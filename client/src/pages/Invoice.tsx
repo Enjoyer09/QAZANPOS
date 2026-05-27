@@ -243,8 +243,8 @@ export default function Invoice({ params }: InvoiceProps) {
           </div>
 
           {/* Items listing table */}
-          <div className="py-6">
-            <table className="w-full text-left text-xs border-collapse">
+          <div className="py-6 overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse min-w-[500px]">
               <thead>
                 <tr className="border-b border-gray-100 text-[10px] font-bold text-gray-400 uppercase tracking-wider pb-2">
                   <th className="py-2">Məhsul</th>

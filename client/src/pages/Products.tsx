@@ -177,7 +177,7 @@ export default function Products() {
       {/* Main product table card */}
       <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-xs glass-card">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm border-collapse">
+          <table className="w-full text-left text-sm border-collapse min-w-[650px]">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50 text-xs font-bold text-gray-400 uppercase tracking-wider">
                 <th className="p-4 w-12 text-center">#</th>

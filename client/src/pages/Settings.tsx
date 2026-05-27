@@ -13,6 +13,10 @@ import {
   Sparkles,
   Barcode,
   Users,
+  Trash2,
+  Lock,
+  ShieldCheck,
+  User,
 } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
 import { qzService } from "../lib/qz.ts";
@@ -45,6 +49,37 @@ export default function SettingsPage() {
   const [qzConnected, setQzConnected] = useState<"LOADING" | "CONNECTED" | "OFFLINE">("LOADING");
   const [availablePrinters, setAvailablePrinters] = useState<string[]>([]);
   const [selectedPrinter, setSelectedPrinter] = useState("");
+
+  const activeUser = (() => {
+    try {
+      const userStr = localStorage.getItem("qazanpos_user");
+      return userStr ? JSON.parse(userStr) : null;
+    } catch (e) {
+      return null;
+    }
+  })();
+
+  const isAdmin = activeUser?.role === "Admin";
+
+  // User Management State
+  const [newUsername, setNewUsername] = useState("");
+  const [newUserPassword, setNewUserPassword] = useState("");
+  const [newUserRole, setNewUserRole] = useState("Staff");
+  const [selectedUserToReset, setSelectedUserToReset] = useState<any | null>(null);
+  const [resetPasswordValue, setResetPasswordValue] = useState("");
+  const [staffNewPassword, setStaffNewPassword] = useState("");
+  const [staffConfirmPassword, setStaffConfirmPassword] = useState("");
+
+  // Fetch users list
+  const { data: usersList, refetch: refetchUsers } = useQuery<any[]>({
+    queryKey: ["/api/users"],
+    queryFn: async () => {
+      const res = await fetch("/api/users");
+      if (!res.ok) throw new Error("İstifadəçiləri gətirmək mümkün olmadı");
+      return res.json();
+    },
+    enabled: isAdmin,
+  });
 
   // Fetch Settings
   const { data: settingsData, isLoading } = useQuery<any>({
@@ -146,6 +181,101 @@ export default function SettingsPage() {
     },
   });
 
+  // User Management Mutations
+  const createUserMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      const res = await fetch("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "İstifadəçi yaradıla bilmədi");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      refetchUsers();
+      setNewUsername("");
+      setNewUserPassword("");
+      setNewUserRole("Staff");
+      toast({
+        title: "İstifadəçi yaradıldı",
+        description: "Yeni kassa hesabı uğurla aktivləşdirildi.",
+        variant: "success",
+      });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Xəta!",
+        description: err.message || "İstifadəçi yaradılarkən xəta baş verdi.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const changePasswordMutation = useMutation({
+    mutationFn: async ({ id, password }: any) => {
+      const res = await fetch(`/api/users/${id}/password`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Şifrə dəyişdirilə bilmədi");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      setSelectedUserToReset(null);
+      setResetPasswordValue("");
+      setStaffNewPassword("");
+      setStaffConfirmPassword("");
+      toast({
+        title: "Şifrə dəyişdirildi",
+        description: "Yeni şifrə uğurla yadda saxlanıldı.",
+        variant: "success",
+      });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Xəta!",
+        description: err.message || "Şifrə dəyişdirilərkən xəta baş verdi.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteUserMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/users/${id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "İstifadəçi silinə bilmədi");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      refetchUsers();
+      toast({
+        title: "İstifadəçi silindi",
+        description: "İstifadəçi hesabı sistemdən tam silindi.",
+        variant: "success",
+      });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Xəta!",
+        description: err.message || "İstifadəçi silinərkən xəta baş verdi.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -194,6 +324,106 @@ export default function SettingsPage() {
     return (
       <div className="py-20 text-center text-xs text-gray-400 font-semibold animate-pulse">
         Ayarlar yüklənir, lütfən gözləyin...
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="space-y-6 animate-in fade-in-0 duration-300 max-w-xl mx-auto py-4">
+        {/* Header */}
+        <div className="text-center sm:text-left">
+          <h2 className="text-2xl font-black text-gray-900 tracking-tight">İstifadəçi Ayarları</h2>
+          <p className="text-xs text-gray-400 mt-1">
+            Giriş hesabınızın təhlükəsizlik və şifrə ayarları
+          </p>
+        </div>
+
+        {/* Profile Details & Password Form Card */}
+        <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xl glass-card space-y-6">
+          {/* User Profile Avatar block */}
+          <div className="flex flex-col items-center sm:flex-row gap-4 pb-6 border-b border-gray-100/50">
+            <div className="size-16 rounded-2xl bg-gradient-to-tr from-primary to-emerald-400 flex items-center justify-center text-white font-black text-2xl shadow-lg shadow-primary/20 border border-white/20">
+              {activeUser?.username?.substring(0, 2).toUpperCase()}
+            </div>
+            <div className="text-center sm:text-left">
+              <h3 className="font-extrabold text-gray-900 text-base">{activeUser?.username}</h3>
+              <p className="text-xs text-gray-400 font-semibold mt-0.5 flex items-center justify-center sm:justify-start gap-1">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                Rol: Satıcı (Staff)
+              </p>
+            </div>
+          </div>
+
+          {/* Form */}
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!staffNewPassword.trim()) {
+                toast({ title: "Xəta!", description: "Yeni şifrə daxil edilməlidir.", variant: "destructive" });
+                return;
+              }
+              if (staffNewPassword !== staffConfirmPassword) {
+                toast({ title: "Xəta!", description: "Şifrələr eyni deyil.", variant: "destructive" });
+                return;
+              }
+              if (staffNewPassword.length < 4) {
+                toast({ title: "Xəta!", description: "Şifrə ən azı 4 simvoldan ibarət olmalıdır.", variant: "destructive" });
+                return;
+              }
+              changePasswordMutation.mutate({
+                id: activeUser.id,
+                password: staffNewPassword,
+              });
+            }} 
+            className="space-y-4"
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <Lock className="w-4 h-4 text-primary" />
+              <h4 className="font-extrabold text-gray-900 text-xs uppercase tracking-wider">Şifrəni Yenilə</h4>
+            </div>
+
+            <div className="space-y-3.5 text-xs font-semibold">
+              <div className="space-y-1">
+                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Yeni Şifrə</label>
+                <div className="relative">
+                  <Lock className="absolute left-3.5 top-3.5 w-4 h-4 text-gray-400" />
+                  <input
+                    type="password"
+                    placeholder="Yeni şifrənizi daxil edin"
+                    value={staffNewPassword}
+                    onChange={(e) => setStaffNewPassword(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Yeni Şifrənin Təkrarı</label>
+                <div className="relative">
+                  <Lock className="absolute left-3.5 top-3.5 w-4 h-4 text-gray-400" />
+                  <input
+                    type="password"
+                    placeholder="Yeni şifrənizi yenidən daxil edin"
+                    value={staffConfirmPassword}
+                    onChange={(e) => setStaffConfirmPassword(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 font-mono"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="submit"
+                disabled={changePasswordMutation.isPending}
+                className="w-full sm:w-auto px-6 py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 cursor-pointer shadow-md shadow-primary/10 transition-all flex items-center justify-center gap-2 text-xs"
+              >
+                <CheckCircle className="w-4 h-4" /> Şifrəni Dəyiş
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     );
   }
@@ -642,6 +872,7 @@ export default function SettingsPage() {
                     <span className="text-[9px] font-medium text-gray-400 truncate block">{tbl.countLabel}</span>
                   </div>
                   <button
+                    type="button"
                     onClick={() => handleExport(tbl.key, tbl.label)}
                     className="p-2 bg-white text-gray-600 rounded-lg border border-gray-200 hover:text-primary hover:border-primary/50 cursor-pointer shadow-xs transition-all flex items-center justify-center"
                     title="Yüklə (CSV)"
@@ -652,8 +883,167 @@ export default function SettingsPage() {
               ))}
             </div>
           </div>
+
+          {/* User Management Card */}
+          <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card space-y-5">
+            <div className="flex items-center gap-2 mb-2 border-b border-gray-100/50 pb-3">
+              <Users className="w-5 h-5 text-primary" />
+              <h3 className="font-extrabold text-gray-900 text-sm">İstifadəçilərin İdarə Edilməsi</h3>
+            </div>
+
+            {/* Existing Users list */}
+            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+              {usersList?.map((u) => {
+                const isCurrentSelf = activeUser && u.username === activeUser.username;
+                return (
+                  <div
+                    key={u.id}
+                    className="flex items-center justify-between p-3 bg-gray-50/50 border border-gray-100 rounded-xl text-xs hover:bg-gray-50 transition-all"
+                  >
+                    <div>
+                      <p className="font-bold text-gray-900 flex items-center gap-1.5">
+                        {u.username}
+                        {isCurrentSelf && (
+                          <span className="text-[8px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-md font-extrabold uppercase">
+                            SİZ
+                          </span>
+                        )}
+                      </p>
+                      <span className="text-[9px] font-bold text-gray-400 mt-0.5 block">
+                        Rol: {u.role === "Admin" ? "Administrator" : "Satıcı"}
+                      </span>
+                    </div>
+                    
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedUserToReset(u)}
+                        className="px-2 py-1 bg-white text-gray-500 rounded-lg border border-gray-200 hover:text-primary hover:border-primary/50 cursor-pointer shadow-xs transition-all flex items-center justify-center font-bold text-[10px]"
+                        title="Şifrəni Dəyiş"
+                      >
+                        Şifrə
+                      </button>
+                      {!isCurrentSelf && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm(`'${u.username}' istifadəçisini silməyə əminsiniz?`)) {
+                              deleteUserMutation.mutate(u.id);
+                            }
+                          }}
+                          className="p-1.5 bg-white text-red-500 rounded-lg border border-red-100 hover:bg-red-50 cursor-pointer shadow-xs transition-all flex items-center justify-center"
+                          title="İstifadəçini Sil"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Create new user form */}
+            <div className="border-t border-gray-100 pt-4 space-y-3">
+              <span className="text-[10px] text-gray-400 font-extrabold uppercase tracking-wider block">Yeni İstifadəçi Əlavə Et</span>
+              <div className="space-y-2 text-xs font-semibold">
+                <input
+                  type="text"
+                  placeholder="İstifadəçi adı (məs. satici2)"
+                  value={newUsername}
+                  onChange={(e) => setNewUsername(e.target.value)}
+                  className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50"
+                />
+                <input
+                  type="password"
+                  placeholder="Şifrə"
+                  value={newUserPassword}
+                  onChange={(e) => setNewUserPassword(e.target.value)}
+                  className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 font-mono"
+                />
+                <div className="flex gap-2">
+                  <select
+                    value={newUserRole}
+                    onChange={(e) => setNewUserRole(e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 font-bold cursor-pointer"
+                  >
+                    <option value="Staff">Satıcı (Staff)</option>
+                    <option value="Admin">Administrator (Admin)</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!newUsername.trim() || !newUserPassword.trim()) {
+                        toast({ title: "Xəta!", description: "İstifadəçi adı və şifrə boş ola bilməz", variant: "destructive" });
+                        return;
+                      }
+                      createUserMutation.mutate({
+                        username: newUsername,
+                        password: newUserPassword,
+                        role: newUserRole,
+                      });
+                    }}
+                    className="px-4 py-2 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 cursor-pointer shadow-md shadow-primary/10 transition-all text-[11px]"
+                  >
+                    Əlavə Et
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
+
+      {/* Change Password Modal Overlay */}
+      {selectedUserToReset && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs z-100 flex items-center justify-center p-4 animate-in fade-in-0">
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-2xl max-w-sm w-full relative space-y-4">
+            <h3 className="font-extrabold text-gray-900 text-sm border-b border-gray-50 pb-2">
+              '{selectedUserToReset.username}' üçün Şifrəni Yenilə
+            </h3>
+            
+            <div className="space-y-1.5 text-xs font-semibold">
+              <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Yeni Şifrə</label>
+              <input
+                type="password"
+                placeholder="Yeni şifrə daxil edin"
+                value={resetPasswordValue}
+                onChange={(e) => setResetPasswordValue(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 font-mono"
+              />
+            </div>
+
+            <div className="flex gap-2.5 justify-end text-xs font-bold pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedUserToReset(null);
+                  setResetPasswordValue("");
+                }}
+                className="px-4 py-2.5 border border-gray-200 text-gray-500 rounded-xl hover:bg-gray-50 cursor-pointer transition-all"
+              >
+                Ləğv Et
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!resetPasswordValue.trim()) {
+                    toast({ title: "Xəta!", description: "Şifrə boş ola bilməz", variant: "destructive" });
+                    return;
+                  }
+                  changePasswordMutation.mutate({
+                    id: selectedUserToReset.id,
+                    password: resetPasswordValue,
+                  });
+                }}
+                className="px-4 py-2.5 bg-primary text-white rounded-xl hover:bg-primary/90 cursor-pointer shadow-md shadow-primary/10 transition-all"
+              >
+                Şifrəni Dəyiş
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

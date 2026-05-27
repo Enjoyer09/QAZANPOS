@@ -263,7 +263,7 @@ export default function Debts() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm border-collapse">
+              <table className="w-full text-left text-sm border-collapse min-w-[700px]">
                 <thead>
                   <tr className="border-b border-gray-100 text-xs font-bold text-gray-400 uppercase tracking-wider">
                     <th className="py-2.5 px-2">Müştəri</th>
@@ -355,7 +355,7 @@ export default function Debts() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm border-collapse">
+              <table className="w-full text-left text-sm border-collapse min-w-[700px]">
                 <thead>
                   <tr className="border-b border-gray-100 text-xs font-bold text-gray-400 uppercase tracking-wider">
                     <th className="py-2.5 px-2">Müştəri</th>
@@ -447,7 +447,7 @@ export default function Debts() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm border-collapse">
+            <table className="w-full text-left text-sm border-collapse min-w-[800px]">
               <thead>
                 <tr className="border-b border-gray-100 text-xs font-bold text-gray-400 uppercase tracking-wider">
                   <th className="py-2.5 px-2">Tədarükçü</th>

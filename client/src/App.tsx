@@ -95,7 +95,7 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
     { href: "/satislar", label: "Tarixçə", icon: History },
     ...(isAdmin ? [{ href: "/xercler", label: "Xərclər", icon: TrendingDown }] : []),
     ...(isAdmin ? [{ href: "/loqlar", label: "Loqlar", icon: Activity }] : []),
-    ...(isAdmin ? [{ href: "/ayarlar", label: "Ayarlar", icon: SettingsIcon }] : []),
+    { href: "/ayarlar", label: "Ayarlar", icon: SettingsIcon },
   ];
 
   return (
@@ -401,7 +401,7 @@ function MainRoutes({ user, onLogout }: { user: any; onLogout: () => void }) {
         <Route path="/satislar/:id" component={Invoice} />
         {isAdmin && <Route path="/xercler" component={Expenses} />}
         {isAdmin && <Route path="/loqlar" component={Logs} />}
-        {isAdmin && <Route path="/ayarlar" component={SettingsPage} />}
+        <Route path="/ayarlar" component={SettingsPage} />
         <Route>
           <div className="flex flex-col items-center justify-center py-20">
             <h1 className="text-6xl font-extrabold text-primary">403</h1>

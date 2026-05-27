@@ -1308,6 +1308,134 @@ router.get("/activity-logs", requireAdmin, async (req, res) => {
   }
 });
 
+// 12. USER MANAGEMENT ENDPOINTS (Admin Only)
+// List all users
+router.get("/users", requireAdmin, async (req, res) => {
+  try {
+    const list = await db
+      .select({
+        id: schema.users.id,
+        username: schema.users.username,
+        role: schema.users.role,
+      })
+      .from(schema.users)
+      .orderBy(schema.users.username);
+    res.json(list);
+  } catch (error) {
+    res.status(500).json({ message: "İstifadəçiləri gətirərkən xəta baş verdi" });
+  }
+});
+
+// Create user
+router.post("/users", requireAdmin, async (req, res) => {
+  try {
+    const { username, password, role } = req.body;
+    if (!username || !password || !role) {
+      return res.status(400).json({ message: "Məcburi sahələri doldurun" });
+    }
+
+    const normalizedUsername = username.trim().toLowerCase();
+    
+    // Check if user already exists
+    const existing = await db.query.users.findFirst({
+      where: eq(schema.users.username, normalizedUsername)
+    });
+    if (existing) {
+      return res.status(400).json({ message: "Bu istifadəçi adı artıq mövcuddur" });
+    }
+
+    const newUser = await db
+      .insert(schema.users)
+      .values({
+        username: normalizedUsername,
+        password: password.trim(),
+        role: role || "Staff",
+      })
+      .returning();
+
+    await logActivity(req, "CREATE_USER", `Yeni istifadəçi hesabı yaradıldı: '${normalizedUsername}' (Rol: ${role})`);
+
+    res.json({
+      id: newUser[0].id,
+      username: newUser[0].username,
+      role: newUser[0].role,
+    });
+  } catch (error) {
+    res.status(500).json({ message: "İstifadəçi yaradılarkən xəta baş verdi" });
+  }
+});
+
+// Change user password
+router.put("/users/:id/password", async (req, res) => {
+  try {
+    const targetUserId = parseInt(req.params.id);
+    const { password } = req.body;
+    if (!password || !password.trim()) {
+      return res.status(400).json({ message: "Şifrə daxil edilməlidir" });
+    }
+
+    // Verify permission: Must be Admin OR updating self
+    const reqRole = req.headers["x-user-role"];
+    const reqUsername = req.headers["x-user-username"];
+    
+    const targetUser = await db.query.users.findFirst({
+      where: eq(schema.users.id, targetUserId)
+    });
+    if (!targetUser) {
+      return res.status(404).json({ message: "İstifadəçi tapılmadı" });
+    }
+
+    const reqUsernameStr = typeof reqUsername === "string" ? reqUsername.trim().toLowerCase() : "";
+    const isSelf = reqUsernameStr && targetUser.username === reqUsernameStr;
+    const isAdmin = reqRole === "Admin";
+
+    if (!isAdmin && !isSelf) {
+      return res.status(403).json({ message: "Bu şifrəni dəyişmək üçün kifayət qədər səlahiyyətiniz yoxdur." });
+    }
+
+    await db
+      .update(schema.users)
+      .set({ password: password.trim() })
+      .where(eq(schema.users.id, targetUserId));
+
+    await logActivity(req, "CHANGE_PASSWORD", `'${targetUser.username}' istifadəçisinin sistem şifrəsini yenilədi`);
+
+    res.json({ message: "Şifrə uğurla dəyişdirildi" });
+  } catch (error) {
+    res.status(500).json({ message: "Şifrə yenilənərkən xəta baş verdi" });
+  }
+});
+
+// Delete user
+router.delete("/users/:id", requireAdmin, async (req, res) => {
+  try {
+    const targetUserId = parseInt(req.params.id);
+    const reqUsername = req.headers["x-user-username"];
+
+    const targetUser = await db.query.users.findFirst({
+      where: eq(schema.users.id, targetUserId)
+    });
+    if (!targetUser) {
+      return res.status(404).json({ message: "İstifadəçi tapılmadı" });
+    }
+
+    const reqUsernameStr = typeof reqUsername === "string" ? reqUsername.trim().toLowerCase() : "";
+    if (reqUsernameStr && targetUser.username === reqUsernameStr) {
+      return res.status(400).json({ message: "Öz hesabınızı silə bilməzsiniz!" });
+    }
+
+    await db
+      .delete(schema.users)
+      .where(eq(schema.users.id, targetUserId));
+
+    await logActivity(req, "DELETE_USER", `'${targetUser.username}' (Rol: ${targetUser.role}) istifadəçi hesabını sistemdən sildi`);
+
+    res.json({ message: "İstifadəçi silindi" });
+  } catch (error) {
+    res.status(500).json({ message: "İstifadəçi silinərkən xəta baş verdi" });
+  }
+});
+
 
 // Export database tables as CSV (Data backup & portability)
 router.get("/backup/export/:table", requireAdmin, async (req, res) => {

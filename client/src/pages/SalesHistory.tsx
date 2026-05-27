@@ -126,7 +126,6 @@ export default function SalesHistory() {
             </button>
           )}
         </div>
-        </div>
       </div>
 
       {/* Search Input bar */}
