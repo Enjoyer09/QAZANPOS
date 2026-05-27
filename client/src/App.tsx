@@ -14,6 +14,7 @@ import {
   LogOut,
   Sparkles,
   Settings as SettingsIcon,
+  Menu,
 } from "lucide-react";
 
 // Reusable components
@@ -70,6 +71,7 @@ const queryClient = new QueryClient({
 
 function AppLayout({ children, user, onLogout }: { children: React.ReactNode; user: any; onLogout: () => void }) {
   const [location] = useLocation();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const isAdmin = user?.role === "Admin";
 
@@ -116,7 +118,7 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
         </Link>
 
         {/* Dynamic Horizontal Navigation Menu */}
-        <nav className="flex items-center gap-1">
+        <nav className="hidden lg:flex items-center gap-1">
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive =
@@ -161,13 +163,13 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
         </nav>
 
         {/* Status Indicator & Profile */}
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1.5 bg-green-50/50 px-2.5 py-1.5 rounded-lg border border-green-100/50 text-[10px] font-bold text-green-700 glass">
+        <div className="flex items-center gap-2 sm:gap-4">
+          <div className="hidden xs:flex items-center gap-1.5 bg-green-50/50 px-2.5 py-1.5 rounded-lg border border-green-100/50 text-[10px] font-bold text-green-700 glass">
             <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse"></span>
             <span>Lokal</span>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
             <div className="text-right hidden sm:block">
               <span className="text-[10px] font-extrabold block text-gray-900 leading-none">
                 {user?.username}
@@ -178,14 +180,102 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
             </div>
             <button
               onClick={onLogout}
-              className="size-8 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 flex items-center justify-center border border-red-100 select-none cursor-pointer transition-all"
+              className="size-8 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 hidden sm:flex items-center justify-center border border-red-100 select-none cursor-pointer transition-all"
               title="Sistemdən Çıxış"
             >
               <LogOut className="w-3.5 h-3.5" />
             </button>
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="size-8 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-700 flex lg:hidden items-center justify-center border border-gray-200 select-none cursor-pointer transition-all"
+              title="Menyu"
+            >
+              <Menu className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </header>
+
+      {/* Mobile Slide-over Drawer Menu */}
+      {isMobileMenuOpen && (
+        <div 
+          className="fixed inset-0 z-100 flex lg:hidden bg-black/60 backdrop-blur-xs animate-in fade-in-0 no-print" 
+          onClick={() => setIsMobileMenuOpen(false)}
+        >
+          <div 
+            className="bg-white w-72 h-full p-6 shadow-2xl flex flex-col justify-between animate-in slide-in-from-left duration-300"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="space-y-6">
+              {/* Brand Logo */}
+              <div className="flex items-center gap-3">
+                <div className="size-9 rounded-xl bg-primary flex items-center justify-center text-white font-black text-lg">
+                  Q
+                </div>
+                <div>
+                  <h1 className="font-extrabold text-gray-900 text-sm leading-none">Qazan POS</h1>
+                  <span className="text-[10px] font-bold text-gray-400 mt-1 block">ANBAR & SATIŞ</span>
+                </div>
+              </div>
+
+              {/* Menu List */}
+              <nav className="flex flex-col gap-1.5 pt-4">
+                {menuItems.map((item) => {
+                  const Icon = item.icon;
+                  const isActive =
+                    item.href === "/"
+                      ? location === "/"
+                      : item.href === "/anbar"
+                      ? location === "/anbar"
+                      : location.startsWith(item.href);
+
+                  return (
+                    <Link key={item.href} href={item.href} onClick={() => setIsMobileMenuOpen(false)}>
+                      <div
+                        className={`flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-xs cursor-pointer transition-all ${
+                          isActive
+                            ? "bg-primary/10 text-primary font-extrabold"
+                            : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                        }`}
+                      >
+                        <Icon className="w-4 h-4 shrink-0" />
+                        <span>{item.label}</span>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </nav>
+            </div>
+
+            {/* Footer Profile & Logout */}
+            <div className="border-t border-gray-100 pt-4 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="size-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-extrabold text-xs">
+                  {user?.username?.substring(0, 2).toUpperCase()}
+                </div>
+                <div>
+                  <span className="text-xs font-extrabold block text-gray-900 leading-none">
+                    {user?.username}
+                  </span>
+                  <span className="text-[9px] font-bold text-gray-400 mt-1 block">
+                    {user?.role === "Admin" ? "Administrator" : "Satıcı"}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  onLogout();
+                }}
+                className="w-full py-3 bg-red-50 hover:bg-red-100 text-red-500 font-bold text-xs rounded-xl border border-red-100 flex items-center justify-center gap-2 cursor-pointer transition-all"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Sistemdən Çıxış</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 2. Main content container */}
       <main className="flex-1 w-full max-w-7xl mx-auto px-6 mt-8 flex flex-col">
