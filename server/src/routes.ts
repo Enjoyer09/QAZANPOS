@@ -14,6 +14,22 @@ function requireAdmin(req: any, res: any, next: any) {
   next();
 }
 
+// Helper to log user activities
+async function logActivity(req: any, action: string, description: string) {
+  try {
+    const username = req.headers["x-user-username"] || (req.headers["x-user-role"] === "Admin" ? "admin" : "satici") || "Sistem";
+    await db.insert(schema.activityLogs).values({
+      username,
+      action,
+      description,
+      timestamp: new Date().toISOString(),
+      archived: 0,
+    });
+  } catch (error) {
+    console.error("Failed to log activity:", error);
+  }
+}
+
 // ----------------------------------------------------
 // 0. AUTH ENDPOINTS
 // ----------------------------------------------------
@@ -84,6 +100,8 @@ router.post("/products", requireAdmin, async (req, res) => {
       })
       .returning();
 
+    await logActivity(req, "CREATE_PRODUCT", `Yeni məhsul yaratdı: '${name}' (Kateqoriya: ${category || "yoxdur"}, Vahid: ${unit || "ədəd"})`);
+
     res.json(newProduct[0]);
   } catch (error) {
     res.status(500).json({ message: "Məhsul yaradılarkən xəta baş verdi" });
@@ -110,6 +128,8 @@ router.put("/products/:id", requireAdmin, async (req, res) => {
     if (updated.length === 0)
       return res.status(404).json({ message: "Məhsul tapılmadı" });
 
+    await logActivity(req, "UPDATE_PRODUCT", `'${name}' (ID: ${id}) məhsulunun məlumatlarını yenilədi`);
+
     res.json(updated[0]);
   } catch (error) {
     res.status(500).json({ message: "Məhsul yenilənərkən xəta baş verdi" });
@@ -127,6 +147,8 @@ router.delete("/products/:id", requireAdmin, async (req, res) => {
 
     if (deleted.length === 0)
       return res.status(404).json({ message: "Məhsul tapılmadı" });
+
+    await logActivity(req, "DELETE_PRODUCT", `'${deleted[0].name}' (ID: ${id}) məhsulunu kataloqdan sildi`);
 
     res.json({ message: "Məhsul silindi" });
   } catch (error) {
@@ -195,6 +217,15 @@ router.post("/stock/entries", requireAdmin, async (req, res) => {
         paidStatus: isCredit ? "credit" : "paid",
       })
       .returning();
+
+    const productList = await db.select().from(schema.products).where(eq(schema.products.id, productId)).limit(1);
+    const productName = productList[0] ? productList[0].name : `ID: ${productId}`;
+    const unit = productList[0] ? productList[0].unit : "ədəd";
+    await logActivity(
+      req,
+      "CREATE_STOCK_ENTRY",
+      `Anbara mədaxil etdi: ${quantity} ${unit} '${productName}' (Alış qiyməti: ${purchasePrice} ₼, Tədarükçü: ${supplier || "Yoxdur"}, Ödəniş: ${paymentType})`
+    );
 
     res.json(newEntry[0]);
   } catch (error) {
@@ -304,6 +335,16 @@ router.patch("/stock/entries/:id/pay", requireAdmin, async (req, res) => {
       .where(eq(schema.stockEntries.id, id))
       .returning();
 
+    const productList = await db.select().from(schema.products).where(eq(schema.products.id, entry.productId)).limit(1);
+    const productName = productList[0] ? productList[0].name : `ID: ${entry.productId}`;
+    const unit = productList[0] ? productList[0].unit : "ədəd";
+    const totalAmount = entry.quantity * entry.purchasePrice;
+    await logActivity(
+      req,
+      "PAY_SUPPLIER_DEBT",
+      `Tədarükçüyə olan borcu ödədi: '${productName}' məhsulu üzrə ${entry.quantity} ${unit} üçün ${totalAmount.toFixed(2)} ₼ ödəniş edildi (Tədarükçü: ${entry.supplier || "Yoxdur"}, Ödəniş üsulu: ${paymentType || "Nəğd"})`
+    );
+
     res.json({ message: "Borc ödənildi" });
   } catch (error) {
     res.status(500).json({ message: "Borc ödənilərkən xəta baş verdi" });
@@ -341,6 +382,8 @@ router.post("/customers", async (req, res) => {
       })
       .returning();
 
+    await logActivity(req, "CREATE_CUSTOMER", `Yeni müştəri əlavə etdi: '${name}' (Telefon: ${phone || "yoxdur"})`);
+
     res.json(newCustomer[0]);
   } catch (error) {
     res.status(500).json({ message: "Müştəri yaradılarkən xəta baş verdi" });
@@ -368,6 +411,8 @@ router.put("/customers/:id", async (req, res) => {
     if (updated.length === 0)
       return res.status(404).json({ message: "Müştəri tapılmadı" });
 
+    await logActivity(req, "UPDATE_CUSTOMER", `'${name}' (ID: ${id}) müştərisinin məlumatlarını yenilədi`);
+
     res.json(updated[0]);
   } catch (error) {
     res.status(500).json({ message: "Müştəri yenilənərkən xəta baş verdi" });
@@ -385,6 +430,8 @@ router.delete("/customers/:id", requireAdmin, async (req, res) => {
 
     if (deleted.length === 0)
       return res.status(404).json({ message: "Müştəri tapılmadı" });
+
+    await logActivity(req, "DELETE_CUSTOMER", `'${deleted[0].name}' (ID: ${id}) müştərisini sistemdən sildi`);
 
     res.json({ message: "Müştəri silindi" });
   } catch (error) {
@@ -572,6 +619,14 @@ router.post("/sales", async (req, res) => {
       });
     }
 
+    const formattedId = `#${saleId.toString().padStart(5, "0")}`;
+    const custLabel = customerName ? `'${customerName}'` : "Anonim Müştəri";
+    await logActivity(
+      req,
+      "CREATE_SALE",
+      `Satış etdi (Qaimə №${formattedId}): ${totalAmount.toFixed(2)} ₼ məbləğində, Müştəri: ${custLabel}, Ödəniş üsulu: ${paymentType}`
+    );
+
     res.json({ id: saleId, message: "Satış tamamlandı" });
   } catch (error) {
     console.error(error);
@@ -663,6 +718,14 @@ router.patch("/sales/:id/pay-credit", async (req, res) => {
       .set({ paymentStatus: "paid" })
       .where(eq(schema.sales.id, saleId));
 
+    const formattedId = `#${saleId.toString().padStart(5, "0")}`;
+    const custLabel = sale.customerName || "Anonim Müştəri";
+    await logActivity(
+      req,
+      "PAY_CUSTOMER_CREDIT",
+      `Müştəri borcu tam ödənildi: ${custLabel} tərəfindən Qaimə №${formattedId} üzrə olan ${amountToPay.toFixed(2)} ₼ borc tam bağlandı`
+    );
+
     res.json({ message: "Borc tam ödənildi" });
   } catch (error) {
     res.status(500).json({ message: "Borc ödənilərkən xəta baş verdi" });
@@ -708,12 +771,21 @@ router.patch("/sales/:id/add-payment", async (req, res) => {
 
     // 2. Check if credit is fully paid now
     const newTotalPaid = totalPaid + amountToPay;
-    if (Math.abs(sale.totalAmount - newTotalPaid) < 0.01 || newTotalPaid >= sale.totalAmount) {
+    const isFinished = Math.abs(sale.totalAmount - newTotalPaid) < 0.01 || newTotalPaid >= sale.totalAmount;
+    if (isFinished) {
       await db
         .update(schema.sales)
         .set({ paymentStatus: "paid" })
         .where(eq(schema.sales.id, saleId));
     }
+
+    const formattedId = `#${saleId.toString().padStart(5, "0")}`;
+    const custLabel = sale.customerName || "Anonim Müştəri";
+    await logActivity(
+      req,
+      "ADD_CUSTOMER_PAYMENT",
+      `Müştəri borc ödənişi qəbul edildi: ${custLabel} tərəfindən Qaimə №${formattedId} üçün ${amountToPay.toFixed(2)} ₼ məbləğində ödəniş alındı (${isFinished ? "Borc tam bağlandı" : `Qalıq borc: ${(sale.totalAmount - newTotalPaid).toFixed(2)} ₼`})`
+    );
 
     res.json({ message: "Ödəniş qəbul edildi" });
   } catch (error) {
@@ -823,7 +895,7 @@ router.post("/expenses", requireAdmin, async (req, res) => {
     const { amount, category, description } = req.body;
 
     if (!amount || !category) {
-      return res.status(400).json({ message: "Məbləğ və kateqoriya tələb olunur" });
+      return res.status(400).json({ message: "Məlbəğ və kateqoriya tələb olunur" });
     }
 
     const newExpense = await db
@@ -835,6 +907,12 @@ router.post("/expenses", requireAdmin, async (req, res) => {
         date: new Date().toISOString(),
       })
       .returning();
+
+    await logActivity(
+      req,
+      "CREATE_EXPENSE",
+      `Yeni xərc qeydə aldı: ${amount} ₼ (Kateqoriya: ${category}, Təsvir: ${description || "Yoxdur"})`
+    );
 
     res.json(newExpense[0]);
   } catch (error) {
@@ -853,6 +931,12 @@ router.delete("/expenses/:id", requireAdmin, async (req, res) => {
 
     if (deleted.length === 0)
       return res.status(404).json({ message: "Xərc tapılmadı" });
+
+    await logActivity(
+      req,
+      "DELETE_EXPENSE",
+      `Xərci sildi (ID: ${id}): ${deleted[0].amount} ₼ (Kateqoriya: ${deleted[0].category}, Təsvir: ${deleted[0].description || "Yoxdur"})`
+    );
 
     res.json({ message: "Xərc silindi" });
   } catch (error) {
@@ -1180,9 +1264,47 @@ router.put("/settings", requireAdmin, async (req, res) => {
         .where(eq(schema.settings.id, list[0].id))
         .returning();
     }
+
+    await logActivity(
+      req,
+      "UPDATE_SETTINGS",
+      `Sistem və mağaza ayarlarını yenilədi (Mağaza: '${storeName || "Mətbəx Dünyası"}')`
+    );
+
     res.json(updated[0]);
   } catch (error) {
     res.status(500).json({ message: "Ayarları yeniləyərkən xəta baş verdi" });
+  }
+});
+
+// Fetch activity logs (Admin only)
+router.get("/activity-logs", requireAdmin, async (req, res) => {
+  try {
+    const { date } = req.query;
+    const targetDate = (date as string) || new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+    
+    // Auto-archive past logs: update archived=1 where date is older than today and archived=0
+    const todayStr = new Date().toISOString().split("T")[0];
+    await db.update(schema.activityLogs)
+      .set({ archived: 1 })
+      .where(
+        and(
+          sql`LEFT(timestamp, 10) < ${todayStr}`,
+          eq(schema.activityLogs.archived, 0)
+        )
+      );
+
+    // Fetch logs for the target date
+    const logsList = await db
+      .select()
+      .from(schema.activityLogs)
+      .where(sql`LEFT(timestamp, 10) = ${targetDate}`)
+      .orderBy(desc(schema.activityLogs.id));
+
+    res.json(logsList);
+  } catch (error) {
+    console.error("Error in GET /activity-logs:", error);
+    res.status(500).json({ message: "Loqları gətirərkən xəta baş verdi" });
   }
 });
 

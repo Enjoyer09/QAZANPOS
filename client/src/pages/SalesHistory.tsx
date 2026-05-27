@@ -91,40 +91,41 @@ export default function SalesHistory() {
         </div>
 
         {/* Date Filter Controls */}
-        <div className="flex flex-wrap items-end gap-3 bg-white p-3 rounded-2xl border border-gray-100 shadow-xs glass">
-          <div className="space-y-1">
+        <div className="flex flex-wrap items-end gap-3 bg-white p-3 rounded-2xl border border-gray-100 shadow-xs glass w-full md:w-auto">
+          <div className="space-y-1 flex-1 min-w-[120px] sm:flex-initial">
             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Başlanğıc</label>
             <input
               type="date"
               value={fromDate}
               onChange={(e) => setFromDate(e.target.value)}
-              className="px-3 py-1.5 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary w-36 bg-gray-50/50"
+              className="px-3 py-1.5 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary w-full sm:w-36 bg-gray-50/50"
             />
           </div>
-          <div className="space-y-1">
+          <div className="space-y-1 flex-1 min-w-[120px] sm:flex-initial">
             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Son</label>
             <input
               type="date"
               value={toDate}
               onChange={(e) => setToDate(e.target.value)}
-              className="px-3 py-1.5 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary w-36 bg-gray-50/50"
+              className="px-3 py-1.5 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary w-full sm:w-36 bg-gray-50/50"
             />
           </div>
           <button
             onClick={handleFilter}
             disabled={!fromDate && !toDate}
-            className="px-4 py-2 bg-primary text-white font-semibold text-xs rounded-xl hover:bg-primary/90 cursor-pointer disabled:opacity-50"
+            className="px-4 py-2 bg-primary text-white font-semibold text-xs rounded-xl hover:bg-primary/90 cursor-pointer disabled:opacity-50 w-full sm:w-auto"
           >
             Filtrlə
           </button>
           {filterActive && (
             <button
               onClick={handleReset}
-              className="px-4 py-2 border border-gray-200 text-gray-500 font-semibold text-xs rounded-xl hover:bg-gray-50 cursor-pointer"
+              className="px-4 py-2 border border-gray-200 text-gray-500 font-semibold text-xs rounded-xl hover:bg-gray-50 cursor-pointer w-full sm:w-auto"
             >
               Sıfırla
             </button>
           )}
+        </div>
         </div>
       </div>
 
@@ -173,7 +174,7 @@ export default function SalesHistory() {
       {/* Sales History Table */}
       <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-xs glass-card">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm border-collapse">
+          <table className="w-full text-left text-sm border-collapse min-w-[800px]">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50 text-xs font-bold text-gray-400 uppercase tracking-wider">
                 <th className="p-4 pl-6 text-center w-16">Qaimə №</th>

@@ -15,6 +15,7 @@ import {
   Sparkles,
   Settings as SettingsIcon,
   Menu,
+  Activity,
 } from "lucide-react";
 
 // Reusable components
@@ -33,8 +34,9 @@ import Debts from "./pages/Debts.tsx";
 import Expenses from "./pages/Expenses.tsx";
 import SettingsPage from "./pages/Settings.tsx";
 import Login from "./pages/Login.tsx";
+import Logs from "./pages/Logs.tsx";
 
-// Global fetch interceptor to automatically attach x-user-role header
+// Global fetch interceptor to automatically attach x-user-role and x-user-username headers
 const originalFetch = window.fetch;
 window.fetch = async (input, init) => {
   const userStr = localStorage.getItem("qazanpos_user");
@@ -45,13 +47,19 @@ window.fetch = async (input, init) => {
       init.headers = init.headers || {};
       if (init.headers instanceof Headers) {
         init.headers.set("x-user-role", user.role);
+        init.headers.set("x-user-username", user.username);
       } else if (Array.isArray(init.headers)) {
-        const hasHeader = init.headers.some(([k]) => k.toLowerCase() === "x-user-role");
-        if (!hasHeader) {
+        const hasHeaderRole = init.headers.some(([k]) => k.toLowerCase() === "x-user-role");
+        if (!hasHeaderRole) {
           init.headers.push(["x-user-role", user.role]);
+        }
+        const hasHeaderUser = init.headers.some(([k]) => k.toLowerCase() === "x-user-username");
+        if (!hasHeaderUser) {
+          init.headers.push(["x-user-username", user.username]);
         }
       } else {
         (init.headers as Record<string, string>)["x-user-role"] = user.role;
+        (init.headers as Record<string, string>)["x-user-username"] = user.username;
       }
     } catch (e) {
       // Ignore
@@ -86,6 +94,7 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
     ...(isAdmin ? [{ href: "/mehsullar", label: "Kataloq", icon: FolderKanban }] : []),
     { href: "/satislar", label: "Tarixçə", icon: History },
     ...(isAdmin ? [{ href: "/xercler", label: "Xərclər", icon: TrendingDown }] : []),
+    ...(isAdmin ? [{ href: "/loqlar", label: "Loqlar", icon: Activity }] : []),
     ...(isAdmin ? [{ href: "/ayarlar", label: "Ayarlar", icon: SettingsIcon }] : []),
   ];
 
@@ -99,7 +108,7 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
       </div>
 
       {/* 1. Centered Floating Liquid Glass Navbar */}
-      <header className="w-full max-w-7xl mx-auto px-6 py-3.5 mt-6 rounded-2xl glass-navbar flex items-center justify-between shadow-xl sticky top-6 z-50 no-print">
+      <header className="w-[calc(100%-2rem)] sm:w-full max-w-7xl mx-auto px-4 sm:px-6 py-3.5 mt-4 sm:mt-6 rounded-2xl glass-navbar flex items-center justify-between shadow-xl sticky top-4 sm:top-6 z-50 no-print">
         {/* Brand Logo & Name */}
         <Link href={isAdmin ? "/" : "/pos"}>
           <div className="flex items-center gap-3 cursor-pointer group">
@@ -278,7 +287,7 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
       )}
 
       {/* 2. Main content container */}
-      <main className="flex-1 w-full max-w-7xl mx-auto px-6 mt-8 flex flex-col">
+      <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 mt-8 flex flex-col">
         <div className="flex-1 w-full animate-in fade-in-50 duration-300">
           {children}
         </div>
@@ -391,6 +400,7 @@ function MainRoutes({ user, onLogout }: { user: any; onLogout: () => void }) {
         <Route path="/satislar" component={SalesHistory} />
         <Route path="/satislar/:id" component={Invoice} />
         {isAdmin && <Route path="/xercler" component={Expenses} />}
+        {isAdmin && <Route path="/loqlar" component={Logs} />}
         {isAdmin && <Route path="/ayarlar" component={SettingsPage} />}
         <Route>
           <div className="flex flex-col items-center justify-center py-20">

@@ -350,8 +350,8 @@ export default function POS() {
           {/* Product selector card */}
           <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card">
             <h3 className="font-extrabold text-gray-900 text-sm mb-4">Səbətə Məhsul Əlavə Et</h3>
-            <div className="flex gap-3 text-xs font-semibold">
-              <div className="flex-1">
+            <div className="flex flex-col sm:flex-row gap-3 text-xs font-semibold">
+              <div className="flex-1 w-full">
                 <select
                   value={selectedProductId}
                   onChange={(e) => setSelectedProductId(e.target.value)}
@@ -365,7 +365,7 @@ export default function POS() {
                   ))}
                 </select>
               </div>
-              <div className="w-24">
+              <div className="w-full sm:w-24">
                 <input
                   type="number"
                   min="0.01"
@@ -378,7 +378,7 @@ export default function POS() {
               </div>
               <button
                 onClick={handleAddToBasket}
-                className="px-5 py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 cursor-pointer flex items-center gap-2 shadow-md shadow-primary/10 transition-all"
+                className="w-full sm:w-auto px-5 py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 cursor-pointer flex items-center justify-center gap-2 shadow-md shadow-primary/10 transition-all"
               >
                 <Plus className="w-4 h-4" /> Əlavə et
               </button>
@@ -401,7 +401,7 @@ export default function POS() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm border-collapse">
+                <table className="w-full text-left text-sm border-collapse min-w-[650px]">
                   <thead>
                     <tr className="border-b border-gray-100 text-xs font-bold text-gray-400 uppercase tracking-wider">
                       <th className="py-3 px-2">Məhsul</th>
@@ -485,7 +485,7 @@ export default function POS() {
           {/* Customer Selection Card */}
           <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card">
             <h3 className="font-extrabold text-gray-900 text-sm mb-4">Müştəri Seçimi</h3>
-            <div className="flex gap-2 text-xs font-semibold mb-4">
+            <div className="flex flex-col xs:flex-row gap-2 text-xs font-semibold mb-4">
               <button
                 type="button"
                 onClick={() => {

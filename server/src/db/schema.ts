@@ -158,3 +158,14 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
   role: text("role").notNull().default("Staff"), // "Admin" or "Staff"
 });
+
+// 10. Activity Logs Table for Auditing
+export const activityLogs = pgTable("activity_logs", {
+  id: serial("id").primaryKey(),
+  username: text("username").notNull(),
+  action: text("action").notNull(),
+  description: text("description").notNull(),
+  timestamp: text("timestamp").notNull(),
+  archived: integer("archived").notNull().default(0), // 0 = active, 1 = archived
+});
+
