@@ -1,9 +1,9 @@
-import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import { pgTable, text, integer, serial, doublePrecision } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
 // 1. Products Directory
-export const products = sqliteTable("products", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const products = pgTable("products", {
+  id: serial("id").primaryKey(),
   name: text("name").notNull(),
   category: text("category"),
   unit: text("unit").notNull().default("ədəd"),
@@ -11,13 +11,13 @@ export const products = sqliteTable("products", {
 });
 
 // 2. Stock Entries (Warehouse entry / restocking)
-export const stockEntries = sqliteTable("stock_entries", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const stockEntries = pgTable("stock_entries", {
+  id: serial("id").primaryKey(),
   productId: integer("product_id")
     .notNull()
     .references(() => products.id, { onDelete: "cascade" }),
-  quantity: real("quantity").notNull(),
-  purchasePrice: real("purchase_price").notNull(), // Alış qiyməti
+  quantity: doublePrecision("quantity").notNull(),
+  purchasePrice: doublePrecision("purchase_price").notNull(), // Alış qiyməti
   supplier: text("supplier"),
   notes: text("notes"),
   paymentType: text("payment_type").notNull(), // "Nəğd", "Kart", "Kart2Kart", "Nisyə"
@@ -27,8 +27,8 @@ export const stockEntries = sqliteTable("stock_entries", {
 });
 
 // 3. Customers Directory
-export const customers = sqliteTable("customers", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const customers = pgTable("customers", {
+  id: serial("id").primaryKey(),
   name: text("name").notNull(),
   phone: text("phone"),
   email: text("email"),
@@ -37,8 +37,8 @@ export const customers = sqliteTable("customers", {
 });
 
 // 4. Sales Table
-export const sales = sqliteTable("sales", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const sales = pgTable("sales", {
+  id: serial("id").primaryKey(),
   customerId: integer("customer_id").references(() => customers.id, {
     onDelete: "set null",
   }),
@@ -48,47 +48,47 @@ export const sales = sqliteTable("sales", {
   creditDueDate: text("credit_due_date"), // Borcun ödənilməli olduğu son tarix
   notes: text("notes"),
   saleDate: text("sale_date").notNull(), // ISO timestamp
-  totalAmount: real("total_amount").notNull(), // Satış cəmi
-  totalCost: real("total_cost").notNull(), // Satışın Maya dəyəri (calculating total COGS)
+  totalAmount: doublePrecision("total_amount").notNull(), // Satış cəmi
+  totalCost: doublePrecision("total_cost").notNull(), // Satışın Maya dəyəri (calculating total COGS)
   paymentStatus: text("payment_status").notNull().default("paid"), // "paid" (tam ödənilib), "credit" (nisyə borc)
 });
 
 // 5. Sale Items
-export const saleItems = sqliteTable("sale_items", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const saleItems = pgTable("sale_items", {
+  id: serial("id").primaryKey(),
   saleId: integer("sale_id")
     .notNull()
     .references(() => sales.id, { onDelete: "cascade" }),
   productId: integer("product_id")
     .notNull()
     .references(() => products.id),
-  quantity: real("quantity").notNull(),
-  salePrice: real("sale_price").notNull(), // Satış qiyməti
-  purchasePrice: real("purchase_price").notNull(), // Maya dəyəri (snapshot of lastPurchasePrice at sale time)
+  quantity: doublePrecision("quantity").notNull(),
+  salePrice: doublePrecision("sale_price").notNull(), // Satış qiyməti
+  purchasePrice: doublePrecision("purchase_price").notNull(), // Maya dəyəri (snapshot of lastPurchasePrice at sale time)
 });
 
 // 6. Credit Payments (Customer paying back their debt partially or fully)
-export const creditPayments = sqliteTable("credit_payments", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const creditPayments = pgTable("credit_payments", {
+  id: serial("id").primaryKey(),
   saleId: integer("sale_id")
     .notNull()
     .references(() => sales.id, { onDelete: "cascade" }),
   paymentDate: text("payment_date").notNull(), // ISO timestamp
-  amount: real("amount").notNull(), // Ödənilən məbləğ
+  amount: doublePrecision("amount").notNull(), // Ödənilən məbləğ
 });
 
 // 7. General Expenses
-export const expenses = sqliteTable("expenses", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  amount: real("amount").notNull(),
+export const expenses = pgTable("expenses", {
+  id: serial("id").primaryKey(),
+  amount: doublePrecision("amount").notNull(),
   category: text("category").notNull(), // "Maaş", "İcarə", "Kommunal", "Nəqliyyat", "Digər"
   description: text("description"),
   date: text("date").notNull(), // ISO timestamp
 });
 
 // 8. Application Settings (Business settings and limits)
-export const settings = sqliteTable("settings", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const settings = pgTable("settings", {
+  id: serial("id").primaryKey(),
   storeName: text("store_name").notNull().default("Mətbəx Dünyası"),
   phone: text("phone").default("055-123-4567"),
   address: text("address").default("Yuxarı Göyçay"),
@@ -152,8 +152,8 @@ export const creditPaymentsRelations = relations(creditPayments, ({ one }) => ({
 }));
 
 // 9. Users Table for Authentication & Authorization
-export const users = sqliteTable("users", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
   role: text("role").notNull().default("Staff"), // "Admin" or "Staff"

@@ -1,19 +1,13 @@
-import { drizzle } from "drizzle-orm/libsql";
-import { createClient } from "@libsql/client";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 import * as schema from "./schema.js";
-import path from "path";
-import { fileURLToPath } from "url";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  throw new Error("DATABASE_URL is not defined in environment variables");
+}
 
-const url = process.env.DATABASE_URL || `file:${path.resolve(__dirname, "../../../sqlite.db")}`;
-const authToken = process.env.DATABASE_AUTH_TOKEN;
-
-const client = createClient({
-  url,
-  authToken,
-});
+const client = postgres(connectionString);
 const db = drizzle(client, { schema });
 
 
@@ -21,14 +15,14 @@ async function seed() {
   console.log("Seeding database...");
 
   // 1. Clear existing data
-  await client.execute("DELETE FROM credit_payments");
-  await client.execute("DELETE FROM sale_items");
-  await client.execute("DELETE FROM sales");
-  await client.execute("DELETE FROM stock_entries");
-  await client.execute("DELETE FROM products");
-  await client.execute("DELETE FROM customers");
-  await client.execute("DELETE FROM expenses");
-  await client.execute("DELETE FROM users");
+  await db.delete(schema.creditPayments);
+  await db.delete(schema.saleItems);
+  await db.delete(schema.sales);
+  await db.delete(schema.stockEntries);
+  await db.delete(schema.products);
+  await db.delete(schema.customers);
+  await db.delete(schema.expenses);
+  await db.delete(schema.users);
 
   console.log("Cleared existing data.");
 
@@ -335,9 +329,9 @@ async function seed() {
 }
 
 seed()
-  .then(() => client.close())
+  .then(() => client.end())
   .catch(async (err) => {
     console.error("Seeding failed:", err);
-    await client.close();
+    await client.end();
     process.exit(1);
   });
