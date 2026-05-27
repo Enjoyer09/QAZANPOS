@@ -32,6 +32,35 @@ app.get("*", (req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
+import { db } from "./db/index.js";
+import * as schema from "./db/schema.js";
+
+async function ensureDefaultUsers() {
+  try {
+    const existingUsers = await db.select().from(schema.users).limit(1);
+    if (existingUsers.length === 0) {
+      console.log("No users found. Creating default accounts...");
+      await db.insert(schema.users).values([
+        {
+          username: "admin",
+          password: "admin123",
+          role: "Admin",
+        },
+        {
+          username: "satici",
+          password: "satici123",
+          role: "Staff",
+        },
+      ]);
+      console.log("Default accounts created: admin/admin123, satici/satici123");
+    }
+  } catch (error) {
+    console.error("Failed to ensure default users on startup:", error);
+  }
+}
+
+app.listen(PORT, async () => {
   console.log(`Server listening on port ${PORT}`);
+  await ensureDefaultUsers();
 });
+

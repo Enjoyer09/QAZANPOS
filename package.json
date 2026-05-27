@@ -12,7 +12,7 @@
     "build:server": "npm run build --workspace=server",
     "build:client": "npm run build --workspace=client",
     "build": "npm run build:server && npm run build:client",
-    "start": "npm run start --workspace=server"
+    "start": "npm run db:push --workspace=server && npm run start --workspace=server"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
