@@ -418,38 +418,45 @@ function MainRoutes({ user, onLogout }: { user: any; onLogout: () => void }) {
 
   return (
     <AppLayout user={user} onLogout={onLogout}>
-      <Switch>
-        {isSuperTenant ? (
-          <>
-            <Route path="/" component={SuperDashboard} />
-            <Route path="/loqlar" component={Logs} />
-          </>
-        ) : (
-          <>
-            {isAdmin && <Route path="/" component={Dashboard} />}
-            <Route path="/pos" component={POS} />
-            <Route path="/nisye" component={Debts} />
-            <Route path="/musteriler" component={Customers} />
-            <Route path="/anbar" component={Stock} />
-            {isAdmin && <Route path="/anbar/daxil" component={StockIn} />}
-            {isAdmin && <Route path="/mehsullar" component={Products} />}
-            <Route path="/satislar" component={SalesHistory} />
-            <Route path="/satislar/:id" component={Invoice} />
-            {isAdmin && <Route path="/xercler" component={Expenses} />}
-            {isAdmin && <Route path="/loqlar" component={Logs} />}
-            <Route path="/ayarlar" component={SettingsPage} />
-          </>
-        )}
-        <Route>
-          <div className="flex flex-col items-center justify-center py-20">
-            <h1 className="text-6xl font-extrabold text-primary">403</h1>
-            <p className="text-gray-500 mt-2 font-medium">Giriş qadağandır və ya səhifə mövcud deyil.</p>
-            <Link href={isSuperTenant ? "/" : (isAdmin ? "/" : "/pos")} className="mt-4 text-sm text-primary font-bold hover:underline">
-              Geri qayıt
-            </Link>
-          </div>
-        </Route>
-      </Switch>
+      {isSuperTenant ? (
+        <Switch>
+          <Route path="/" component={SuperDashboard} />
+          <Route path="/loqlar" component={Logs} />
+          <Route>
+            <div className="flex flex-col items-center justify-center py-20">
+              <h1 className="text-6xl font-extrabold text-primary">403</h1>
+              <p className="text-gray-500 mt-2 font-medium">Giriş qadağandır və ya səhifə mövcud deyil.</p>
+              <Link href="/" className="mt-4 text-sm text-primary font-bold hover:underline">
+                Geri qayıt
+              </Link>
+            </div>
+          </Route>
+        </Switch>
+      ) : (
+        <Switch>
+          {isAdmin && <Route path="/" component={Dashboard} />}
+          <Route path="/pos" component={POS} />
+          <Route path="/nisye" component={Debts} />
+          <Route path="/musteriler" component={Customers} />
+          <Route path="/anbar" component={Stock} />
+          {isAdmin && <Route path="/anbar/daxil" component={StockIn} />}
+          {isAdmin && <Route path="/mehsullar" component={Products} />}
+          <Route path="/satislar" component={SalesHistory} />
+          <Route path="/satislar/:id" component={Invoice} />
+          {isAdmin && <Route path="/xercler" component={Expenses} />}
+          {isAdmin && <Route path="/loqlar" component={Logs} />}
+          <Route path="/ayarlar" component={SettingsPage} />
+          <Route>
+            <div className="flex flex-col items-center justify-center py-20">
+              <h1 className="text-6xl font-extrabold text-primary">403</h1>
+              <p className="text-gray-500 mt-2 font-medium">Giriş qadağandır və ya səhifə mövcud deyil.</p>
+              <Link href={isAdmin ? "/" : "/pos"} className="mt-4 text-sm text-primary font-bold hover:underline">
+                Geri qayıt
+              </Link>
+            </div>
+          </Route>
+        </Switch>
+      )}
     </AppLayout>
   );
 }
