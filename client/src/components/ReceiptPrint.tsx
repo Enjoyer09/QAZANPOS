@@ -147,7 +147,7 @@ export function generateReceiptHtml(sale: any, settings: any): string {
         }
         body {
           font-family: "Courier New", Courier, monospace, system-ui, sans-serif;
-          font-size: 11px;
+          font-size: 9.5pt;
           line-height: 1.4;
           color: #000000;
           background-color: #ffffff;
@@ -162,14 +162,14 @@ export function generateReceiptHtml(sale: any, settings: any): string {
           font-weight: bold;
         }
         .header-title {
-          font-size: 14px;
+          font-size: 13pt;
           font-weight: bold;
           text-transform: uppercase;
           margin-bottom: 2px;
           letter-spacing: 0.5px;
         }
         .header-meta {
-          font-size: 9px;
+          font-size: 8.5pt;
           color: #333333;
           margin-bottom: 4px;
         }
@@ -198,7 +198,7 @@ export function generateReceiptHtml(sale: any, settings: any): string {
         .item-details {
           display: flex;
           justify-content: space-between;
-          font-size: 10px;
+          font-size: 8.5pt;
           padding-left: 4px;
         }
         .item-total {
@@ -211,7 +211,7 @@ export function generateReceiptHtml(sale: any, settings: any): string {
           margin-top: 6px;
         }
         .grand-total {
-          font-size: 13px;
+          font-size: 11.5pt;
           font-weight: 900;
         }
         .text-red {
@@ -227,7 +227,7 @@ export function generateReceiptHtml(sale: any, settings: any): string {
           margin: 10px 0 6px 0;
         }
         .footer-message {
-          font-size: 9px;
+          font-size: 8.5pt;
           text-align: center;
           font-style: italic;
           margin-top: 8px;
@@ -256,7 +256,7 @@ export function generateReceiptHtml(sale: any, settings: any): string {
         </div>
       </div>
       ` : `
-      <div class="text-center" style="font-size: 9px; padding: 2px 0; font-weight: bold;">
+      <div class="text-center" style="font-size: 8.5pt; padding: 2px 0; font-weight: bold;">
         ${(showStorePhone === 1 && phone) ? `Əlaqə: ${phone}` : ""} ${(showStoreAddress === 1 && address) ? ` | Ünvan: ${address}` : ""}
       </div>
       `}
@@ -278,7 +278,7 @@ export function generateReceiptHtml(sale: any, settings: any): string {
       <div class="divider"></div>
 
       <!-- Listing Header -->
-      <div class="flex-row bold" style="font-size: 10px; margin-bottom: 4px;">
+      <div class="flex-row bold" style="font-size: 9pt; margin-bottom: 4px;">
         <span>Məhsul</span>
         <span>Məbləğ</span>
       </div>
@@ -308,7 +308,7 @@ export function generateReceiptHtml(sale: any, settings: any): string {
       <div class="payment-info">
         ${paymentDetailsHtml}
         ${sale.notes ? `
-          <div class="flex-row pt-1" style="font-size: 9px; font-style: italic;">
+          <div class="flex-row pt-1" style="font-size: 8.5pt; font-style: italic;">
             <span>Qeyd:</span>
             <span>${sale.notes}</span>
           </div>

@@ -93,6 +93,7 @@ export class QzTrayService {
         units: "mm",
         size: { width: parseFloat(widthVal) || 80 },
         margins: 0,
+        scaleContent: false
       });
 
       const data = [{
