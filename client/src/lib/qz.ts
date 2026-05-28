@@ -1,128 +1,108 @@
-// Reusable QZ Tray WebSocket Connector (Zero-dependency implementation)
+// @ts-ignore
+import qz from "qz-tray";
+
 export class QzTrayService {
-  private socket: WebSocket | null = null;
-  private connected = false;
-  private messageId = 1;
-  private pendingRequests = new Map<number, { resolve: Function; reject: Function }>();
+  private initialized = false;
 
   constructor() {}
 
-  public connect(): Promise<boolean> {
-    return new Promise((resolve) => {
-      if (this.connected && this.socket && this.socket.readyState === WebSocket.OPEN) {
-        return resolve(true);
-      }
+  private initSecurity() {
+    if (this.initialized) return;
 
-      // Try secure port 8182 first
-      const wsUrl = "wss://localhost:8182";
-      
-      try {
-        this.socket = new WebSocket(wsUrl);
-        
-        this.socket.onopen = () => {
-          this.connected = true;
-          console.log("QZ Tray: Connected successfully on port 8182");
-          resolve(true);
-        };
-
-        this.socket.onerror = () => {
-          // Fallback to non-secure port 8181
-          try {
-            this.socket = new WebSocket("ws://localhost:8181");
-            this.socket.onopen = () => {
-              this.connected = true;
-              console.log("QZ Tray: Connected successfully on port 8181");
-              resolve(true);
-            };
-            this.socket.onerror = () => {
-              this.connected = false;
-              console.log("QZ Tray: Service is offline or not installed");
-              resolve(false);
-            };
-            this.socket.onmessage = (msg) => this.handleMessage(msg);
-          } catch (e) {
-            this.connected = false;
-            resolve(false);
-          }
-        };
-
-        this.socket.onmessage = (msg) => this.handleMessage(msg);
-        
-        this.socket.onclose = () => {
-          this.connected = false;
-          console.log("QZ Tray: Connection closed");
-        };
-
-      } catch (e) {
-        this.connected = false;
-        resolve(false);
-      }
+    // 1. Set the digital certificate loader promise
+    qz.security.setCertificatePromise((resolve: (value: string) => void, reject: (reason: any) => void) => {
+      fetch("/api/auth/qz-certificate")
+        .then((res) => {
+          if (!res.ok) throw new Error("Sertifikat yüklənmədi");
+          return res.text();
+        })
+        .then(resolve)
+        .catch((err) => {
+          console.error("QZ Cert error:", err);
+          reject(err);
+        });
     });
+
+    // 2. Set the signature loader promise (SHA-512)
+    qz.security.setSignaturePromise((toSign: string) => {
+      return (resolve: (value: string) => void, reject: (reason: any) => void) => {
+        fetch("/api/auth/qz-sign", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ request: toSign }),
+        })
+          .then((res) => {
+            if (!res.ok) throw new Error("İmza alınmadı");
+            return res.text();
+          })
+          .then(resolve)
+          .catch((err) => {
+            console.error("QZ Sign error:", err);
+            reject(err);
+          });
+      };
+    });
+
+    this.initialized = true;
   }
 
-  private handleMessage(msg: MessageEvent) {
+  public async connect(): Promise<boolean> {
     try {
-      const response = JSON.parse(msg.data);
-      if (response.id && this.pendingRequests.has(response.id)) {
-        const { resolve, reject } = this.pendingRequests.get(response.id)!;
-        this.pendingRequests.delete(response.id);
-        
-        if (response.error) {
-          reject(new Error(response.error));
-        } else {
-          resolve(response.result);
-        }
+      this.initSecurity();
+
+      if (qz.websocket.isActive()) {
+        return true;
       }
+
+      await qz.websocket.connect();
+      console.log("QZ Tray: Connected successfully via qz-tray SDK");
+      return true;
     } catch (e) {
-      console.error("QZ Tray parsing error", e);
+      console.warn("QZ Tray: Connection failed or offline", e);
+      return false;
     }
   }
 
-  private sendRequest(method: string, params: any[]): Promise<any> {
-    return new Promise((resolve, reject) => {
-      if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
-        return reject(new Error("QZ Tray is not connected"));
+  public isConnected(): boolean {
+    return qz.websocket.isActive();
+  }
+
+  public async getPrinters(): Promise<string[]> {
+    try {
+      if (!this.isConnected()) {
+        await this.connect();
+      }
+      return await qz.printers.find();
+    } catch (e) {
+      console.error("QZ Tray: Failed to get printers", e);
+      return [];
+    }
+  }
+
+  public async printHTML(printerName: string, htmlContent: string, options: any = {}): Promise<any> {
+    try {
+      if (!this.isConnected()) {
+        await this.connect();
       }
 
-      const id = this.messageId++;
-      this.pendingRequests.set(id, { resolve, reject });
-
-      const payload = JSON.stringify({
-        call: method,
-        params: params,
-        id: id
+      const widthVal = options.width || "80mm";
+      const config = qz.configs.create(printerName, {
+        units: "mm",
+        size: { width: parseFloat(widthVal) || 80 },
+        margins: 0,
       });
 
-      this.socket.send(payload);
-    });
-  }
+      const data = [{
+        type: 'html',
+        format: 'plain',
+        data: htmlContent
+      }];
 
-  public isConnected(): boolean {
-    return this.connected;
-  }
-
-  public getPrinters(): Promise<string[]> {
-    return this.sendRequest("printers.find", []);
-  }
-
-  public printHTML(printerName: string, htmlContent: string, options: any = {}): Promise<any> {
-    const widthVal = options.width || "80mm";
-    
-    // QZ Tray JSON structure for printer config and plain HTML printing
-    const config = {
-      printer: printerName,
-      units: "mm",
-      size: { width: parseFloat(widthVal) || 80 },
-      margins: 0
-    };
-    
-    const data = [{
-      type: 'html',
-      format: 'plain',
-      data: htmlContent
-    }];
-    
-    return this.sendRequest("print", [config, data]);
+      return await qz.print(config, data);
+    } catch (e) {
+      console.error("QZ Tray: HTML print failed", e);
+      throw e;
+    }
   }
 }
 

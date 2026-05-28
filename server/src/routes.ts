@@ -2,6 +2,9 @@ import { Router } from "express";
 import { db } from "./db/index.js";
 import * as schema from "./db/schema.js";
 import { eq, and, lte, gte, sql, desc } from "drizzle-orm";
+import crypto from "crypto";
+import fs from "fs";
+import path from "path";
 
 declare global {
   namespace Express {
@@ -137,6 +140,44 @@ router.post("/auth/login", async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ message: "Giriş zamanı xəta baş verdi" });
+  }
+});
+
+// Serve QZ Digital Certificate
+router.get("/auth/qz-certificate", async (req, res) => {
+  try {
+    const certPath = path.resolve(process.cwd(), "server/auth/digital-certificate.txt");
+    if (!fs.existsSync(certPath)) {
+      return res.status(404).json({ message: "Rəqəmsal sertifikat tapılmadı" });
+    }
+    const cert = fs.readFileSync(certPath, "utf8");
+    res.type("text/plain").send(cert);
+  } catch (error) {
+    res.status(500).json({ message: "Sertifikatı gətirərkən xəta baş verdi" });
+  }
+});
+
+// Sign QZ messages (using SHA-512)
+router.post("/auth/qz-sign", async (req, res) => {
+  try {
+    const { request } = req.body;
+    if (!request) {
+      return res.status(400).json({ message: "İmzalanacaq məlumat daxil edilməyib" });
+    }
+
+    const keyPath = path.resolve(process.cwd(), "server/auth/private-key.pem");
+    if (!fs.existsSync(keyPath)) {
+      return res.status(500).json({ message: "Rəqəmsal imza açarı tapılmadı" });
+    }
+
+    const privateKey = fs.readFileSync(keyPath, "utf8");
+    const signer = crypto.createSign("RSA-SHA512");
+    signer.update(request);
+    const signature = signer.sign(privateKey, "base64");
+
+    res.type("text/plain").send(signature);
+  } catch (error) {
+    res.status(500).json({ message: "İmzalama zamanı xəta baş verdi" });
   }
 });
 
