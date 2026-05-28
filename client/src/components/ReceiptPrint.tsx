@@ -178,9 +178,21 @@ export function generateReceiptHtml(sale: any, settings: any): string {
           margin: 6px 0;
         }
         .flex-row {
-          display: flex;
-          justify-content: space-between;
+          display: block;
+          clear: both;
+          width: 100%;
           margin-bottom: 2px;
+        }
+        .flex-row span:first-child {
+          float: left;
+        }
+        .flex-row span:last-child {
+          float: right;
+        }
+        .flex-row::after {
+          content: "";
+          display: block;
+          clear: both;
         }
         .pt-1 {
           padding-top: 4px;
@@ -190,16 +202,36 @@ export function generateReceiptHtml(sale: any, settings: any): string {
         }
         .item-row {
           margin-bottom: 6px;
+          clear: both;
+        }
+        .item-row::after {
+          content: "";
+          display: block;
+          clear: both;
         }
         .item-name {
           font-weight: bold;
           word-break: break-all;
+          display: block;
+          width: 100%;
         }
         .item-details {
-          display: flex;
-          justify-content: space-between;
+          display: block;
+          clear: both;
+          width: 100%;
           font-size: 8.5pt;
           padding-left: 4px;
+        }
+        .item-details span:first-child {
+          float: left;
+        }
+        .item-details span:last-child {
+          float: right;
+        }
+        .item-details::after {
+          content: "";
+          display: block;
+          clear: both;
         }
         .item-total {
           font-weight: bold;
@@ -209,6 +241,12 @@ export function generateReceiptHtml(sale: any, settings: any): string {
           border-top: 1px dashed #000000;
           padding-top: 4px;
           margin-top: 6px;
+          clear: both;
+        }
+        .total-box::after {
+          content: "";
+          display: block;
+          clear: both;
         }
         .grand-total {
           font-size: 11.5pt;
@@ -221,10 +259,13 @@ export function generateReceiptHtml(sale: any, settings: any): string {
           color: #000000;
         }
         .barcode-container {
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          margin: 10px 0 6px 0;
+          text-align: center;
+          margin: 10px auto 6px auto;
+          width: 100%;
+          clear: both;
+        }
+        .barcode-container svg {
+          display: inline-block;
         }
         .footer-message {
           font-size: 8.5pt;
@@ -232,6 +273,7 @@ export function generateReceiptHtml(sale: any, settings: any): string {
           font-style: italic;
           margin-top: 8px;
           line-height: 1.3;
+          clear: both;
         }
         @media print {
           body {
