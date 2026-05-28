@@ -589,13 +589,22 @@ export default function SettingsPage() {
                   </p>
 
                   <div className="flex flex-col sm:flex-row gap-3">
-                    {/* Download Button */}
+                    {/* Main Download Button for TXT Certificate */}
+                    <a
+                      href="/api/auth/qz-certificate"
+                      download="digital-certificate.txt"
+                      className="px-4 py-2.5 bg-emerald-600 text-white font-bold text-xs rounded-xl hover:bg-emerald-700 cursor-pointer flex items-center justify-center gap-2 shadow-xs transition-all hover-elevate w-full sm:w-auto text-center"
+                    >
+                      <Printer className="w-3.5 h-3.5 inline-block" /> digital-certificate.txt Yüklə (Ən Sadə Metod)
+                    </a>
+
+                    {/* Secondary CRT Download Button */}
                     <a
                       href="/api/auth/qz-certificate"
                       download="override.crt"
-                      className="px-4 py-2.5 bg-primary text-white font-bold text-xs rounded-xl hover:bg-primary/90 cursor-pointer flex items-center justify-center gap-2 shadow-xs transition-all hover-elevate w-full sm:w-auto text-center"
+                      className="px-4 py-2.5 border border-gray-200 text-gray-600 bg-white hover:bg-gray-50 font-bold text-xs rounded-xl cursor-pointer flex items-center justify-center gap-2 transition-all w-full sm:w-auto text-center"
                     >
-                      <Printer className="w-3.5 h-3.5 inline-block" /> override.crt Yüklə (Sertifikat)
+                      override.crt Yüklə
                     </a>
                     
                     <button
@@ -614,23 +623,40 @@ export default function SettingsPage() {
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2.5 text-[10px] text-gray-500 leading-normal font-medium">
-                    <div className="space-y-1.5 p-3.5 bg-white/50 border border-gray-100 rounded-xl">
-                      <span className="font-extrabold text-gray-800 uppercase tracking-wider block text-[9px]">macOS üçün Quraşdırma:</span>
-                      <ol className="list-decimal pl-4 space-y-1">
-                        <li>Local QZ Tray ikonuna sağ klikləyib <strong>Advanced ➔ Diagnostic ➔ Browse Shared Folder</strong> seçin.</li>
-                        <li>Açılan qovluqdakı <strong>qz-tray.properties</strong> faylını açın.</li>
-                        <li>Ən sonuna əlavə edin: <code>authcert.override=/sizin/yüklədiyiniz/qovluq/override.crt</code></li>
-                        <li>Faylı yadda saxlayın və QZ-i yenidən başladın (Restart).</li>
+                  <div className="grid grid-cols-1 gap-4 pt-2.5 text-[10px] text-gray-500 leading-normal font-medium">
+                    {/* Site Manager Setup Method (Easiest) */}
+                    <div className="space-y-1.5 p-3.5 bg-emerald-50/50 border border-emerald-100 rounded-xl">
+                      <span className="font-extrabold text-emerald-800 uppercase tracking-wider block text-[9.5px] flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-emerald-600" /> Metod 1: QZ Site Manager ilə Quraşdırma (Bütün Sistemlər üçün - Tövsiyə Olunur):
+                      </span>
+                      <ol className="list-decimal pl-4 space-y-1 text-gray-600">
+                        <li>Yuxarıdakı yaşıl <strong>"digital-certificate.txt Yüklə"</strong> düyməsinə klikləyərək faylı kompüterinizə yazın.</li>
+                        <li>QZ Tray proqramını başladın, ekranın sağ aşağı küncündəki (və ya yuxarı menyudakı) QZ ikonuna sağ klikləyin.</li>
+                        <li><strong>Advanced ➔ Site Manager</strong> (və ya <i>Digital Certificates</i>) bölməsinə daxil olun.</li>
+                        <li>Açılan pəncərəyə yüklədiyiniz <code>digital-certificate.txt</code> faylını sürükləyib buraxın (və ya sol aşağıdakı <strong>"+"</strong> düyməsinə klikləyərək faylı seçin).</li>
+                        <li>Dəyişikliklərin tam aktivləşməsi üçün QZ proqramından çıxın (Exit) və yenidən başladın.</li>
                       </ol>
                     </div>
-                    <div className="space-y-1.5 p-3.5 bg-white/50 border border-gray-100 rounded-xl">
-                      <span className="font-extrabold text-gray-800 uppercase tracking-wider block text-[9px]">Windows üçün Quraşdırma:</span>
-                      <ol className="list-decimal pl-4 space-y-1">
-                        <li>Yüklədiyiniz <strong>override.crt</strong> faylını birbaşa QZ Tray-in quraşdırıldığı qovluğa kopyalayın (məsələn: <code>C:\Program Files\QZ Tray\override.crt</code>).</li>
-                        <li>QZ Tray proqramı avtomatik olaraq bu faylı tanıyacaq.</li>
-                        <li>Dəyişikliklərin tam aktiv olması üçün QZ-i yenidən başladın.</li>
-                      </ol>
+
+                    {/* Advanced properties file methods */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1.5 p-3.5 bg-white/50 border border-gray-100 rounded-xl">
+                        <span className="font-extrabold text-gray-800 uppercase tracking-wider block text-[9px]">Metod 2: macOS üçün qovluq ilə quraşdırma:</span>
+                        <ol className="list-decimal pl-4 space-y-1">
+                          <li>Sertifikatı <code>override.crt</code> olaraq yükləyin.</li>
+                          <li>Local QZ Tray ikonuna sağ klikləyib <strong>Advanced ➔ Diagnostic ➔ Browse Shared Folder</strong> seçin.</li>
+                          <li>Açılan qovluqdakı <strong>qz-tray.properties</strong> faylını açıb sonuna əlavə edin: <code>authcert.override=/yol/override.crt</code></li>
+                          <li>QZ-i yenidən başladın (Restart).</li>
+                        </ol>
+                      </div>
+                      <div className="space-y-1.5 p-3.5 bg-white/50 border border-gray-100 rounded-xl">
+                        <span className="font-extrabold text-gray-800 uppercase tracking-wider block text-[9px]">Metod 2: Windows üçün qovluq ilə quraşdırma:</span>
+                        <ol className="list-decimal pl-4 space-y-1">
+                          <li>Sertifikatı <code>override.crt</code> olaraq yükləyin.</li>
+                          <li>Yüklədiyiniz faylı birbaşa QZ Tray-in quraşdırıldığı qovluğa kopyalayın (məsələn: <code>C:\Program Files\QZ Tray\override.crt</code>).</li>
+                          <li>Dəyişikliklərin tam aktiv olması üçün QZ-i yenidən başladın.</li>
+                        </ol>
+                      </div>
                     </div>
                   </div>
                 </div>
