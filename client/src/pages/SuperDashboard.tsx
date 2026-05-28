@@ -14,6 +14,8 @@ import {
   Layers,
   Calendar,
   Eye,
+  EyeOff,
+  Trash2,
   Activity
 } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
@@ -28,10 +30,15 @@ export default function SuperDashboard() {
   const [newSlug, setNewSlug] = useState("");
   const [newAdminUser, setNewAdminUser] = useState("");
   const [newAdminPassword, setNewAdminPassword] = useState("");
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
 
   const [selectedTenantForUsers, setSelectedTenantForUsers] = useState<any | null>(null);
   const [tenantUsers, setTenantUsers] = useState<any[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+
+  const [selectedTenantForDelete, setSelectedTenantForDelete] = useState<any | null>(null);
+  const [superAdminPasswordConfirm, setSuperAdminPasswordConfirm] = useState("");
+  const [showSuperAdminPassword, setShowSuperAdminPassword] = useState(false);
 
   const handleViewUsers = async (tenant: any) => {
     setSelectedTenantForUsers(tenant);
@@ -155,6 +162,40 @@ export default function SuperDashboard() {
       toast({
         title: "Xəta!",
         description: err.message || "Biznes dərəcəsi dəyişdirilərkən xəta baş verdi.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Delete Tenant mutation
+  const deleteTenantMutation = useMutation({
+    mutationFn: async ({ id, password }: { id: number; password: string }) => {
+      const res = await fetch(`/api/super/tenants/${id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Biznes silinə bilmədi");
+      }
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/super/tenants"] });
+      setSelectedTenantForDelete(null);
+      setSuperAdminPasswordConfirm("");
+      setShowSuperAdminPassword(false);
+      toast({
+        title: "Biznes Silindi",
+        description: data.message || "Biznes və ona aid bütün məlumatlar uğurla təmizləndi.",
+        variant: "success",
+      });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Xəta!",
+        description: err.message || "Biznes silinərkən xəta baş verdi.",
         variant: "destructive",
       });
     },
@@ -345,6 +386,13 @@ export default function SuperDashboard() {
                               <CheckCircle className="w-3.5 h-3.5" /> Aktivləşdir
                             </button>
                           )}
+                          <button
+                            type="button"
+                            onClick={() => setSelectedTenantForDelete(tenant)}
+                            className="px-2.5 py-1.5 bg-red-50 text-red-600 rounded-lg border border-red-100 hover:bg-red-100 cursor-pointer shadow-xs transition-all flex items-center justify-center gap-1 font-bold text-[10px]"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" /> Sil
+                          </button>
                         </div>
                       ) : (
                         <span className="text-[10px] text-gray-400 font-extrabold uppercase italic block tracking-wider pr-4">Super Platform</span>
@@ -441,14 +489,23 @@ export default function SuperDashboard() {
                 {/* Admin Password */}
                 <div className="space-y-1">
                   <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Şifrə *</label>
-                  <input
-                    type="password"
-                    placeholder="Şifrə"
-                    value={newAdminPassword}
-                    onChange={(e) => setNewAdminPassword(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 font-mono text-gray-900 font-bold"
-                    required
-                  />
+                  <div className="relative">
+                    <input
+                      type={showAdminPassword ? "text" : "password"}
+                      placeholder="Şifrə"
+                      value={newAdminPassword}
+                      onChange={(e) => setNewAdminPassword(e.target.value)}
+                      className="w-full px-4 py-3 pr-10 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 font-mono text-gray-900 font-bold"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowAdminPassword(!showAdminPassword)}
+                      className="absolute right-3.5 top-3.5 text-gray-400 hover:text-primary transition-colors flex items-center justify-center"
+                    >
+                      {showAdminPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -540,6 +597,94 @@ export default function SuperDashboard() {
               >
                 Bağla
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Tenant Modal */}
+      {selectedTenantForDelete && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs z-100 flex items-center justify-center p-4 animate-in fade-in-0">
+          <div className="bg-white rounded-3xl border border-gray-100 p-8 shadow-2xl max-w-md w-full relative space-y-6">
+            <div>
+              <h3 className="font-extrabold text-red-600 text-lg tracking-tight flex items-center gap-2">
+                <ShieldAlert className="w-5 h-5" /> '{selectedTenantForDelete.name}' Biznesini Sil
+              </h3>
+              <p className="text-[10px] text-gray-400 mt-1 font-semibold leading-relaxed uppercase tracking-wider">
+                BU ƏMƏLİYYAT DAİMİDİR VƏ GERİ QAYTARILA BİLMƏZ!
+              </p>
+            </div>
+
+            <div className="space-y-4 text-xs font-semibold">
+              <div className="bg-red-50 text-red-700 p-4 rounded-2xl border border-red-100 space-y-2">
+                <p className="font-bold">Diqqət! Bu əməliyyat nəticəsində:</p>
+                <ul className="list-disc pl-4 space-y-1">
+                  <li>Mağazanın bütün satış jurnalları və gəlir-xərc məlumatları silinəcək.</li>
+                  <li>Bütün məhsul kataloqu və anbardakı qalıqlar silinəcək.</li>
+                  <li>Mağazaya aid bütün kassir və admin istifadəçi hesabları tamamilə ləğv ediləcək.</li>
+                </ul>
+              </div>
+
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!superAdminPasswordConfirm.trim()) {
+                    toast({
+                      title: "Xəta!",
+                      description: "Təsdiq üçün Super Admin şifrənizi daxil edin.",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  deleteTenantMutation.mutate({
+                    id: selectedTenantForDelete.id,
+                    password: superAdminPasswordConfirm.trim(),
+                  });
+                }}
+                className="space-y-3"
+              >
+                <div className="space-y-1">
+                  <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Super Admin Şifrəsi *</label>
+                  <div className="relative">
+                    <input
+                      type={showSuperAdminPassword ? "text" : "password"}
+                      placeholder="Super Admin Şifrənizi daxil edin"
+                      value={superAdminPasswordConfirm}
+                      onChange={(e) => setSuperAdminPasswordConfirm(e.target.value)}
+                      className="w-full px-4 py-3 pr-10 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-red-500 bg-gray-50/50 font-mono text-gray-900 font-bold"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowSuperAdminPassword(!showSuperAdminPassword)}
+                      className="absolute right-3.5 top-3.5 text-gray-400 hover:text-red-500 transition-colors flex items-center justify-center"
+                    >
+                      {showSuperAdminPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex gap-2.5 justify-end text-xs font-bold pt-4 border-t border-gray-100/50 mt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedTenantForDelete(null);
+                      setSuperAdminPasswordConfirm("");
+                      setShowSuperAdminPassword(false);
+                    }}
+                    className="px-4 py-2.5 border border-gray-200 text-gray-500 rounded-xl hover:bg-gray-50 cursor-pointer transition-all"
+                  >
+                    Ləğv Et
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={deleteTenantMutation.isPending}
+                    className="px-6 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 cursor-pointer shadow-md shadow-red-500/10 transition-all flex items-center justify-center gap-1.5"
+                  >
+                    {deleteTenantMutation.isPending ? "Silinir..." : "Biznesi Həmişəlik Sil"}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </div>

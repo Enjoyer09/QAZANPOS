@@ -1785,4 +1785,53 @@ router.get("/super/tenants/:id/users", requireSuperAdmin, async (req, res) => {
   }
 });
 
+// Delete a tenant (requires super admin privileges & verifying super admin password)
+router.delete("/super/tenants/:id", requireSuperAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { password } = req.body;
+
+    if (!password) {
+      return res.status(400).json({ message: "Təsdiqləmək üçün Super Admin şifrəsini daxil edin" });
+    }
+
+    if (id === 2) {
+      return res.status(400).json({ message: "Super platforma admin tenantı silinə bilməz!" });
+    }
+
+    // Verify the super admin user's password
+    const headerUsername = req.headers["x-user-username"];
+    const superAdminUsername = (Array.isArray(headerUsername) ? (headerUsername[0] || "superadmin") : (headerUsername || "superadmin")).trim().toLowerCase();
+    const superAdminUser = await db.query.users.findFirst({
+      where: and(
+        eq(schema.users.username, superAdminUsername),
+        eq(schema.users.tenantId, req.tenantId)
+      )
+    });
+
+    if (!superAdminUser || superAdminUser.password !== password.trim()) {
+      return res.status(401).json({ message: "Daxil edilən Super Admin şifrəsi yanlışdır!" });
+    }
+
+    // Fetch tenant name before deleting
+    const tenantToDelete = await db.query.tenants.findFirst({
+      where: eq(schema.tenants.id, id)
+    });
+
+    if (!tenantToDelete) {
+      return res.status(404).json({ message: "Silinəcək biznes tapılmadı" });
+    }
+
+    // Delete the tenant
+    await db.delete(schema.tenants).where(eq(schema.tenants.id, id));
+
+    await logActivity(req, "DELETE_TENANT", `'${tenantToDelete.name}' (Kod: ${tenantToDelete.slug}) biznesini tamamilə sildi`);
+
+    res.json({ message: `Biznes hesabınız ('${tenantToDelete.name}') uğurla silindi` });
+  } catch (error: any) {
+    console.error("Error deleting tenant:", error);
+    res.status(500).json({ message: "Biznes silinərkən xəta baş verdi" });
+  }
+});
+
 export default router;
