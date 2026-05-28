@@ -390,7 +390,7 @@ function OverdueDebtCheck() {
                   <p className="text-[10px] text-gray-400 mt-0.5">{item.customerPhone}</p>
                 )}
               </div>
-              <span className="font-bold text-red-700 font-mono text-base">{item.totalAmount.toFixed(2)} ₼</span>
+              <span className="font-bold text-red-700 font-mono text-base">{Number(item.totalAmount || 0).toFixed(2)} ₼</span>
             </div>
           ))}
         </div>
@@ -468,44 +468,15 @@ function MainRoutes({ user, onLogout }: { user: any; onLogout: () => void }) {
   );
 }
 
-export default function App() {
+function AppContent() {
   const [user, setUser] = useState<any>(null);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
-
-  useEffect(() => {
-    const userStr = localStorage.getItem("qazanpos_user");
-    if (userStr) {
-      try {
-        setUser(JSON.parse(userStr));
-      } catch (e) {
-        localStorage.removeItem("qazanpos_user");
-      }
-    }
-    setIsCheckingSession(false);
-  }, []);
-
-  const handleLoginSuccess = (userData: any) => {
-    localStorage.setItem("qazanpos_user", JSON.stringify(userData));
-    setUser(userData);
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem("qazanpos_user");
-    setUser(null);
-  };
-
-  if (isCheckingSession) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <span className="text-xs font-bold text-gray-400">Yüklənir...</span>
-      </div>
-    );
-  }
 
   const host = window.location.hostname;
   const parts = host.split(".");
   const isSuperTenant = parts.length > 1 && parts[0].toLowerCase() === "super";
 
+  // Moved hook to the top level unconditionally before early returns to preserve Hook rules
   const { data: tenantConfig, error: tenantError, isLoading: isCheckingTenant } = useQuery<any>({
     queryKey: ["/api/settings", host],
     queryFn: async () => {
@@ -528,6 +499,28 @@ export default function App() {
     },
     retry: false,
   });
+
+  useEffect(() => {
+    const userStr = localStorage.getItem("qazanpos_user");
+    if (userStr) {
+      try {
+        setUser(JSON.parse(userStr));
+      } catch (e) {
+        localStorage.removeItem("qazanpos_user");
+      }
+    }
+    setIsCheckingSession(false);
+  }, []);
+
+  const handleLoginSuccess = (userData: any) => {
+    localStorage.setItem("qazanpos_user", JSON.stringify(userData));
+    setUser(userData);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("qazanpos_user");
+    setUser(null);
+  };
 
   if (isCheckingSession || isCheckingTenant) {
     return (
@@ -603,18 +596,24 @@ export default function App() {
   }
 
   return (
+    <ToastProvider>
+      {user ? (
+        <>
+          <MainRoutes user={user} onLogout={handleLogout} />
+          {!isSuperTenant && <OverdueDebtCheck />}
+        </>
+      ) : (
+        <Login onLoginSuccess={handleLoginSuccess} />
+      )}
+      <ToastViewport />
+    </ToastProvider>
+  );
+}
+
+export default function App() {
+  return (
     <QueryClientProvider client={queryClient}>
-      <ToastProvider>
-        {user ? (
-          <>
-            <MainRoutes user={user} onLogout={handleLogout} />
-            {!isSuperTenant && <OverdueDebtCheck />}
-          </>
-        ) : (
-          <Login onLoginSuccess={handleLoginSuccess} />
-        )}
-        <ToastViewport />
-      </ToastProvider>
+      <AppContent />
     </QueryClientProvider>
   );
 }
