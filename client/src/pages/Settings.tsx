@@ -573,8 +573,68 @@ export default function SettingsPage() {
               <p className="text-[10px] text-gray-400 font-medium md:col-span-3 mt-1 leading-normal">
                 {qzConnected === "CONNECTED"
                   ? "✓ Səssiz çap aktivdir. POS-da və qaimədə çap düyməsinə kliklədikdə standart brauzer çap pəncərəsi açılmadan birbaşa termal printerinizə göndəriləcək."
-                  : "⚠ QZ Tray local olaraq işə salınmayıb. Çap əməliyyatları standart brauzer çap pəncərəsi (Ctrl + P) üzərindən açılacaq. Səssiz çap üçün arxa fonda QZ Tray proqramını başladın."}
+                  : "⚠ QZ Tray local olaraq işə salınmayıb. Çap əməliyyatları standart brauzer çap pəncərəsi (Ctrl + P) üzərindən açılacak. Səssiz çap üçün arxa fonda QZ Tray proqramını başladın."}
               </p>
+
+              {/* QZ Silent Printing Self-Signed Certificate Guide for tenants */}
+              <div className="md:col-span-3 border-t border-gray-100/70 pt-6 mt-4 space-y-4">
+                <div className="bg-primary/5 rounded-2xl p-5 border border-primary/10 space-y-3.5">
+                  <div className="flex items-center gap-2 text-primary font-bold text-xs">
+                    <Sparkles className="w-4 h-4" />
+                    <span>Səssiz (Pop-up Sorğusuz) Çap üçün Rəqəmsal Sertifikat</span>
+                  </div>
+                  
+                  <p className="text-[11px] text-gray-500 font-medium leading-relaxed">
+                    Local printerinizə səssiz (heç bir "Allow/İcazə ver" pəncərəsi çıxmadan) birbaşa çap göndərmək üçün SaaS rəqəmsal sertifikatımızı kompüterinizə yükləyib local QZ Tray proqramınıza tanıtmalısınız.
+                  </p>
+
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    {/* Download Button */}
+                    <a
+                      href="/api/auth/qz-certificate"
+                      download="override.crt"
+                      className="px-4 py-2.5 bg-primary text-white font-bold text-xs rounded-xl hover:bg-primary/90 cursor-pointer flex items-center justify-center gap-2 shadow-xs transition-all hover-elevate w-full sm:w-auto text-center"
+                    >
+                      <Printer className="w-3.5 h-3.5 inline-block" /> override.crt Yüklə (Sertifikat)
+                    </a>
+                    
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText("authcert.override=" + window.location.origin + "/api/auth/qz-certificate");
+                        toast({
+                          title: "Kopyalandı!",
+                          description: "Properties parametri buferə kopyalandı.",
+                          variant: "success"
+                        });
+                      }}
+                      className="px-4 py-2.5 border border-gray-200 text-gray-600 bg-white hover:bg-gray-50 font-bold text-xs rounded-xl cursor-pointer flex items-center justify-center gap-2 transition-all w-full sm:w-auto"
+                    >
+                      Ayar Parametrini Kopyala
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2.5 text-[10px] text-gray-500 leading-normal font-medium">
+                    <div className="space-y-1.5 p-3.5 bg-white/50 border border-gray-100 rounded-xl">
+                      <span className="font-extrabold text-gray-800 uppercase tracking-wider block text-[9px]">macOS üçün Quraşdırma:</span>
+                      <ol className="list-decimal pl-4 space-y-1">
+                        <li>Local QZ Tray ikonuna sağ klikləyib <strong>Advanced ➔ Diagnostic ➔ Browse Shared Folder</strong> seçin.</li>
+                        <li>Açılan qovluqdakı <strong>qz-tray.properties</strong> faylını açın.</li>
+                        <li>Ən sonuna əlavə edin: <code>authcert.override=/sizin/yüklədiyiniz/qovluq/override.crt</code></li>
+                        <li>Faylı yadda saxlayın və QZ-i yenidən başladın (Restart).</li>
+                      </ol>
+                    </div>
+                    <div className="space-y-1.5 p-3.5 bg-white/50 border border-gray-100 rounded-xl">
+                      <span className="font-extrabold text-gray-800 uppercase tracking-wider block text-[9px]">Windows üçün Quraşdırma:</span>
+                      <ol className="list-decimal pl-4 space-y-1">
+                        <li>Yüklədiyiniz <strong>override.crt</strong> faylını birbaşa QZ Tray-in quraşdırıldığı qovluğa kopyalayın (məsələn: <code>C:\Program Files\QZ Tray\override.crt</code>).</li>
+                        <li>QZ Tray proqramı avtomatik olaraq bu faylı tanıyacaq.</li>
+                        <li>Dəyişikliklərin tam aktiv olması üçün QZ-i yenidən başladın.</li>
+                      </ol>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
