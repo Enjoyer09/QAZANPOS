@@ -19,18 +19,24 @@ export function generateReceiptHtml(sale: any, settings: any): string {
 
   // Dynamically build items HTML
   let itemsHtml = "";
-  sale.items.forEach((item: any) => {
-    const total = (item.quantity * item.salePrice).toFixed(2);
-    itemsHtml += `
-      <div class="item-row">
-        <div class="item-name">${item.productName}</div>
-        <div class="item-details">
-          <span>${item.quantity} ${item.unit} x ${item.salePrice.toFixed(2)} ₼</span>
-          <span class="item-total">${total} ₼</span>
+  if (sale.items && Array.isArray(sale.items)) {
+    sale.items.forEach((item: any) => {
+      const qty = parseFloat(item.quantity) || 0;
+      const price = parseFloat(item.salePrice) || 0;
+      const name = item.productName || item.product?.name || "Məhsul";
+      const unit = item.unit || item.product?.unit || "ədəd";
+      const total = (qty * price).toFixed(2);
+      itemsHtml += `
+        <div class="item-row">
+          <div class="item-name">${name}</div>
+          <div class="item-details">
+            <span>${qty} ${unit} x ${price.toFixed(2)} ₼</span>
+            <span class="item-total">${total} ₼</span>
+          </div>
         </div>
-      </div>
-    `;
-  });
+      `;
+    });
+  }
 
   // Dynamic Payment info
   let paymentDetailsHtml = `
@@ -67,7 +73,10 @@ export function generateReceiptHtml(sale: any, settings: any): string {
   // Debt details if applicable
   let debtHtml = "";
   if (sale.paymentStatus === "credit") {
-    const remaining = (sale.remainingDebt !== undefined ? sale.remainingDebt : (sale.totalAmount - (sale.totalPaid || 0))).toFixed(2);
+    const totalAmount = parseFloat(sale.totalAmount) || 0;
+    const totalPaid = parseFloat(sale.totalPaid) || 0;
+    const remainingDebt = sale.remainingDebt !== undefined ? parseFloat(sale.remainingDebt) : null;
+    const remaining = (remainingDebt !== null ? remainingDebt : (totalAmount - totalPaid)).toFixed(2);
     debtHtml = `
       <div class="flex-row text-red bold font-medium">
         <span>Qalıq Borc:</span>
@@ -283,11 +292,11 @@ export function generateReceiptHtml(sale: any, settings: any): string {
       <div class="total-box">
         <div class="flex-row grand-total">
           <span>CƏMİ:</span>
-          <span>${sale.totalAmount.toFixed(2)} ₼</span>
+          <span>${(parseFloat(sale.totalAmount) || 0).toFixed(2)} ₼</span>
         </div>
         <div class="flex-row">
           <span>Ödənilən:</span>
-          <span>${(sale.totalPaid || 0).toFixed(2)} ₼</span>
+          <span>${(parseFloat(sale.totalPaid) || 0).toFixed(2)} ₼</span>
         </div>
         ${debtHtml}
       </div>
