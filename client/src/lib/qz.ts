@@ -9,7 +9,10 @@ export class QzTrayService {
   private initSecurity() {
     if (this.initialized) return;
 
-    // 1. Set the digital certificate loader promise
+    // 1. Set the signature algorithm to SHA512 to match our server
+    qz.security.setSignatureAlgorithm("SHA512");
+
+    // 2. Set the digital certificate loader promise
     qz.security.setCertificatePromise((resolve: (value: string) => void, reject: (reason: any) => void) => {
       fetch("/api/auth/qz-certificate")
         .then((res) => {
@@ -23,7 +26,7 @@ export class QzTrayService {
         });
     });
 
-    // 2. Set the signature loader promise (SHA-512)
+    // 3. Set the signature loader promise (SHA-512)
     qz.security.setSignaturePromise((toSign: string) => {
       return (resolve: (value: string) => void, reject: (reason: any) => void) => {
         fetch("/api/auth/qz-sign", {
