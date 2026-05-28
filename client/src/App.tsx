@@ -16,6 +16,9 @@ import {
   Settings as SettingsIcon,
   Menu,
   Activity,
+  Building,
+  Mail,
+  RotateCw,
 } from "lucide-react";
 
 // Reusable components
@@ -502,6 +505,102 @@ export default function App() {
   const host = window.location.hostname;
   const parts = host.split(".");
   const isSuperTenant = parts.length > 1 && parts[0].toLowerCase() === "super";
+
+  const { data: tenantConfig, error: tenantError, isLoading: isCheckingTenant } = useQuery<any>({
+    queryKey: ["/api/settings", host],
+    queryFn: async () => {
+      // If super, localhost, or bare domains, they are always valid fallbacks
+      if (isSuperTenant || parts.length <= 1 || parts[0] === "localhost" || parts[0] === "www" || parts[0] === "qazanpos-production" || parts[0].includes("127.0.0.1")) {
+        return { valid: true };
+      }
+      
+      const res = await fetch("/api/settings");
+      if (!res.ok) {
+        if (res.status === 404) {
+          const errData = await res.json();
+          if (errData.errorType === "TENANT_NOT_FOUND") {
+            throw new Error("TENANT_NOT_FOUND");
+          }
+        }
+        throw new Error("API_ERROR");
+      }
+      return res.json();
+    },
+    retry: false,
+  });
+
+  if (isCheckingSession || isCheckingTenant) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50/50">
+        <div className="text-center space-y-4">
+          <RotateCw className="w-8 h-8 text-primary mx-auto animate-spin" />
+          <span className="text-xs font-bold text-gray-400 block animate-pulse">Qazan SaaS yüklənir...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (tenantError?.message === "TENANT_NOT_FOUND") {
+    const slug = parts[0].toLowerCase();
+    return (
+      <div className="min-h-screen w-screen flex items-center justify-center relative overflow-hidden select-none pb-12 bg-gray-50">
+        {/* Dynamic Liquid Background Blobs */}
+        <div className="absolute inset-0 z-0">
+          <div className="absolute top-1/4 left-1/4 size-96 bg-primary/20 rounded-full blur-3xl animate-pulse"></div>
+          <div className="absolute bottom-1/3 right-1/4 size-[450px] bg-red-500/15 rounded-full blur-3xl animate-pulse duration-5000"></div>
+        </div>
+
+        <div className="w-full max-w-md px-6 z-10 text-center space-y-8 animate-in fade-in-0 duration-500">
+          {/* Logo & Brand */}
+          <div className="flex flex-col items-center gap-3.5">
+            <div className="size-16 rounded-2xl bg-primary flex items-center justify-center text-white font-black text-3xl shadow-xl shadow-primary/25 border border-white/20">
+              Q
+            </div>
+            <div>
+              <h1 className="font-extrabold text-gray-900 tracking-tight text-2xl leading-none">
+                Qazan SaaS
+              </h1>
+              <span className="text-xs font-bold text-gray-400 mt-2 block tracking-wider uppercase">
+                Çox-Biznesli POS & Anbar Platforması
+              </span>
+            </div>
+          </div>
+
+          {/* Premium Glassmorphic Apology Card */}
+          <div className="bg-white border border-gray-100 rounded-3xl p-8 shadow-2xl glass-card relative overflow-hidden space-y-6">
+            <div className="size-16 rounded-full bg-red-50 flex items-center justify-center mx-auto text-red-500 border border-red-100/50">
+              <Building className="w-8 h-8 animate-pulse" />
+            </div>
+
+            <div className="space-y-2">
+              <h2 className="text-lg font-black text-gray-900 tracking-tight">
+                Biznes Tapılmadı
+              </h2>
+              <p className="text-xs text-gray-500 font-semibold leading-relaxed">
+                Sizin <span className="font-mono text-primary bg-primary/5 px-2 py-0.5 rounded-md font-extrabold">'{slug}'</span> adlı biznesiniz bizim sistemdə mövcud deyil.
+              </p>
+            </div>
+
+            <p className="text-xs text-gray-600 leading-relaxed font-bold bg-gray-50/50 p-4 rounded-xl border border-gray-100/30">
+              Qazan POS platformasında yeni bir mağaza açmaq və ya pulsuz Demo əldə etmək üçün bizə yaza bilərsiniz.
+            </p>
+
+            {/* Inquiries Action Button */}
+            <a
+              href={`mailto:abbas@laptopmarket.az?subject=Qazan POS Demo Talebi: ${slug}&body=Salam, biz '${slug}' subdomeni altında Qazan POS sistemini sınamaq üçün Demo hesabı əldə etmək istəyirik.`}
+              className="w-full py-4 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 cursor-pointer flex items-center justify-center gap-2 text-sm shadow-md shadow-primary/10 transition-all hover-elevate"
+            >
+              <Mail className="w-4 h-4" /> Demo Əldə Etmək Üçün Yazın
+            </a>
+          </div>
+
+          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+            Dəstək və Əlaqə: <a href="mailto:abbas@laptopmarket.az" className="text-primary hover:underline">abbas@laptopmarket.az</a>
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <QueryClientProvider client={queryClient}>
