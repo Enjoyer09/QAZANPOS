@@ -19,7 +19,8 @@ import {
   getCachedProducts,
   getCachedCustomers,
   getCachedSettings,
-  saveOfflineSale
+  saveOfflineSale,
+  saveOfflineReturn
 } from "../lib/offlineSync.ts";
 import { useToast } from "../components/Toast.tsx";
 import { printReceipt } from "../components/ReceiptPrint.tsx";
@@ -79,6 +80,10 @@ export default function POS() {
   const [creditDueDate, setCreditDueDate] = useState("");
   const [notes, setNotes] = useState("");
 
+  // POS Mode State
+  const [posMode, setPosMode] = useState<"sale" | "return">("sale");
+  const [returnStatus, setReturnStatus] = useState<"returned_to_stock" | "defective">("returned_to_stock");
+
   // Checkout Success Modal State
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [lastCreatedSale, setLastCreatedSale] = useState<any | null>(null);
@@ -108,6 +113,8 @@ export default function POS() {
     setNotes("");
     setLastCreatedSale(null);
     setShowSuccessModal(false);
+    setPosMode("sale");
+    setReturnStatus("returned_to_stock");
   };
 
   // Queries
@@ -155,8 +162,10 @@ export default function POS() {
   const activeStockLevels = isOnline ? stockLevels : getCachedProducts();
   const activeCustomers = isOnline ? customers : getCachedCustomers();
 
-  // Filter products that have positive stock levels
-  const sellableProducts = activeStockLevels?.filter((p) => parseFloat(p.currentQuantity) > 0) || [];
+  // Filter products that have positive stock levels (in sale mode) or all products (in return mode)
+  const sellableProducts = posMode === "sale"
+    ? (activeStockLevels?.filter((p) => parseFloat(p.currentQuantity) > 0) || [])
+    : (activeStockLevels || []);
 
   // Add item to basket
   const handleAddToBasket = () => {
@@ -174,10 +183,10 @@ export default function POS() {
       return;
     }
 
-    // Check if adding exceeds stock
+    // Check if adding exceeds stock (only in sale mode)
     const existingInBasket = basket.find((item) => item.productId === prod.productId);
     const currentBasketQty = existingInBasket ? existingInBasket.quantity : 0;
-    if (currentBasketQty + qty > prod.currentQuantity) {
+    if (posMode === "sale" && currentBasketQty + qty > prod.currentQuantity) {
       toast({
         title: "Xəta!",
         description: `Anbarda kifayət qədər yoxdur. Maksimum: ${prod.currentQuantity} ${prod.unit}`,
@@ -224,8 +233,8 @@ export default function POS() {
       prev.map((item) => {
         if (item.productId !== id) return item;
 
-        // If updating quantity, verify it doesn't exceed stock limit
-        if (field === "quantity") {
+        // If updating quantity, verify it doesn't exceed stock limit (only in sale mode)
+        if (field === "quantity" && posMode === "sale") {
           const prod = activeStockLevels?.find((p) => p.productId === id);
           if (prod && value > prod.currentQuantity) {
             toast({
@@ -312,9 +321,118 @@ export default function POS() {
     },
   });
 
+  const createReturnMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      const res = await fetch("/api/returns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.message || "Geri qaytarış tamamlanmadı");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/stock/levels"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/returns"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/summary"] });
+
+      // Construct return snapshot for print success modal
+      const returnObj = {
+        id: data.id,
+        saleDate: new Date().toISOString(),
+        customerName: "Qaytarış",
+        paymentType: "Geri Ödəniş",
+        notes: notes.trim() || null,
+        totalAmount,
+        items: basket.map((item) => ({
+          productName: item.productName,
+          unit: item.unit,
+          quantity: item.quantity,
+          salePrice: item.salePrice
+        }))
+      };
+
+      setLastCreatedSale(returnObj);
+      setShowSuccessModal(true);
+
+      toast({
+        title: "Geri qaytarış tamamlandı 🔄",
+        description: `Məbləğ: ${totalAmount.toFixed(2)} ₼`,
+        variant: "success",
+      });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Xəta!",
+        description: err.message || "Geri qaytarış qeydə alınarkən xəta baş verdi.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleCheckout = () => {
     if (basket.length === 0) {
       toast({ title: "Xəta!", description: "Səbət boşdur", variant: "destructive" });
+      return;
+    }
+
+    if (posMode === "return") {
+      const payload = {
+        saleId: null, // Sürətli qaytarış ad-hoc-dur
+        reason: notes.trim() || "Sürətli qaytarış",
+        items: basket.map((item) => ({
+          productId: item.productId,
+          quantity: item.quantity,
+          salePrice: item.salePrice,
+          purchasePrice: item.minPrice,
+          status: returnStatus,
+        })),
+      };
+
+      if (!isOnline) {
+        try {
+          const enrichedOfflineReturn = saveOfflineReturn(payload);
+
+          // Construct print representation for offline success modal
+          enrichedOfflineReturn.items = basket.map((item) => ({
+            productId: item.productId,
+            productName: item.productName,
+            unit: item.unit,
+            quantity: item.quantity,
+            salePrice: item.salePrice,
+            purchasePrice: item.minPrice,
+            status: returnStatus,
+          }));
+
+          setLastCreatedSale({
+            ...enrichedOfflineReturn,
+            totalAmount,
+            customerName: "Qaytarış",
+            paymentType: "Geri Ödəniş",
+            notes: notes.trim() || null,
+          });
+          setShowSuccessModal(true);
+
+          toast({
+            title: "Oflayn geri qaytarış qeydə alındı 🔄",
+            description: "Qaytarış yaddaşda saxlanıldı. İnternet bərpa olunduqda avtomatik sinxronizasiya ediləcək.",
+            variant: "success",
+          });
+        } catch (err) {
+          toast({
+            title: "Xəta!",
+            description: "Oflayn qaytarışı qeydə alarkən xəta baş verdi.",
+            variant: "destructive",
+          });
+        }
+        return;
+      }
+
+      createReturnMutation.mutate(payload);
       return;
     }
 
@@ -421,29 +539,69 @@ export default function POS() {
 
   return (
     <div className="space-y-6 animate-in fade-in-0">
-      {/* Header */}
-      <div>
-        <h2 className="text-2xl font-black text-gray-900 tracking-tight">POS Terminal</h2>
-        <p className="text-xs text-gray-400 mt-1">Sürətli satış, kassa və müştəri borclarının idarəedilməsi</p>
+      {/* Header with Mode Toggle */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-black text-gray-900 tracking-tight">POS Terminal</h2>
+          <p className="text-xs text-gray-400 mt-1">Sürətli satış, kassa və müştəri borclarının idarəedilməsi</p>
+        </div>
+
+        {/* Mode Toggle Controls */}
+        <div className="flex bg-white/70 p-1 rounded-xl border border-gray-100/50 shadow-sm glass">
+          <button
+            onClick={() => {
+              if (basket.length > 0) {
+                if (confirm("Səbət təmizlənəcək. Davam edilsin?")) setBasket([]);
+                else return;
+              }
+              setPosMode("sale");
+            }}
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+              posMode === "sale"
+                ? "bg-primary text-white shadow-md shadow-primary/10"
+                : "text-gray-500 hover:text-gray-900"
+            }`}
+          >
+            ⚡ Satış Rejimi
+          </button>
+          <button
+            onClick={() => {
+              if (basket.length > 0) {
+                if (confirm("Səbət təmizlənəcək. Davam edilsin?")) setBasket([]);
+                else return;
+              }
+              setPosMode("return");
+            }}
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+              posMode === "return"
+                ? "bg-amber-600 text-white shadow-md shadow-amber-500/10"
+                : "text-gray-500 hover:text-gray-900"
+            }`}
+          >
+            🔄 Sürətli Qaytarış
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
         {/* Left Side: Basket & Product Selection */}
         <div className="xl:col-span-2 space-y-6">
           {/* Product selector card */}
-          <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card">
-            <h3 className="font-extrabold text-gray-900 text-sm mb-4">Səbətə Məhsul Əlavə Et</h3>
+          <div className={`bg-white border p-6 rounded-2xl shadow-xs glass-card transition-all ${posMode === "return" ? "border-amber-300 ring-2 ring-amber-500/10" : "border-gray-100"}`}>
+            <h3 className="font-extrabold text-gray-900 text-sm mb-4">
+              {posMode === "return" ? "Geri Qaytarılacaq Məhsul Seçin" : "Səbətə Məhsul Əlavə Et"}
+            </h3>
             <div className="flex flex-col sm:flex-row gap-3 text-xs font-semibold">
               <div className="flex-1 w-full">
                 <select
                   value={selectedProductId}
                   onChange={(e) => setSelectedProductId(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 cursor-pointer"
+                  className={`w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none bg-gray-50/50 cursor-pointer focus:ring-1 ${posMode === "return" ? "focus:ring-amber-500" : "focus:ring-primary"}`}
                 >
                   <option value="">Məhsul seçin...</option>
                   {sellableProducts.map((p) => (
                     <option key={p.productId} value={p.productId}>
-                      {p.productName} — Qalıq: {p.currentQuantity} {p.unit} (Maya: {p.lastPurchasePrice.toFixed(2)} ₼)
+                      {p.productName} — Qalıq: {p.currentQuantity} {p.unit} {posMode === "sale" ? `(Alış: ${p.lastPurchasePrice.toFixed(2)} ₼)` : ""}
                     </option>
                   ))}
                 </select>
@@ -456,14 +614,18 @@ export default function POS() {
                   placeholder="Miqdar"
                   value={selectedQuantity}
                   onChange={(e) => setSelectedQuantity(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50"
+                  className={`w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none bg-gray-50/50 focus:ring-1 ${posMode === "return" ? "focus:ring-amber-500" : "focus:ring-primary"}`}
                 />
               </div>
               <button
                 onClick={handleAddToBasket}
-                className="w-full sm:w-auto px-5 py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 cursor-pointer flex items-center justify-center gap-2 shadow-md shadow-primary/10 transition-all"
+                className={`w-full sm:w-auto px-5 py-3 text-white font-bold rounded-xl cursor-pointer flex items-center justify-center gap-2 shadow-md transition-all ${
+                  posMode === "return"
+                    ? "bg-amber-600 hover:bg-amber-700 shadow-amber-600/10"
+                    : "bg-primary hover:bg-primary/90 shadow-primary/10"
+                }`}
               >
-                <Plus className="w-4 h-4" /> Əlavə et
+                <Plus className="w-4 h-4" /> {posMode === "return" ? "Qaytarışa əlavə et" : "Əlavə et"}
               </button>
             </div>
           </div>
@@ -489,15 +651,17 @@ export default function POS() {
                     <tr className="border-b border-gray-100 text-xs font-bold text-gray-400 uppercase tracking-wider">
                       <th className="py-3 px-2">Məhsul</th>
                       <th className="py-3 px-2 text-right w-24">Miqdar</th>
-                      <th className="py-3 px-2 text-right w-28">Satış Qiyməti (₼)</th>
+                      <th className="py-3 px-2 text-right w-28">
+                        {posMode === "return" ? "Qaytarış Qiyməti (₼)" : "Satış Qiyməti (₼)"}
+                      </th>
                       <th className="py-3 px-2 text-right w-28">Toplam</th>
-                      <th className="py-3 px-2 text-right w-20 text-green-600">Gəlir</th>
+                      {posMode === "sale" && isAdmin && <th className="py-3 px-2 text-right w-20 text-green-600">Gəlir</th>}
                       <th className="py-3 px-2 w-12 text-center"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {basket.map((item) => {
-                      const isLoss = item.salePrice < item.minPrice;
+                      const isLoss = posMode === "sale" && item.salePrice < item.minPrice;
                       const itemProfit = (item.salePrice - item.minPrice) * item.quantity;
                       return (
                         <tr key={item.productId} className="border-b border-gray-50 hover:bg-gray-50/30 transition-all text-xs">
@@ -514,7 +678,7 @@ export default function POS() {
                               step="0.01"
                               value={item.quantity}
                               onChange={(e) => handleUpdateBasketItem(item.productId, "quantity", e.target.value)}
-                              className="w-16 px-2 py-1 border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-1 focus:ring-primary"
+                              className={`w-16 px-2 py-1 border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-1 ${posMode === "return" ? "focus:ring-amber-500" : "focus:ring-primary"}`}
                             />
                           </td>
                           <td className="py-4 px-2 text-right">
@@ -528,7 +692,7 @@ export default function POS() {
                                 className={`w-20 px-2 py-1 border rounded-lg text-right focus:outline-none focus:ring-1 ${
                                   isLoss
                                     ? "border-red-400 focus:ring-red-500 bg-red-50/50"
-                                    : "border-gray-200 focus:ring-primary"
+                                    : (posMode === "return" ? "border-gray-200 focus:ring-amber-500" : "border-gray-200 focus:ring-primary")
                                 }`}
                               />
                               {isLoss && (
@@ -541,10 +705,12 @@ export default function POS() {
                           <td className="py-4 px-2 text-right font-bold text-gray-900 font-mono">
                             {(item.quantity * item.salePrice).toFixed(2)} ₼
                           </td>
-                          <td className={`py-4 px-2 text-right font-bold font-mono ${itemProfit >= 0 ? "text-green-600" : "text-red-500"}`}>
-                            {itemProfit >= 0 ? "+" : ""}
-                            {itemProfit.toFixed(2)}
-                          </td>
+                          {posMode === "sale" && isAdmin && (
+                            <td className={`py-4 px-2 text-right font-bold font-mono ${itemProfit >= 0 ? "text-green-600" : "text-red-500"}`}>
+                              {itemProfit >= 0 ? "+" : ""}
+                              {itemProfit.toFixed(2)}
+                            </td>
+                          )}
                           <td className="py-4 px-2 text-center">
                             <button
                               onClick={() => handleRemoveFromBasket(item.productId)}
@@ -670,16 +836,20 @@ export default function POS() {
           </div>
 
           {/* Checkout & Totals Card */}
-          <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card">
-            <h3 className="font-extrabold text-gray-900 text-sm mb-4">Ödəniş və Yekun</h3>
+          <div className={`bg-white border p-6 rounded-2xl shadow-xs glass-card transition-all ${posMode === "return" ? "border-amber-300 ring-2 ring-amber-500/10" : "border-gray-100"}`}>
+            <h3 className="font-extrabold text-gray-900 text-sm mb-4">
+              {posMode === "return" ? "Geri Qaytarış və Yekun" : "Ödəniş və Yekun"}
+            </h3>
 
             {/* Totals panel */}
-            <div className="space-y-2 border-b border-gray-100 pb-4 mb-4 text-xs font-medium text-gray-500">
+            <div className="space-y-2 border-b border-gray-100 pb-4 mb-4 text-xs font-medium text-gray-500 font-semibold">
               <div className="flex justify-between">
-                <span>Cəmi məbləğ</span>
-                <span className="font-bold text-gray-900 font-mono text-sm">{totalAmount.toFixed(2)} ₼</span>
+                <span>{posMode === "return" ? "Geri Ödəniləcək Cəmi" : "Cəmi məbləğ"}</span>
+                <span className={`font-bold font-mono text-sm ${posMode === "return" ? "text-amber-600" : "text-gray-900"}`}>
+                  {totalAmount.toFixed(2)} ₼
+                </span>
               </div>
-              {isAdmin && (
+              {posMode === "sale" && isAdmin && (
                 <>
                   <div className="flex justify-between">
                     <span>Məhsul mayası</span>
@@ -696,21 +866,38 @@ export default function POS() {
             {/* Payment Type */}
             <div className="space-y-4 text-xs font-semibold">
               <div className="space-y-1.5">
-                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Ödəniş Üsulu</label>
+                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">
+                  {posMode === "return" ? "Geri Ödəniş Üsulu" : "Ödəniş Üsulu"}
+                </label>
                 <select
                   value={paymentType}
                   onChange={(e) => setPaymentType(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 cursor-pointer"
+                  className={`w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none bg-gray-50/50 cursor-pointer focus:ring-1 ${posMode === "return" ? "focus:ring-amber-500" : "focus:ring-primary"}`}
                 >
                   <option value="Nəğd">Nəğd</option>
                   <option value="Kart">Kart</option>
                   <option value="Kart2Kart">Kart2Kart</option>
-                  <option value="Nisyə">Nisyə (Borc)</option>
+                  {posMode === "sale" && <option value="Nisyə">Nisyə (Borc)</option>}
                 </select>
               </div>
 
+              {/* Return Status if in Return Mode */}
+              {posMode === "return" && (
+                <div className="space-y-1.5 animate-in slide-in-from-top-1.5">
+                  <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Qaytarış Tipi (Status)</label>
+                  <select
+                    value={returnStatus}
+                    onChange={(e) => setReturnStatus(e.target.value as any)}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 bg-gray-50/50 cursor-pointer text-xs font-semibold"
+                  >
+                    <option value="returned_to_stock">🟢 Anbara Geri Qayıtsın (Yararlı)</option>
+                    <option value="defective">🔴 Deffekt / Zədəli (Zərərə silinsin)</option>
+                  </select>
+                </div>
+              )}
+
               {/* Due date if credit sale */}
-              {isCredit && (
+              {posMode === "sale" && isCredit && (
                 <div className="space-y-1.5 border border-amber-100 bg-amber-50/10 p-3.5 rounded-xl animate-in slide-in-from-top-1.5">
                   <label className="text-amber-700 uppercase tracking-wider block text-[10px]">
                     Borcun Ödənilmə Tarixi *
@@ -729,28 +916,30 @@ export default function POS() {
 
               {/* Notes */}
               <div className="space-y-1.5">
-                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Satış qeydi</label>
+                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">
+                  {posMode === "return" ? "Qaytarılma Səbəbi" : "Satış qeydi"}
+                </label>
                 <input
                   type="text"
-                  placeholder="Əlavə məlumat (ixtiyari)"
+                  placeholder={posMode === "return" ? "Qaytarılma səbəbini qeyd edin..." : "Əlavə məlumat (ixtiyari)"}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50"
+                  className={`w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none bg-gray-50/50 focus:ring-1 ${posMode === "return" ? "focus:ring-amber-500" : "focus:ring-primary"}`}
                 />
               </div>
 
               {/* Checkout Button */}
               <button
                 onClick={handleCheckout}
-                disabled={basket.length === 0 || createSaleMutation.isPending || isSellingAtLoss}
+                disabled={basket.length === 0 || createSaleMutation.isPending || createReturnMutation.isPending || (posMode === "sale" && isSellingAtLoss)}
                 className={`w-full py-3 text-white font-bold rounded-xl cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 text-sm shadow-md transition-all ${
-                  isCredit
-                    ? "bg-amber-600 hover:bg-amber-700 shadow-amber-500/10"
-                    : "bg-primary hover:bg-primary/90 shadow-primary/10"
+                  posMode === "return"
+                    ? "bg-amber-600 hover:bg-amber-700 shadow-amber-500/10 shadow-lg shadow-amber-600/20 animate-pulse"
+                    : (isCredit ? "bg-amber-600 hover:bg-amber-700 shadow-amber-500/10" : "bg-primary hover:bg-primary/90 shadow-primary/10")
                 }`}
               >
                 <CheckCircle className="w-4 h-4" />{" "}
-                {isCredit ? "Nisyə Satış Qeyd Et" : "Satışı Tamamla (Qaimə)"}
+                {posMode === "return" ? "Geri Qaytarışı Tamamla" : (isCredit ? "Nisyə Satış Qeyd Et" : "Satışı Tamamla (Qaimə)")}
               </button>
             </div>
           </div>
@@ -763,23 +952,37 @@ export default function POS() {
           <div className="bg-white border border-gray-100 p-8 rounded-3xl max-w-md w-full shadow-2xl relative text-center space-y-6 animate-in zoom-in-95 duration-300">
             
             {/* Success Icon */}
-            <div className="mx-auto size-16 bg-green-50 text-green-600 rounded-full flex items-center justify-center border border-green-100 shadow-sm">
+            <div className={`mx-auto size-16 rounded-full flex items-center justify-center border shadow-sm ${
+              lastCreatedSale.customerName === "Qaytarış"
+                ? "bg-amber-50 text-amber-600 border-amber-100"
+                : "bg-green-50 text-green-600 border-green-100"
+            }`}>
               <CheckCircle className="w-8 h-8" />
             </div>
 
             {/* Title / Header */}
             <div className="space-y-1">
-              <h3 className="text-xl font-black text-gray-900 tracking-tight">Satış Uğurla Tamamlandı! 🎉</h3>
+              <h3 className="text-xl font-black text-gray-900 tracking-tight">
+                {lastCreatedSale.customerName === "Qaytarış"
+                  ? "Geri Qaytarış Tamamlandı! 🔄"
+                  : "Satış Uğurla Tamamlandı! 🎉"}
+              </h3>
               <p className="text-xs text-gray-400">
-                Qaimə #{lastCreatedSale.id.toString().padStart(5, "0")} yaradıldı
+                {lastCreatedSale.id && lastCreatedSale.id.toString().startsWith("OFL")
+                  ? (lastCreatedSale.id.toString().startsWith("OFL-RET") ? "Oflayn Geri Qaytarış qeyd edildi" : "Oflayn Satış qeyd edildi")
+                  : (lastCreatedSale.customerName === "Qaytarış" ? `Qaytarış № ${lastCreatedSale.id} yaradıldı` : `Qaimə #${lastCreatedSale.id.toString().padStart(5, "0")} yaradıldı`)}
               </p>
             </div>
 
             {/* Məbləğ Info Box */}
             <div className="bg-gray-50/50 border border-gray-100 rounded-2xl p-4 flex flex-col items-center justify-center space-y-0.5 font-semibold">
-              <span className="text-[10px] text-gray-400 uppercase tracking-wider">Ümumi Məbləğ</span>
+              <span className="text-[10px] text-gray-400 uppercase tracking-wider">
+                {lastCreatedSale.customerName === "Qaytarış" ? "Geri Ödənilən Məbləğ" : "Ümumi Məbləğ"}
+              </span>
               <span className="text-2xl font-black text-gray-950 font-mono">{lastCreatedSale.totalAmount.toFixed(2)} ₼</span>
-              <span className="text-[10px] text-gray-500">Ödəniş Üsulu: {lastCreatedSale.paymentType}</span>
+              <span className="text-[10px] text-gray-500">
+                {lastCreatedSale.customerName === "Qaytarış" ? `Tip: ${returnStatus === "returned_to_stock" ? "Anbara Qayıdan" : "Deffekt (Zay)"}` : `Ödəniş Üsulu: {lastCreatedSale.paymentType}`}
+              </span>
             </div>
 
             {/* Actions Grid */}
@@ -817,6 +1020,14 @@ export default function POS() {
               <div className="grid grid-cols-2 gap-2 text-xs font-bold">
                 <button
                   onClick={() => {
+                    if (lastCreatedSale.customerName === "Qaytarış") {
+                      toast({
+                        title: "Məlumat ℹ️",
+                        description: "Sürətli qaytarışın ayrıca qaimə vərəqi yoxdur.",
+                        variant: "default",
+                      });
+                      return;
+                    }
                     if (!isOnline) {
                       toast({
                         title: "Oflayn Rejim Məhdudiyyəti 🔒",
@@ -837,7 +1048,7 @@ export default function POS() {
                   onClick={handleResetPOS}
                   className="py-2.5 bg-primary text-white rounded-xl cursor-pointer hover:bg-primary/90 shadow-md shadow-primary/10 transition-all flex items-center justify-center gap-1.5"
                 >
-                  Yeni Satış
+                  Yeni Əməliyyat
                 </button>
               </div>
             </div>

@@ -23,7 +23,7 @@ import {
 
 // Reusable components
 import { ToastProvider, ToastViewport, useToast } from "./components/Toast.tsx";
-import { syncOfflineSalesToServer } from "./lib/offlineSync.ts";
+import { syncOfflineSalesToServer, syncOfflineReturnsToServer } from "./lib/offlineSync.ts";
 
 // Pages (will implement them next)
 import Dashboard from "./pages/Dashboard.tsx";
@@ -112,6 +112,13 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
           variant: "success",
         });
       });
+      syncOfflineReturnsToServer((count) => {
+        toast({
+          title: "Əlaqə Bərpa Olundu",
+          description: `${count} ədəd oflayn geri qaytarış uğurla buluda sinxronizasiya edildi!`,
+          variant: "success",
+        });
+      });
     };
     const handleOffline = () => {
       setIsOnline(false);
@@ -146,6 +153,13 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
         toast({
           title: "Arxaplan Sinxronizasiyası",
           description: `${count} ədəd oflayn satış uğurla buluda sinxronizasiya edildi!`,
+          variant: "success",
+        });
+      });
+      syncOfflineReturnsToServer((count) => {
+        toast({
+          title: "Arxaplan Sinxronizasiyası",
+          description: `${count} ədəd oflayn geri qaytarış uğurla buluda sinxronizasiya edildi!`,
           variant: "success",
         });
       });

@@ -5,6 +5,7 @@ export const CACHE_KEYS = {
   CUSTOMERS: "qazan_pos_cached_customers",
   SETTINGS: "qazan_pos_cached_settings",
   OFFLINE_SALES: "qazan_pos_offline_sales_queue",
+  OFFLINE_RETURNS: "qazan_pos_offline_returns_queue",
 };
 
 // 1. Caching Helpers
@@ -79,6 +80,44 @@ export function clearOfflineSalesQueue() {
   localStorage.removeItem(CACHE_KEYS.OFFLINE_SALES);
 }
 
+// 2b. Offline Returns Queue Logging & Local Stock Level Restoration
+export function getOfflineReturnsQueue(): any[] {
+  const data = localStorage.getItem(CACHE_KEYS.OFFLINE_RETURNS);
+  return data ? JSON.parse(data) : [];
+}
+
+export function saveOfflineReturn(returnPayload: any): any {
+  const localId = `OFL-RET-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+  const enrichedReturn = {
+    ...returnPayload,
+    id: localId,
+    returnDate: new Date().toISOString(),
+    isOfflinePending: true,
+  };
+
+  const queue = getOfflineReturnsQueue();
+  queue.push(enrichedReturn);
+  localStorage.setItem(CACHE_KEYS.OFFLINE_RETURNS, JSON.stringify(queue));
+
+  // Increase stock quantities in local cache if the return status is returned_to_stock
+  const cachedProducts = getCachedProducts();
+  const updatedProducts = cachedProducts.map((prod) => {
+    const retItem = returnPayload.items.find((item: any) => item.productId === prod.productId);
+    if (retItem && retItem.status === "returned_to_stock") {
+      const currentQty = parseFloat(prod.currentQuantity) || 0;
+      const returnedQty = parseFloat(retItem.quantity) || 0;
+      return {
+        ...prod,
+        currentQuantity: currentQty + returnedQty,
+      };
+    }
+    return prod;
+  });
+  cacheProducts(updatedProducts);
+
+  return enrichedReturn;
+}
+
 // 3. Background Synchronization Engine
 let isSyncing = false;
 
@@ -134,6 +173,66 @@ export async function syncOfflineSalesToServer(onSuccessToast?: (count: number) 
   if (successfulIds.length > 0) {
     const freshQueue = getOfflineSalesQueue().filter((sale) => !successfulIds.includes(sale.id));
     localStorage.setItem(CACHE_KEYS.OFFLINE_SALES, JSON.stringify(freshQueue));
+    
+    if (onSuccessToast) {
+      onSuccessToast(successfulIds.length);
+    }
+    
+    isSyncing = false;
+    return true;
+  }
+
+  isSyncing = false;
+  return false;
+}
+
+export async function syncOfflineReturnsToServer(onSuccessToast?: (count: number) => void): Promise<boolean> {
+  if (isSyncing) return false;
+  if (!navigator.onLine) return false;
+
+  const queue = getOfflineReturnsQueue();
+  if (queue.length === 0) return false;
+
+  isSyncing = true;
+  console.log(`SyncEngine: Found ${queue.length} offline return(s) to synchronize.`);
+
+  const successfulIds: string[] = [];
+
+  for (const ret of queue) {
+    try {
+      const postBody = {
+        saleId: ret.saleId || null,
+        reason: ret.reason,
+        items: ret.items.map((item: any) => ({
+          productId: item.productId,
+          quantity: item.quantity,
+          salePrice: item.salePrice,
+          purchasePrice: item.purchasePrice,
+          status: item.status,
+        })),
+      };
+
+      const res = await fetch("/api/returns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(postBody),
+      });
+
+      if (res.ok) {
+        successfulIds.push(ret.id);
+        console.log(`SyncEngine: Offline Return ${ret.id} synced successfully.`);
+      } else {
+        console.warn(`SyncEngine: Server rejected offline return ${ret.id}.`);
+      }
+    } catch (err) {
+      console.error(`SyncEngine: Network error syncing return ${ret.id}. Stopped loop.`, err);
+      break;
+    }
+  }
+
+  if (successfulIds.length > 0) {
+    const freshQueue = getOfflineReturnsQueue().filter((ret) => !successfulIds.includes(ret.id));
+    localStorage.setItem(CACHE_KEYS.OFFLINE_RETURNS, JSON.stringify(freshQueue));
     
     if (onSuccessToast) {
       onSuccessToast(successfulIds.length);

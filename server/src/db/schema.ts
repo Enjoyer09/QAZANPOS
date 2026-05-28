@@ -178,6 +178,39 @@ export const activityLogs = pgTable("activity_logs", {
   archived: integer("archived").notNull().default(0), // 0 = active, 1 = archived
 });
 
+// 11. Returns Table (Geri Qaytarışlar)
+export const returns = pgTable("returns", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" })
+    .default(1),
+  saleId: integer("sale_id") // Can be null for loose/ad-hoc returns
+    .references(() => sales.id, { onDelete: "cascade" }),
+  returnDate: text("return_date").notNull(), // ISO timestamp
+  totalAmount: doublePrecision("total_amount").notNull(), // Total refunded money to customer
+  reason: text("reason"),
+});
+
+// 12. Return Items Table
+export const returnItems = pgTable("return_items", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" })
+    .default(1),
+  returnId: integer("return_id")
+    .notNull()
+    .references(() => returns.id, { onDelete: "cascade" }),
+  productId: integer("product_id")
+    .notNull()
+    .references(() => products.id),
+  quantity: doublePrecision("quantity").notNull(),
+  salePrice: doublePrecision("sale_price").notNull(),
+  purchasePrice: doublePrecision("purchase_price").notNull(),
+  status: text("status").notNull(), // "returned_to_stock" or "defective"
+});
+
 // Relations Definitions for Drizzle ORM queries
 export const tenantsRelations = relations(tenants, ({ many }) => ({
   products: many(products),
@@ -186,6 +219,7 @@ export const tenantsRelations = relations(tenants, ({ many }) => ({
   sales: many(sales),
   expenses: many(expenses),
   users: many(users),
+  returns: many(returns),
 }));
 
 export const productsRelations = relations(products, ({ one, many }) => ({
@@ -195,6 +229,7 @@ export const productsRelations = relations(products, ({ one, many }) => ({
   }),
   stockEntries: many(stockEntries),
   saleItems: many(saleItems),
+  returnItems: many(returnItems),
 }));
 
 export const stockEntriesRelations = relations(stockEntries, ({ one }) => ({
@@ -227,6 +262,7 @@ export const salesRelations = relations(sales, ({ one, many }) => ({
   }),
   items: many(saleItems),
   payments: many(creditPayments),
+  returns: many(returns),
 }));
 
 export const saleItemsRelations = relations(saleItems, ({ one }) => ({
@@ -282,3 +318,31 @@ export const activityLogsRelations = relations(activityLogs, ({ one }) => ({
     references: [tenants.id],
   }),
 }));
+
+export const returnsRelations = relations(returns, ({ one, many }) => ({
+  tenant: one(tenants, {
+    fields: [returns.tenantId],
+    references: [tenants.id],
+  }),
+  sale: one(sales, {
+    fields: [returns.saleId],
+    references: [sales.id],
+  }),
+  items: many(returnItems),
+}));
+
+export const returnItemsRelations = relations(returnItems, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [returnItems.tenantId],
+    references: [tenants.id],
+  }),
+  return: one(returns, {
+    fields: [returnItems.returnId],
+    references: [returns.id],
+  }),
+  product: one(products, {
+    fields: [returnItems.productId],
+    references: [products.id],
+  }),
+}));
+

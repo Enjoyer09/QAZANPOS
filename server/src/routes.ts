@@ -375,9 +375,22 @@ router.get("/stock/levels", async (req, res) => {
         .where(and(eq(schema.saleItems.productId, product.id), eq(schema.saleItems.tenantId, req.tenantId)));
       const totalSold = parseFloat((soldResult[0]?.total as string) || "0");
 
-      const currentQuantity = totalRestocked - totalSold;
+      // 3. Calculate total returned back to stock
+      const returnedResult = await db
+        .select({ total: sql`SUM(quantity)` })
+        .from(schema.returnItems)
+        .where(
+          and(
+            eq(schema.returnItems.productId, product.id),
+            eq(schema.returnItems.tenantId, req.tenantId),
+            eq(schema.returnItems.status, "returned_to_stock")
+          )
+        );
+      const totalReturned = parseFloat((returnedResult[0]?.total as string) || "0");
 
-      // 3. Get latest purchase price
+      const currentQuantity = totalRestocked - totalSold + totalReturned;
+
+      // 4. Get latest purchase price
       const latestEntry = await db
         .select({ price: schema.stockEntries.purchasePrice })
         .from(schema.stockEntries)
@@ -582,7 +595,7 @@ router.get("/sales", async (req, res) => {
   try {
     const list = await db.query.sales.findMany({
       where: eq(schema.sales.tenantId, req.tenantId),
-      with: { payments: true },
+      with: { payments: true, returns: { with: { items: true } } },
       orderBy: [desc(schema.sales.saleDate)],
     });
     res.json(list);
@@ -677,7 +690,11 @@ router.get("/sales/:id", async (req, res) => {
     const id = parseInt(req.params.id);
     const sale = await db.query.sales.findFirst({
       where: and(eq(schema.sales.id, id), eq(schema.sales.tenantId, req.tenantId)),
-      with: { items: { with: { product: true } }, payments: true },
+      with: { 
+        items: { with: { product: true } }, 
+        payments: true,
+        returns: { with: { items: true } }
+      },
     });
 
     if (!sale) return res.status(404).json({ message: "Çek tapılmadı" });
@@ -776,6 +793,122 @@ router.patch("/sales/:id/add-payment", async (req, res) => {
     res.json({ message: "Qismən ödəniş uğurla qeydə alındı" });
   } catch (error) {
     res.status(500).json({ message: "Ödəniş qeydə alınarkən xəta baş verdi" });
+  }
+});
+
+// ----------------------------------------------------
+// 4b. RETURN / REFUND ENDPOINTS
+// ----------------------------------------------------
+
+// List all returns
+router.get("/returns", async (req, res) => {
+  try {
+    const list = await db.query.returns.findMany({
+      where: eq(schema.returns.tenantId, req.tenantId),
+      with: { items: { with: { product: true } } },
+      orderBy: [desc(schema.returns.returnDate)],
+    });
+    res.json(list);
+  } catch (error) {
+    res.status(500).json({ message: "Geri qaytarış tarixçəsini gətirərkən xəta baş verdi" });
+  }
+});
+
+// Process a return
+router.post("/returns", async (req, res) => {
+  try {
+    const { saleId, reason, items } = req.body;
+
+    if (!items || items.length === 0) {
+      return res.status(400).json({ message: "Qaytarılan məhsullar daxil edilməlidir" });
+    }
+
+    let calculatedTotalAmount = 0;
+
+    // 1. If linked to a sale, validate quantities
+    if (saleId) {
+      const sale = await db.query.sales.findFirst({
+        where: and(eq(schema.sales.id, saleId), eq(schema.sales.tenantId, req.tenantId)),
+        with: { items: true, returns: { with: { items: true } } },
+      });
+
+      if (!sale) {
+        return res.status(404).json({ message: "Satış tapılmadı" });
+      }
+
+      // Check quantities
+      for (const returnItem of items) {
+        const originallySoldItem = sale.items.find(i => i.productId === returnItem.productId);
+        if (!originallySoldItem) {
+          return res.status(400).json({ 
+            message: `Məhsul (ID: ${returnItem.productId}) bu satışa aid deyil` 
+          });
+        }
+
+        // Calculate already returned quantity for this product
+        let alreadyReturnedQty = 0;
+        if (sale.returns) {
+          for (const ret of sale.returns) {
+            const retItem = ret.items.find(ri => ri.productId === returnItem.productId);
+            if (retItem) {
+              alreadyReturnedQty += retItem.quantity;
+            }
+          }
+        }
+
+        const remainingReturnable = originallySoldItem.quantity - alreadyReturnedQty;
+        if (returnItem.quantity > remainingReturnable) {
+          return res.status(400).json({
+            message: `Məhsulun (ID: ${returnItem.productId}) qaytarılma miqdarı satılandan artıq ola bilməz. Maksimum qaytarıla bilən: ${remainingReturnable}`
+          });
+        }
+      }
+    }
+
+    // Calculate total return amount based on items
+    for (const item of items) {
+      calculatedTotalAmount += parseFloat(item.quantity) * parseFloat(item.salePrice);
+    }
+
+    // 2. Create the Return record
+    const newReturn = await db
+      .insert(schema.returns)
+      .values({
+        tenantId: req.tenantId,
+        saleId: saleId || null,
+        returnDate: new Date().toISOString(),
+        totalAmount: calculatedTotalAmount,
+        reason: reason || null,
+      })
+      .returning();
+
+    const returnId = newReturn[0].id;
+
+    // 3. Create Return Items records
+    for (const item of items) {
+      await db.insert(schema.returnItems).values({
+        tenantId: req.tenantId,
+        returnId,
+        productId: item.productId,
+        quantity: parseFloat(item.quantity),
+        salePrice: parseFloat(item.salePrice),
+        purchasePrice: parseFloat(item.purchasePrice || "0"),
+        status: item.status, // "returned_to_stock" or "defective"
+      });
+    }
+
+    // 4. Log Activity
+    const saleLogMsg = saleId ? ` (Çek № ${saleId})` : "";
+    await logActivity(
+      req,
+      "RETURN_ITEMS",
+      `Malların geri qaytarılması həyata keçirildi: Qaytarış № ${returnId}${saleLogMsg} (Məbləğ: ${calculatedTotalAmount.toFixed(2)} ₼, Səbəb: ${reason || "Qeyd edilməyib"})`
+    );
+
+    res.json(newReturn[0]);
+  } catch (error) {
+    console.error("Return error:", error);
+    res.status(500).json({ message: "Geri qaytarış tamamlanarkən xəta baş verdi" });
   }
 });
 
@@ -936,15 +1069,40 @@ router.get("/dashboard/summary", requireAdmin, async (req, res) => {
     const todayStr = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
     const { firstDay, lastDay } = getMonthBoundaries();
 
-    // 1. Today's Sales
+    // 1. Today's Sales & Returns
     const todaySalesList = await db.select().from(schema.sales).where(
       and(
         sql`SUBSTRING(${schema.sales.saleDate}, 1, 10) = ${todayStr}`,
         eq(schema.sales.tenantId, req.tenantId)
       )
     );
-    const todayRevenue = todaySalesList.reduce((sum, sale) => sum + sale.totalAmount, 0);
-    const todayCost = todaySalesList.reduce((sum, sale) => sum + sale.totalCost, 0);
+    const rawTodayRevenue = todaySalesList.reduce((sum, sale) => sum + sale.totalAmount, 0);
+    const rawTodayCost = todaySalesList.reduce((sum, sale) => sum + sale.totalCost, 0);
+
+    const todayReturnsList = await db.select().from(schema.returns).where(
+      and(
+        sql`SUBSTRING(${schema.returns.returnDate}, 1, 10) = ${todayStr}`,
+        eq(schema.returns.tenantId, req.tenantId)
+      )
+    );
+    const todayRefundedAmount = todayReturnsList.reduce((sum, r) => sum + r.totalAmount, 0);
+
+    let todayRecoveredCost = 0;
+    for (const ret of todayReturnsList) {
+      const retItems = await db
+        .select()
+        .from(schema.returnItems)
+        .where(
+          and(
+            eq(schema.returnItems.returnId, ret.id),
+            eq(schema.returnItems.status, "returned_to_stock")
+          )
+        );
+      todayRecoveredCost += retItems.reduce((sum, item) => sum + item.quantity * item.purchasePrice, 0);
+    }
+
+    const todayRevenue = rawTodayRevenue - todayRefundedAmount;
+    const todayCost = Math.max(0, rawTodayCost - todayRecoveredCost);
     const todayProfit = todayRevenue - todayCost;
 
     // Today's Expenses
@@ -961,7 +1119,7 @@ router.get("/dashboard/summary", requireAdmin, async (req, res) => {
     const todayNetProfit = todayProfit - todayExpenses;
     const todaySales = todaySalesList.length;
 
-    // 2. Monthly Sales
+    // 2. Monthly Sales & Returns
     const monthSalesList = await db.select().from(schema.sales).where(
       and(
         gte(schema.sales.saleDate, firstDay),
@@ -969,8 +1127,34 @@ router.get("/dashboard/summary", requireAdmin, async (req, res) => {
         eq(schema.sales.tenantId, req.tenantId)
       )
     );
-    const monthRevenue = monthSalesList.reduce((sum, sale) => sum + sale.totalAmount, 0);
-    const monthCost = monthSalesList.reduce((sum, sale) => sum + sale.totalCost, 0);
+    const rawMonthRevenue = monthSalesList.reduce((sum, sale) => sum + sale.totalAmount, 0);
+    const rawMonthCost = monthSalesList.reduce((sum, sale) => sum + sale.totalCost, 0);
+
+    const monthReturnsList = await db.select().from(schema.returns).where(
+      and(
+        gte(schema.returns.returnDate, firstDay),
+        lte(schema.returns.returnDate, lastDay),
+        eq(schema.returns.tenantId, req.tenantId)
+      )
+    );
+    const monthRefundedAmount = monthReturnsList.reduce((sum, r) => sum + r.totalAmount, 0);
+
+    let monthRecoveredCost = 0;
+    for (const ret of monthReturnsList) {
+      const retItems = await db
+        .select()
+        .from(schema.returnItems)
+        .where(
+          and(
+            eq(schema.returnItems.returnId, ret.id),
+            eq(schema.returnItems.status, "returned_to_stock")
+          )
+        );
+      monthRecoveredCost += retItems.reduce((sum, item) => sum + item.quantity * item.purchasePrice, 0);
+    }
+
+    const monthRevenue = rawMonthRevenue - monthRefundedAmount;
+    const monthCost = Math.max(0, rawMonthCost - monthRecoveredCost);
     const monthProfit = monthRevenue - monthCost;
 
     // Monthly Expenses
@@ -1009,7 +1193,20 @@ router.get("/dashboard/summary", requireAdmin, async (req, res) => {
         .where(and(eq(schema.saleItems.productId, product.id), eq(schema.saleItems.tenantId, req.tenantId)));
       const totalSold = parseFloat((soldResult[0]?.total as string) || "0");
 
-      const currentQty = totalRestocked - totalSold;
+      // Calculate total returned back to stock
+      const returnedResult = await db
+        .select({ total: sql`SUM(quantity)` })
+        .from(schema.returnItems)
+        .where(
+          and(
+            eq(schema.returnItems.productId, product.id),
+            eq(schema.returnItems.tenantId, req.tenantId),
+            eq(schema.returnItems.status, "returned_to_stock")
+          )
+        );
+      const totalReturned = parseFloat((returnedResult[0]?.total as string) || "0");
+
+      const currentQty = totalRestocked - totalSold + totalReturned;
 
       const latestEntry = await db
         .select({ price: schema.stockEntries.purchasePrice })
