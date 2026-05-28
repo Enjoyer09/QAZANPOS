@@ -15,10 +15,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   // Subdomain detection for dedicated public sandbox demo
   const host = window.location.hostname;
   const parts = host.split(".");
-  const isSinaqSubdomain = parts.length > 0 && (
-    parts[0].toLowerCase() === "sinaq" || 
-    parts[0].toLowerCase() === "demo"
-  );
+  const isSinaqSubdomain = parts.length > 0 && parts[0].toLowerCase() === "sinaq";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -174,6 +171,13 @@ export default function Login({ onLoginSuccess }: LoginProps) {
             <h2 className="text-lg font-black text-gray-900 tracking-tight mb-6">
               Sistemə Giriş
             </h2>
+
+            {parts.length > 0 && parts[0].toLowerCase() === "demo" && (
+              <div className="mb-5 bg-purple-500/10 border border-purple-200/50 text-purple-700 text-[10px] font-black tracking-wider py-2 px-3 rounded-xl text-center flex items-center justify-center gap-1.5 animate-pulse glass">
+                <span className="size-1.5 rounded-full bg-purple-500"></span>
+                <span>TƏRTİBATÇI LABORATORİYASI (DEVELOPER LAB) 🧪</span>
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="space-y-5 text-xs font-semibold">
               {/* Username Input */}

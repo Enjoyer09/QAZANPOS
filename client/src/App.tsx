@@ -205,6 +205,13 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
         </div>
       )}
 
+      {/* 0b. Developer Lab Alert Banner */}
+      {window.location.hostname.split(".")[0].toLowerCase() === "demo" && (
+        <div className="w-full bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-black tracking-wide py-2.5 px-4 text-center select-none flex items-center justify-center gap-2 animate-pulse no-print shadow-md shadow-purple-500/10 z-100">
+          <span>BİRSAAS TƏRTİBATÇI LABORATORİYASI (DEVELOPER LAB) 🧪 : Real verilənlər bazası (PostgreSQL) ilə işləyirsiniz. Bütün testləriniz qeyd edilir!</span>
+        </div>
+      )}
+
       {/* Dynamic Liquid Background Blobs */}
       <div className="liquid-bg">
         <div className="liquid-blob-1"></div>
