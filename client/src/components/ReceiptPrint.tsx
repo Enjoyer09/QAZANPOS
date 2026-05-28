@@ -336,7 +336,13 @@ export async function printReceipt(sale: any, settings: any): Promise<boolean> {
   const width = settings?.receiptWidth || "80mm";
   
   const savedPrinter = localStorage.getItem("qazan_pos_selected_printer");
-  const isQzConnected = qzService.isConnected();
+  
+  // Try to connect to QZ Tray if not connected yet
+  let isQzConnected = qzService.isConnected();
+  if (!isQzConnected) {
+    console.log("QZ Tray not connected, attempting connection...");
+    isQzConnected = await qzService.connect();
+  }
   
   if (isQzConnected && savedPrinter) {
     try {
