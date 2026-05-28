@@ -651,17 +651,19 @@ function AppContent() {
     retry: false,
   });
 
+  const isSinaqSubdomain = parts.length > 0 && parts[0].toLowerCase() === "sinaq";
   const isDemoActive = sessionStorage.getItem("birsaas_demo_active") === "true";
+  const isSandboxScoped = isDemoActive || isSinaqSubdomain;
 
   useEffect(() => {
-    const userStr = isDemoActive 
+    const userStr = isSandboxScoped 
       ? sessionStorage.getItem("qazanpos_user") 
       : localStorage.getItem("qazanpos_user");
     if (userStr) {
       try {
         setUser(JSON.parse(userStr));
       } catch (e) {
-        if (isDemoActive) {
+        if (isSandboxScoped) {
           sessionStorage.removeItem("qazanpos_user");
         } else {
           localStorage.removeItem("qazanpos_user");
@@ -669,10 +671,10 @@ function AppContent() {
       }
     }
     setIsCheckingSession(false);
-  }, [isDemoActive]);
+  }, [isSandboxScoped]);
 
   const handleLoginSuccess = (userData: any) => {
-    if (isDemoActive) {
+    if (isSandboxScoped) {
       sessionStorage.setItem("qazanpos_user", JSON.stringify(userData));
     } else {
       localStorage.setItem("qazanpos_user", JSON.stringify(userData));
@@ -681,7 +683,7 @@ function AppContent() {
   };
 
   const handleLogout = () => {
-    if (isDemoActive) {
+    if (isSandboxScoped) {
       sessionStorage.clear();
     } else {
       localStorage.removeItem("qazanpos_user");
@@ -703,6 +705,27 @@ function AppContent() {
 
   if (tenantError?.message === "TENANT_NOT_FOUND") {
     const slug = parts[0].toLowerCase();
+
+    // Construct dynamic sinaq subdomain link based on current host
+    const currentHost = window.location.host; // e.g. "localhost:5173" or "birsaas.shop"
+    const hostParts = currentHost.split(".");
+    let demoUrl = "";
+
+    if (currentHost.includes("localhost") || currentHost.includes("127.0.0.1")) {
+      demoUrl = `http://sinaq.localhost:${window.location.port || "5173"}/`;
+    } else {
+      if (hostParts.length > 1) {
+        if (hostParts.length === 2) {
+          demoUrl = `https://sinaq.${currentHost}/`;
+        } else {
+          hostParts[0] = "sinaq";
+          demoUrl = `https://${hostParts.join(".")}/`;
+        }
+      } else {
+        demoUrl = `https://sinaq.birsaas.shop/`; // fallback
+      }
+    }
+
     return (
       <div className="min-h-screen w-screen flex items-center justify-center relative overflow-hidden select-none pb-12 bg-gray-50">
         {/* Dynamic Liquid Background Blobs */}
@@ -743,15 +766,16 @@ function AppContent() {
             </div>
 
             <p className="text-xs text-gray-600 leading-relaxed font-bold bg-gray-50/50 p-4 rounded-xl border border-gray-100/30">
-              BirSaaS platformasında yeni bir mağaza açmaq və ya pulsuz Demo əldə etmək üçün bizə yaza bilərsiniz.
+              Bulud əsaslı POS və Anbar sistemimizi dərhal və heç bir öhdəlik olmadan canlı sınaqdan keçirə bilərsiniz.
             </p>
 
-            {/* Inquiries Action Button */}
+            {/* Redirection Action Button */}
             <a
-              href={`mailto:abbas@laptopmarket.az?subject=BirSaaS Demo Talebi: ${slug}&body=Salam, biz '${slug}' subdomeni altında BirSaaS sistemini sınamaq üçün Demo hesabı əldə etmək istəyirik.`}
-              className="w-full py-4 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 cursor-pointer flex items-center justify-center gap-2 text-sm shadow-md shadow-primary/10 transition-all hover-elevate"
+              href={demoUrl}
+              className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-xl cursor-pointer flex items-center justify-center gap-2 text-sm shadow-md shadow-emerald-500/10 transition-all hover-elevate animate-bounce-subtle"
             >
-              <Mail className="w-4 h-4" /> Demo Əldə Etmək Üçün Yazın
+              <Sparkles className="w-4 h-4 text-white shrink-0" />
+              Demoya baxın 🚀
             </a>
           </div>
 
