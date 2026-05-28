@@ -887,49 +887,68 @@ router.delete("/expenses/:id", requireAdmin, async (req, res) => {
 
 router.get("/dashboard/summary", requireAdmin, async (req, res) => {
   try {
+    const todayStr = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
     const { firstDay, lastDay } = getMonthBoundaries();
 
-    const rangeFilter = and(
-      gte(schema.sales.saleDate, firstDay),
-      lte(schema.sales.saleDate, lastDay),
-      eq(schema.sales.tenantId, req.tenantId)
+    // 1. Today's Sales
+    const todaySalesList = await db.select().from(schema.sales).where(
+      and(
+        sql`SUBSTRING(${schema.sales.saleDate}, 1, 10) = ${todayStr}`,
+        eq(schema.sales.tenantId, req.tenantId)
+      )
     );
+    const todayRevenue = todaySalesList.reduce((sum, sale) => sum + sale.totalAmount, 0);
+    const todayCost = todaySalesList.reduce((sum, sale) => sum + sale.totalCost, 0);
+    const todayProfit = todayRevenue - todayCost;
 
-    const rangeSales = await db.select().from(schema.sales).where(rangeFilter);
-
-    const totalRevenue = rangeSales.reduce((sum, sale) => sum + sale.totalAmount, 0);
-    const totalCOGS = rangeSales.reduce((sum, sale) => sum + sale.totalCost, 0);
-    const totalProfit = totalRevenue - totalCOGS;
-
-    // Monthly Expenses
-    const monthlyExpensesResult = await db
+    // Today's Expenses
+    const todayExpensesResult = await db
       .select({ sum: sql`SUM(amount)` })
       .from(schema.expenses)
-      .where(and(gte(schema.expenses.date, firstDay), lte(schema.expenses.date, lastDay), eq(schema.expenses.tenantId, req.tenantId)));
-    const totalExpenses = parseFloat((monthlyExpensesResult[0]?.sum as string) || "0");
+      .where(
+        and(
+          sql`SUBSTRING(${schema.expenses.date}, 1, 10) = ${todayStr}`,
+          eq(schema.expenses.tenantId, req.tenantId)
+        )
+      );
+    const todayExpenses = parseFloat((todayExpensesResult[0]?.sum as string) || "0");
+    const todayNetProfit = todayProfit - todayExpenses;
+    const todaySales = todaySalesList.length;
 
-    const netProfit = totalProfit - totalExpenses;
+    // 2. Monthly Sales
+    const monthSalesList = await db.select().from(schema.sales).where(
+      and(
+        gte(schema.sales.saleDate, firstDay),
+        lte(schema.sales.saleDate, lastDay),
+        eq(schema.sales.tenantId, req.tenantId)
+      )
+    );
+    const monthRevenue = monthSalesList.reduce((sum, sale) => sum + sale.totalAmount, 0);
+    const monthCost = monthSalesList.reduce((sum, sale) => sum + sale.totalCost, 0);
+    const monthProfit = monthRevenue - monthCost;
 
-    // Calculate Active customer credit totals
-    const activeCredits = await db.query.sales.findMany({
-      where: and(eq(schema.sales.paymentStatus, "credit"), eq(schema.sales.tenantId, req.tenantId)),
-      with: { payments: true }
-    });
+    // Monthly Expenses
+    const monthExpensesResult = await db
+      .select({ sum: sql`SUM(amount)` })
+      .from(schema.expenses)
+      .where(
+        and(
+          gte(schema.expenses.date, firstDay),
+          lte(schema.expenses.date, lastDay),
+          eq(schema.expenses.tenantId, req.tenantId)
+        )
+      );
+    const monthExpenses = parseFloat((monthExpensesResult[0]?.sum as string) || "0");
+    const monthNetProfit = monthProfit - monthExpenses;
 
-    const activeCreditsTotal = activeCredits.reduce((sum, sale) => {
-      const paid = sale.payments.reduce((pSum, p) => pSum + p.amount, 0);
-      return sum + (sale.totalAmount - paid);
-    }, 0);
-
-    // Calculate our own debts to suppliers
-    const myDebts = await db.query.stockEntries.findMany({
-      where: and(eq(schema.stockEntries.paidStatus, "credit"), eq(schema.stockEntries.tenantId, req.tenantId))
-    });
-    const myDebtsTotal = myDebts.reduce((sum, d) => sum + (d.quantity * d.purchasePrice), 0);
-
-    // Dynamic stock valuation
+    // 3. Dynamic stock valuation & low stock count
     const allProducts = await db.select().from(schema.products).where(eq(schema.products.tenantId, req.tenantId));
-    let totalStockValuation = 0;
+    let totalStockValue = 0;
+    let lowStockCount = 0;
+
+    // Fetch alert limit
+    const settingsList = await db.select().from(schema.settings).where(eq(schema.settings.tenantId, req.tenantId)).limit(1);
+    const lowStockAlertCount = settingsList[0]?.lowStockAlertCount || 5;
 
     for (const product of allProducts) {
       const restockedResult = await db
@@ -954,18 +973,52 @@ router.get("/dashboard/summary", requireAdmin, async (req, res) => {
         .limit(1);
       const lastPurchasePrice = latestEntry[0]?.price || 0;
 
-      totalStockValuation += currentQty * lastPurchasePrice;
+      totalStockValue += currentQty * lastPurchasePrice;
+
+      if (currentQty < lowStockAlertCount) {
+        lowStockCount++;
+      }
     }
 
+    // 4. Calculate Customer Credit Debts
+    const activeCredits = await db.query.sales.findMany({
+      where: and(eq(schema.sales.paymentStatus, "credit"), eq(schema.sales.tenantId, req.tenantId)),
+      with: { payments: true }
+    });
+
+    const totalCreditDebt = activeCredits.reduce((sum, sale) => {
+      const paid = sale.payments.reduce((pSum, p) => pSum + p.amount, 0);
+      return sum + (sale.totalAmount - paid);
+    }, 0);
+
+    const overdueCreditsCount = activeCredits.filter(sale => {
+      if (!sale.creditDueDate) return false;
+      const today = new Date().toISOString().split("T")[0];
+      return sale.creditDueDate <= today;
+    }).length;
+
+    // 5. Calculate our own debts to suppliers
+    const myDebts = await db.query.stockEntries.findMany({
+      where: and(eq(schema.stockEntries.paidStatus, "credit"), eq(schema.stockEntries.tenantId, req.tenantId))
+    });
+    const myTotalDebt = myDebts.reduce((sum, d) => sum + (d.quantity * d.purchasePrice), 0);
+
     res.json({
-      totalRevenue,
-      totalCOGS,
-      totalProfit,
-      totalExpenses,
-      netProfit,
-      activeCreditsTotal,
-      myDebtsTotal,
-      totalStockValuation
+      todayRevenue,
+      todayCost,
+      todayProfit,
+      todayExpenses,
+      todayNetProfit,
+      todaySales,
+      monthRevenue,
+      monthProfit,
+      monthExpenses,
+      monthNetProfit,
+      totalStockValue,
+      lowStockCount,
+      totalCreditDebt,
+      overdueCreditsCount,
+      myTotalDebt
     });
   } catch (error) {
     res.status(500).json({ message: "Dashboard verilənlərini hesablayarkən xəta baş verdi" });

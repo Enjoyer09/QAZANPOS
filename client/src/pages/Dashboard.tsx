@@ -151,7 +151,7 @@ export default function Dashboard() {
           </div>
           <div className="mt-4">
             <h3 className="text-2xl font-black text-gray-900 tracking-tight font-mono">
-              {isSummaryLoading ? "..." : `${(summary?.todayRevenue || 0).toFixed(2)} ₼`}
+              {isSummaryLoading ? "..." : `${Number(summary?.todayRevenue || 0).toFixed(2)} ₼`}
             </h3>
             <p className="text-[11px] text-gray-400 mt-1 font-medium">
               {summary?.todaySales || 0} uğurlu satış
@@ -169,7 +169,7 @@ export default function Dashboard() {
           </div>
           <div className="mt-4">
             <h3 className="text-2xl font-black text-gray-900 tracking-tight font-mono">
-              {isSummaryLoading ? "..." : `${(summary?.todayCost || 0).toFixed(2)} ₼`}
+              {isSummaryLoading ? "..." : `${Number(summary?.todayCost || 0).toFixed(2)} ₼`}
             </h3>
             <p className="text-[11px] text-gray-400 mt-1 font-medium">anbar alış qiyməti ilə</p>
           </div>
@@ -185,7 +185,7 @@ export default function Dashboard() {
           </div>
           <div className="mt-4">
             <h3 className="text-2xl font-black text-green-600 tracking-tight font-mono">
-              {isSummaryLoading ? "..." : `${(summary?.todayProfit || 0).toFixed(2)} ₼`}
+              {isSummaryLoading ? "..." : `${Number(summary?.todayProfit || 0).toFixed(2)} ₼`}
             </h3>
             <p className="text-[11px] text-gray-400 mt-1 font-medium">gəlir − maya dəyəri</p>
           </div>
@@ -201,7 +201,7 @@ export default function Dashboard() {
           </div>
           <div className="mt-4">
             <h3 className="text-2xl font-black text-red-500 tracking-tight font-mono">
-              {isSummaryLoading ? "..." : `${(summary?.todayExpenses || 0).toFixed(2)} ₼`}
+              {isSummaryLoading ? "..." : `${Number(summary?.todayExpenses || 0).toFixed(2)} ₼`}
             </h3>
             <p className="text-[11px] text-gray-400 mt-1 font-medium">maaş, icarə və kommunal</p>
           </div>
@@ -222,10 +222,10 @@ export default function Dashboard() {
           </p>
           <h2
             className={`text-4xl font-black tracking-tight font-mono ${
-              (summary?.todayNetProfit || 0) >= 0 ? "text-green-600" : "text-red-600"
+              Number(summary?.todayNetProfit || 0) >= 0 ? "text-green-600" : "text-red-600"
             }`}
           >
-            {isSummaryLoading ? "..." : `${(summary?.todayNetProfit || 0).toFixed(2)} ₼`}
+            {isSummaryLoading ? "..." : `${Number(summary?.todayNetProfit || 0).toFixed(2)} ₼`}
           </h2>
           <p className="text-xs text-gray-400 font-medium">
             Seçilmiş dövr ərzindəki real qazancınız
@@ -237,29 +237,29 @@ export default function Dashboard() {
           <div>
             <span className="text-gray-400 font-medium block">Ay Gəliri</span>
             <span className="font-bold text-sm block mt-1 font-mono text-gray-900">
-              {isSummaryLoading ? "..." : `${(summary?.monthRevenue || 0).toFixed(2)} ₼`}
+              {isSummaryLoading ? "..." : `${Number(summary?.monthRevenue || 0).toFixed(2)} ₼`}
             </span>
           </div>
           <div>
             <span className="text-gray-400 font-medium block">Ay Mənfəəti</span>
             <span className="font-bold text-sm block mt-1 font-mono text-green-600">
-              {isSummaryLoading ? "..." : `${(summary?.monthProfit || 0).toFixed(2)} ₼`}
+              {isSummaryLoading ? "..." : `${Number(summary?.monthProfit || 0).toFixed(2)} ₼`}
             </span>
           </div>
           <div>
             <span className="text-gray-400 font-medium block">Ay Xərcləri</span>
             <span className="font-bold text-sm block mt-1 font-mono text-red-500">
-              {isSummaryLoading ? "..." : `${(summary?.monthExpenses || 0).toFixed(2)} ₼`}
+              {isSummaryLoading ? "..." : `${Number(summary?.monthExpenses || 0).toFixed(2)} ₼`}
             </span>
           </div>
           <div>
             <span className="text-gray-400 font-medium block">Ay Xalis Mənfəət</span>
             <span
               className={`font-bold text-sm block mt-1 font-mono ${
-                (summary?.monthNetProfit || 0) >= 0 ? "text-green-600" : "text-red-500"
+                Number(summary?.monthNetProfit || 0) >= 0 ? "text-green-600" : "text-red-500"
               }`}
             >
-              {isSummaryLoading ? "..." : `${(summary?.monthNetProfit || 0).toFixed(2)} ₼`}
+              {isSummaryLoading ? "..." : `${Number(summary?.monthNetProfit || 0).toFixed(2)} ₼`}
             </span>
           </div>
         </div>
@@ -271,7 +271,7 @@ export default function Dashboard() {
         <div className="bg-white border border-gray-100 p-5 rounded-2xl shadow-xs glass-card">
           <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Anbar Dəyəri</span>
           <h4 className="text-xl font-bold text-gray-900 mt-2 font-mono">
-            {isSummaryLoading ? "..." : `${(summary?.totalStockValue || 0).toFixed(2)} ₼`}
+            {isSummaryLoading ? "..." : `${Number(summary?.totalStockValue || 0).toFixed(2)} ₼`}
           </h4>
           <span className="text-[10px] text-gray-400 mt-1 block font-medium">anbardakı malların mayası</span>
         </div>
@@ -306,10 +306,10 @@ export default function Dashboard() {
           </span>
           <h4
             className={`text-xl font-bold mt-2 font-mono ${
-              (summary?.totalCreditDebt || 0) > 0 ? "text-red-600" : "text-gray-900"
+              Number(summary?.totalCreditDebt || 0) > 0 ? "text-red-600" : "text-gray-900"
             }`}
           >
-            {isSummaryLoading ? "..." : `${(summary?.totalCreditDebt || 0).toFixed(2)} ₼`}
+            {isSummaryLoading ? "..." : `${Number(summary?.totalCreditDebt || 0).toFixed(2)} ₼`}
           </h4>
           <span className="text-[10px] text-gray-400 mt-1 block font-medium">
             {summary?.overdueCreditsCount || 0} müştərinin müddəti keçib
@@ -319,7 +319,7 @@ export default function Dashboard() {
         {/* Debts we owe to suppliers */}
         <div
           className={`border p-5 rounded-2xl shadow-xs transition-all ${
-            (summary?.myTotalDebt || 0) > 0 ? "border-amber-200 bg-amber-50/20" : "bg-white border-gray-100"
+            Number(summary?.myTotalDebt || 0) > 0 ? "border-amber-200 bg-amber-50/20" : "bg-white border-gray-100"
           }`}
         >
           <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
@@ -327,10 +327,10 @@ export default function Dashboard() {
           </span>
           <h4
             className={`text-xl font-bold mt-2 font-mono ${
-              (summary?.myTotalDebt || 0) > 0 ? "text-amber-600" : "text-gray-900"
+              Number(summary?.myTotalDebt || 0) > 0 ? "text-amber-600" : "text-gray-900"
             }`}
           >
-            {isSummaryLoading ? "..." : `${(summary?.myTotalDebt || 0).toFixed(2)} ₼`}
+            {isSummaryLoading ? "..." : `${Number(summary?.myTotalDebt || 0).toFixed(2)} ₼`}
           </h4>
           <span className="text-[10px] text-gray-400 mt-1 block font-medium">tədarükçülərə anbar nisyəsi</span>
         </div>
@@ -362,7 +362,7 @@ export default function Dashboard() {
                     </span>
                   </div>
                   <div className="text-right">
-                    <span className="font-bold block text-gray-950 font-mono">{sale.totalAmount.toFixed(2)} ₼</span>
+                    <span className="font-bold block text-gray-950 font-mono">{Number(sale.totalAmount || 0).toFixed(2)} ₼</span>
                     <span
                       className={`text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full mt-1 inline-block ${
                         sale.paymentStatus === "paid"
