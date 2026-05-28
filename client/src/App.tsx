@@ -284,7 +284,7 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
             <div className="border-t border-gray-100 pt-4 space-y-4">
               <div className="flex items-center gap-3">
                 <div className="size-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-extrabold text-xs">
-                  {user?.username?.substring(0, 2).toUpperCase()}
+                  {user?.username ? user.username.substring(0, 2).toUpperCase() : "SU"}
                 </div>
                 <div>
                   <span className="text-xs font-extrabold block text-gray-900 leading-none">
@@ -495,13 +495,17 @@ export default function App() {
     );
   }
 
+  const host = window.location.hostname;
+  const parts = host.split(".");
+  const isSuperTenant = parts.length > 1 && parts[0].toLowerCase() === "super";
+
   return (
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
         {user ? (
           <>
             <MainRoutes user={user} onLogout={handleLogout} />
-            <OverdueDebtCheck />
+            {!isSuperTenant && <OverdueDebtCheck />}
           </>
         ) : (
           <Login onLoginSuccess={handleLoginSuccess} />

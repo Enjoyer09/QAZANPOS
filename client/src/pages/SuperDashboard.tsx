@@ -148,9 +148,9 @@ export default function SuperDashboard() {
 
   // Calculate high-level platform stats
   const totalTenants = tenantsList?.length || 0;
-  const activeTenants = tenantsList?.filter((t) => t.status === "active").length || 0;
-  const totalSalesCount = tenantsList?.reduce((acc, t) => acc + (t.saleCount || 0), 0) || 0;
-  const canaryTenants = tenantsList?.filter((t) => t.releaseTier === "canary").length || 0;
+  const activeTenants = tenantsList ? tenantsList.filter((t) => t.status === "active").length : 0;
+  const totalSalesCount = tenantsList ? tenantsList.reduce((acc, t) => acc + (t.saleCount || 0), 0) : 0;
+  const canaryTenants = tenantsList ? tenantsList.filter((t) => t.releaseTier === "canary").length : 0;
 
   return (
     <div className="space-y-6 animate-in fade-in-0 duration-300">
