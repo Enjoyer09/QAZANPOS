@@ -259,7 +259,7 @@ router.get("/products", async (req, res) => {
 // Create product
 router.post("/products", requireAdmin, async (req, res) => {
   try {
-    const { name, category, unit, description } = req.body;
+    const { name, category, unit, description, barcode } = req.body;
     if (!name) return res.status(400).json({ message: "Ad tələb olunur" });
 
     // Enforce SaaS resource limits
@@ -283,6 +283,7 @@ router.post("/products", requireAdmin, async (req, res) => {
         category: category || null,
         unit: unit || "ədəd",
         description: description || null,
+        barcode: barcode || null,
       })
       .returning();
 
@@ -298,7 +299,7 @@ router.post("/products", requireAdmin, async (req, res) => {
 router.put("/products/:id", requireAdmin, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const { name, category, unit, description } = req.body;
+    const { name, category, unit, description, barcode } = req.body;
 
     const updated = await db
       .update(schema.products)
@@ -307,6 +308,7 @@ router.put("/products/:id", requireAdmin, async (req, res) => {
         category: category || null,
         unit: unit || "ədəd",
         description: description || null,
+        barcode: barcode || null,
       })
       .where(and(eq(schema.products.id, id), eq(schema.products.tenantId, req.tenantId)))
       .returning();

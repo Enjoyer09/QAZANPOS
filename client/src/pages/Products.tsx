@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Edit2, Trash2, X, Tag, Sliders, Info } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
+import { generateValidEAN13 } from "../components/Barcode.tsx";
+import LabelPrintModal from "../components/LabelPrintModal.tsx";
 
 interface Product {
   id: number;
@@ -9,6 +11,7 @@ interface Product {
   category: string | null;
   unit: string;
   description: string | null;
+  barcode: string | null;
 }
 
 const emptyProduct = {
@@ -16,6 +19,7 @@ const emptyProduct = {
   category: "",
   unit: "ədəd",
   description: "",
+  barcode: "",
 };
 
 export default function Products() {
@@ -27,6 +31,17 @@ export default function Products() {
   const [formData, setFormData] = useState(emptyProduct);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedProductForLabel, setSelectedProductForLabel] = useState<Product | null>(null);
+
+  // Fetch settings dynamically to get store name for labels
+  const { data: settings } = useQuery<any>({
+    queryKey: ["/api/settings"],
+    queryFn: async () => {
+      const res = await fetch("/api/settings");
+      if (!res.ok) return { storeName: "BirSaaS Store" };
+      return res.json();
+    }
+  });
 
   // Queries & Mutations
   const { data: list, isLoading } = useQuery<Product[]>({
@@ -44,7 +59,8 @@ export default function Products() {
     return (
       item.name.toLowerCase().includes(q) ||
       (item.category && item.category.toLowerCase().includes(q)) ||
-      (item.description && item.description.toLowerCase().includes(q))
+      (item.description && item.description.toLowerCase().includes(q)) ||
+      (item.barcode && item.barcode.toLowerCase().includes(q))
     );
   });
 
@@ -119,6 +135,7 @@ export default function Products() {
       category: product.category || "",
       unit: product.unit,
       description: product.description || "",
+      barcode: product.barcode || "",
     });
     setIsOpen(true);
   };
@@ -182,6 +199,7 @@ export default function Products() {
               <tr className="border-b border-gray-100 bg-gray-50/50 text-xs font-bold text-gray-400 uppercase tracking-wider">
                 <th className="p-4 w-12 text-center">#</th>
                 <th className="p-4">Ad</th>
+                <th className="p-4">Barkod</th>
                 <th className="p-4">Kateqoriya</th>
                 <th className="p-4">Ölçü Vahidi</th>
                 <th className="p-4">Təsvir (Qeyd)</th>
@@ -191,13 +209,13 @@ export default function Products() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="p-10 text-center text-xs text-gray-400">
+                  <td colSpan={7} className="p-10 text-center text-xs text-gray-400">
                     Yüklənir...
                   </td>
                 </tr>
               ) : filteredList.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-16 text-center text-xs text-gray-400">
+                  <td colSpan={7} className="p-16 text-center text-xs text-gray-400">
                     {searchQuery ? "Axtarışa uyğun məhsul tapılmadı." : "Kataloq boşdur. Yeni məhsul əlavə edin."}
                   </td>
                 </tr>
@@ -206,6 +224,7 @@ export default function Products() {
                   <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/30 transition-all text-xs">
                     <td className="p-4 text-center font-mono text-gray-400">{idx + 1}</td>
                     <td className="p-4 font-bold text-gray-900">{item.name}</td>
+                    <td className="p-4 font-mono text-[10px] text-gray-500 font-bold">{item.barcode || "—"}</td>
                     <td className="p-4 font-medium text-gray-600">
                       {item.category ? (
                         <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-md text-[10px] font-bold">
@@ -219,6 +238,13 @@ export default function Products() {
                     <td className="p-4 text-gray-400 truncate max-w-xs">{item.description || "—"}</td>
                     <td className="p-4 text-right pr-6">
                       <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => setSelectedProductForLabel(item)}
+                          className="p-2 border border-amber-100 hover:border-amber-200 text-amber-600 hover:text-amber-700 rounded-xl cursor-pointer transition-all bg-white"
+                          title="Qiymət Kağızı Çap Et"
+                        >
+                          <Tag className="w-3.5 h-3.5" />
+                        </button>
                         <button
                           onClick={() => handleOpenEdit(item)}
                           className="p-2 border border-gray-100 hover:border-gray-200 text-gray-500 hover:text-gray-900 rounded-xl cursor-pointer transition-all bg-white"
@@ -265,6 +291,27 @@ export default function Products() {
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50"
                   required
                 />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Barkod</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Məhsul barkodu (EAN-13)"
+                    value={formData.barcode}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, barcode: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 font-mono text-gray-900 font-bold"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setFormData((prev) => ({ ...prev, barcode: generateValidEAN13() }))}
+                    className="px-3.5 py-3 bg-amber-50 text-amber-600 border border-amber-200 hover:bg-amber-100/50 rounded-xl font-bold transition-all text-[11px] shrink-0 cursor-pointer"
+                    title="Avtomatik EAN-13 barkod yarat"
+                  >
+                    Yarat ⚡
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-1.5">
@@ -348,6 +395,15 @@ export default function Products() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Label Print Modal overlay */}
+      {selectedProductForLabel && (
+        <LabelPrintModal
+          product={selectedProductForLabel}
+          storeName={settings?.storeName || "BirSaaS Store"}
+          onClose={() => setSelectedProductForLabel(null)}
+        />
       )}
     </div>
   );

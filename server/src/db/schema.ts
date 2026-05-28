@@ -23,6 +23,7 @@ export const products = pgTable("products", {
   category: text("category"),
   unit: text("unit").notNull().default("ədəd"),
   description: text("description"),
+  barcode: text("barcode"),
 });
 
 // 2. Stock Entries (Warehouse entry / restocking)
