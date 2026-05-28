@@ -158,7 +158,7 @@ export default function SuperDashboard() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-black text-gray-900 tracking-tight flex items-center gap-2">
-            <Building className="w-6 h-6 text-primary" /> Qazan SaaS Control Plane
+            <Building className="w-6 h-6 text-primary" /> BirSaaS Control Plane
           </h2>
           <p className="text-xs text-gray-400 mt-1">
             Çox-biznesli platforma idarəçiliyi, subdomenlərin idarə olunması və tədricən yenilənmə axınları

@@ -66,11 +66,11 @@ export default function Login({ onLoginSuccess }: LoginProps) {
         {/* Logo and Brand */}
         <div className="flex flex-col items-center gap-3.5 mb-8 text-center">
           <div className="size-16 rounded-2xl bg-primary flex items-center justify-center text-white font-black text-3xl shadow-xl shadow-primary/25 border border-white/20">
-            Q
+            B
           </div>
           <div>
             <h1 className="font-extrabold text-gray-900 tracking-tight text-2xl leading-none">
-              Qazan POS
+              BirSaaS
             </h1>
             <span className="text-xs font-bold text-gray-400 mt-2 block tracking-wider uppercase">
               Ticarət & Anbar İdarəetmə Sistemi

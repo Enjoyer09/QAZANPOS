@@ -1,7 +1,7 @@
 import { qzService } from "../lib/qz.ts";
 
 export function generateReceiptHtml(sale: any, settings: any): string {
-  const storeName = settings?.receiptHeader || settings?.storeName || "QAZAN POS";
+  const storeName = settings?.receiptHeader || settings?.storeName || "BirSaaS";
   const phone = settings?.phone || "";
   const address = settings?.address || "";
   const footerMessage = settings?.receiptFooter || "Bizi seçdiyiniz üçün təşəkkür edirik!";

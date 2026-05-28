@@ -285,9 +285,9 @@ export default function Invoice({ params }: InvoiceProps) {
             <div>
               <div className="flex items-center gap-2.5 mb-1.5">
                 <div className="size-8 rounded-lg bg-primary flex items-center justify-center text-white font-bold text-base">
-                  Q
+                  B
                 </div>
-                <h3 className="font-extrabold text-lg text-gray-950">{settings?.storeName || "Qazan POS"}</h3>
+                <h3 className="font-extrabold text-lg text-gray-950">{settings?.storeName || "BirSaaS"}</h3>
               </div>
               {settings?.phone && <p className="text-[10px] text-gray-400 font-medium">Əlaqə: {settings.phone}</p>}
               <p className="text-[10px] text-gray-400 font-medium mt-0.5">{settings?.address || "Bakı, Azərbaycan"}</p>

@@ -210,11 +210,11 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
         <Link href={isSuperTenant ? "/" : (isAdmin ? "/" : "/pos")}>
           <div className="flex items-center gap-3 cursor-pointer group">
             <div className="size-9 rounded-xl bg-primary flex items-center justify-center text-white font-black text-lg shadow-md shadow-primary/20 transition-transform group-hover:scale-105">
-              Q
+              B
             </div>
             <div>
               <h1 className="font-extrabold text-gray-900 tracking-tight text-sm leading-none transition-colors group-hover:text-primary">
-                {isSuperTenant ? "Qazan SaaS" : "Qazan POS"}
+                {isSuperTenant ? "BirSaaS Platform" : "BirSaaS"}
               </h1>
               <span className="text-[10px] font-bold text-gray-400 mt-1 block tracking-wide">
                 {isSuperTenant ? "PLATFORMA PANELİ" : "ANBAR & SATIŞ"}
@@ -348,11 +348,11 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
               {/* Brand Logo */}
               <div className="flex items-center gap-3">
                 <div className="size-9 rounded-xl bg-primary flex items-center justify-center text-white font-black text-lg">
-                  Q
+                  B
                 </div>
                 <div>
                   <h1 className="font-extrabold text-gray-900 text-sm leading-none">
-                    {isSuperTenant ? "Qazan SaaS" : "Qazan POS"}
+                    {isSuperTenant ? "BirSaaS Platform" : "BirSaaS"}
                   </h1>
                   <span className="text-[10px] font-bold text-gray-400 mt-1 block">
                     {isSuperTenant ? "PLATFORMA PANELİ" : "ANBAR & SATIŞ"}
@@ -445,6 +445,19 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
           {children}
         </div>
       </main>
+
+      {/* 3. Premium Watermark & Version Footer */}
+      <footer className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-6 mt-8 border-t border-gray-200/50 flex flex-col sm:flex-row items-center justify-between text-[10px] font-bold text-gray-400 tracking-wider no-print">
+        <div className="flex items-center gap-2">
+          <span className="size-4 rounded-md bg-primary/10 text-primary flex items-center justify-center font-black text-[9px]">B</span>
+          <span>BirSaaS Platformu © {new Date().getFullYear()}</span>
+        </div>
+        <div className="flex items-center gap-4 mt-2 sm:mt-0">
+          <span>Sistem Versiyası: <span className="text-primary bg-primary/5 px-2 py-0.5 rounded-md font-extrabold">1.0 RC</span></span>
+          <span className="text-gray-300">|</span>
+          <span className="bg-gray-100 px-2 py-0.5 rounded-md text-gray-500 font-extrabold uppercase">Bulud və Oflayn Sinxronizasiya</span>
+        </div>
+      </footer>
     </div>
   );
 }
@@ -649,7 +662,7 @@ function AppContent() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50/50">
         <div className="text-center space-y-4">
           <RotateCw className="w-8 h-8 text-primary mx-auto animate-spin" />
-          <span className="text-xs font-bold text-gray-400 block animate-pulse">Qazan SaaS yüklənir...</span>
+          <span className="text-xs font-bold text-gray-400 block animate-pulse">BirSaaS yüklənir...</span>
         </div>
       </div>
     );
@@ -669,11 +682,11 @@ function AppContent() {
           {/* Logo & Brand */}
           <div className="flex flex-col items-center gap-3.5">
             <div className="size-16 rounded-2xl bg-primary flex items-center justify-center text-white font-black text-3xl shadow-xl shadow-primary/25 border border-white/20">
-              Q
+              B
             </div>
             <div>
               <h1 className="font-extrabold text-gray-900 tracking-tight text-2xl leading-none">
-                Qazan SaaS
+                BirSaaS Platform
               </h1>
               <span className="text-xs font-bold text-gray-400 mt-2 block tracking-wider uppercase">
                 Çox-Biznesli POS & Anbar Platforması
@@ -697,12 +710,12 @@ function AppContent() {
             </div>
 
             <p className="text-xs text-gray-600 leading-relaxed font-bold bg-gray-50/50 p-4 rounded-xl border border-gray-100/30">
-              Qazan POS platformasında yeni bir mağaza açmaq və ya pulsuz Demo əldə etmək üçün bizə yaza bilərsiniz.
+              BirSaaS platformasında yeni bir mağaza açmaq və ya pulsuz Demo əldə etmək üçün bizə yaza bilərsiniz.
             </p>
 
             {/* Inquiries Action Button */}
             <a
-              href={`mailto:abbas@laptopmarket.az?subject=Qazan POS Demo Talebi: ${slug}&body=Salam, biz '${slug}' subdomeni altında Qazan POS sistemini sınamaq üçün Demo hesabı əldə etmək istəyirik.`}
+              href={`mailto:abbas@laptopmarket.az?subject=BirSaaS Demo Talebi: ${slug}&body=Salam, biz '${slug}' subdomeni altında BirSaaS sistemini sınamaq üçün Demo hesabı əldə etmək istəyirik.`}
               className="w-full py-4 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 cursor-pointer flex items-center justify-center gap-2 text-sm shadow-md shadow-primary/10 transition-all hover-elevate"
             >
               <Mail className="w-4 h-4" /> Demo Əldə Etmək Üçün Yazın
