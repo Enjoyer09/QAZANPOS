@@ -1771,4 +1771,18 @@ router.put("/super/tenants/:id/tier", requireSuperAdmin, async (req, res) => {
   }
 });
 
+// Get all users for a specific tenant (only for Super Admin)
+router.get("/super/tenants/:id/users", requireSuperAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const tenantUsers = await db.query.users.findMany({
+      where: eq(schema.users.tenantId, id)
+    });
+    res.json(tenantUsers);
+  } catch (error: any) {
+    console.error("Error fetching tenant users:", error);
+    res.status(500).json({ message: "Biznes istifadəçilərini gətirərkən xəta baş verdi" });
+  }
+});
+
 export default router;

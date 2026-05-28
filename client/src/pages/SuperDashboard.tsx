@@ -29,6 +29,29 @@ export default function SuperDashboard() {
   const [newAdminUser, setNewAdminUser] = useState("");
   const [newAdminPassword, setNewAdminPassword] = useState("");
 
+  const [selectedTenantForUsers, setSelectedTenantForUsers] = useState<any | null>(null);
+  const [tenantUsers, setTenantUsers] = useState<any[]>([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+
+  const handleViewUsers = async (tenant: any) => {
+    setSelectedTenantForUsers(tenant);
+    setIsLoadingUsers(true);
+    try {
+      const res = await fetch(`/api/super/tenants/${tenant.id}/users`);
+      if (!res.ok) throw new Error("İstifadəçiləri gətirmək mümkün olmadı");
+      const data = await res.json();
+      setTenantUsers(data);
+    } catch (err: any) {
+      toast({
+        title: "Xəta!",
+        description: err.message || "İstifadəçilər yüklənərkən xəta baş verdi.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingUsers(false);
+    }
+  };
+
   // Fetch tenants
   const { data: tenantsList, isLoading, refetch, isRefetching } = useQuery<any[]>({
     queryKey: ["/api/super/tenants"],
@@ -294,6 +317,13 @@ export default function SuperDashboard() {
                     <td className="p-4 text-right pr-6">
                       {!isSuper ? (
                         <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleViewUsers(tenant)}
+                            className="px-2.5 py-1.5 bg-white text-gray-700 rounded-lg border border-gray-200 hover:text-primary hover:border-primary/50 cursor-pointer shadow-xs transition-all flex items-center justify-center gap-1 font-bold text-[10px]"
+                          >
+                            <Lock className="w-3.5 h-3.5 text-amber-500" /> Girişlər
+                          </button>
                           {tenant.status === "active" ? (
                             <button
                               type="button"
@@ -440,6 +470,77 @@ export default function SuperDashboard() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* View Tenant Users Modal */}
+      {selectedTenantForUsers && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs z-100 flex items-center justify-center p-4 animate-in fade-in-0">
+          <div className="bg-white rounded-3xl border border-gray-100 p-8 shadow-2xl max-w-lg w-full relative space-y-6">
+            <div>
+              <h3 className="font-extrabold text-gray-900 text-lg tracking-tight flex items-center gap-2">
+                <Lock className="w-5 h-5 text-amber-500" /> '{selectedTenantForUsers.name}' Giriş Məlumatları
+              </h3>
+              <p className="text-[10px] text-gray-400 mt-1 font-semibold leading-relaxed uppercase tracking-wider">
+                Sistemə daxil olmaq üçün istifadəçi adları və şifrələri
+              </p>
+            </div>
+
+            {isLoadingUsers ? (
+              <div className="py-8 text-center text-xs text-gray-400 font-semibold space-y-2">
+                <RotateCw className="w-6 h-6 text-primary mx-auto animate-spin" />
+                <p>İstifadəçilər yüklənir...</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {tenantUsers.length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-4">Bu biznes üçün istifadəçi tapılmadı.</p>
+                ) : (
+                  <div className="overflow-hidden border border-gray-100 rounded-2xl">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-gray-50 text-gray-400 font-bold border-b border-gray-100">
+                          <th className="p-3 pl-4">İstifadəçi adı</th>
+                          <th className="p-3">Şifrə</th>
+                          <th className="p-3 pr-4 text-center">Rol</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 font-semibold text-gray-700">
+                        {tenantUsers.map((user) => (
+                          <tr key={user.id} className="hover:bg-gray-50/50">
+                            <td className="p-3 pl-4 font-mono font-bold text-gray-900">{user.username}</td>
+                            <td className="p-3 font-mono font-bold text-amber-600 select-all bg-amber-50/30 px-2 rounded-md">
+                              {user.password}
+                            </td>
+                            <td className="p-3 pr-4 text-center">
+                              <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                                user.role === "Admin" ? "bg-purple-50 text-purple-700" : "bg-blue-50 text-blue-700"
+                              }`}>
+                                {user.role}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex gap-2.5 justify-end text-xs font-bold pt-4 border-t border-gray-100/50">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedTenantForUsers(null);
+                  setTenantUsers([]);
+                }}
+                className="px-6 py-2.5 bg-gray-900 text-white rounded-xl hover:bg-gray-800 cursor-pointer transition-all"
+              >
+                Bağla
+              </button>
+            </div>
           </div>
         </div>
       )}
