@@ -28,7 +28,7 @@ async function resolveTenant(req: any, res: any, next: any) {
   // Default tenant fallback for bare domains or localhost testing
   let slug = "demo";
   
-  if (parts.length > 1 && parts[0] !== "www" && parts[0] !== "localhost" && !parts[0].includes("127.0.0.1")) {
+  if (parts.length > 1 && parts[0] !== "www" && parts[0] !== "localhost" && parts[0] !== "qazanpos-production" && !parts[0].includes("127.0.0.1")) {
     slug = parts[0].toLowerCase();
   }
 
