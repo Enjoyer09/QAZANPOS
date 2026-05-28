@@ -5,6 +5,11 @@ import { eq, and, lte, gte, sql, desc } from "drizzle-orm";
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 
 declare global {
   namespace Express {
@@ -146,7 +151,7 @@ router.post("/auth/login", async (req, res) => {
 // Serve QZ Digital Certificate
 router.get("/auth/qz-certificate", async (req, res) => {
   try {
-    const certPath = path.resolve(process.cwd(), "server/auth/digital-certificate.txt");
+    const certPath = path.resolve(__dirname, "../auth/digital-certificate.txt");
     if (!fs.existsSync(certPath)) {
       return res.status(404).json({ message: "Rəqəmsal sertifikat tapılmadı" });
     }
@@ -165,7 +170,7 @@ router.post("/auth/qz-sign", async (req, res) => {
       return res.status(400).json({ message: "İmzalanacaq məlumat daxil edilməyib" });
     }
 
-    const keyPath = path.resolve(process.cwd(), "server/auth/private-key.pem");
+    const keyPath = path.resolve(__dirname, "../auth/private-key.pem");
     if (!fs.existsSync(keyPath)) {
       return res.status(500).json({ message: "Rəqəmsal imza açarı tapılmadı" });
     }
