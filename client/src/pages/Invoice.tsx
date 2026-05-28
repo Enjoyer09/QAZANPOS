@@ -128,6 +128,15 @@ export default function Invoice({ params }: InvoiceProps) {
 
   const isCredit = invoice.paymentStatus === "credit";
 
+  // Calculate totals dynamically and robustly
+  const totalAmount = parseFloat(invoice.totalAmount) || 0;
+  const totalPaid = invoice.paymentStatus === "paid"
+    ? totalAmount
+    : (invoice.payments || []).reduce((acc: number, p: any) => acc + (parseFloat(p.amount) || 0), 0);
+  const remainingDebt = invoice.paymentStatus === "paid"
+    ? 0
+    : Math.max(0, totalAmount - totalPaid);
+
   return (
     <div className="space-y-6 animate-in fade-in-0 print:p-0 print:bg-white print:shadow-none">
       {/* Header controls (Hidden in Print) */}
@@ -276,19 +285,19 @@ export default function Invoice({ params }: InvoiceProps) {
               <div className="flex justify-between">
                 <span>Cəmi məbləğ</span>
                 <span className="font-bold text-gray-950 font-mono text-sm">
-                  {Number(invoice.totalAmount || 0).toFixed(2)} ₼
+                  {totalAmount.toFixed(2)} ₼
                 </span>
               </div>
               <div className="flex justify-between">
                 <span>Ödənilən məbləğ</span>
                 <span className="font-bold text-green-600 font-mono text-sm">
-                  {Number(invoice.totalPaid || 0).toFixed(2)} ₼
+                  {totalPaid.toFixed(2)} ₼
                 </span>
               </div>
               {isCredit && (
                 <div className="flex justify-between items-center text-red-600 bg-red-50 p-2.5 rounded-xl border border-red-100 mt-2">
                   <span className="font-bold">Qalıq Borc</span>
-                  <span className="font-black font-mono text-base">{Number(invoice.remainingDebt || 0).toFixed(2)} ₼</span>
+                  <span className="font-black font-mono text-base">{remainingDebt.toFixed(2)} ₼</span>
                 </div>
               )}
             </div>

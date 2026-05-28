@@ -17,6 +17,29 @@ export function generateReceiptHtml(sale: any, settings: any): string {
   const saleIdStr = sale.id.toString().padStart(5, "0");
   const dateStr = new Date(sale.saleDate).toLocaleDateString("az-AZ") + " " + new Date(sale.saleDate).toLocaleTimeString("az-AZ", { hour: '2-digit', minute: '2-digit' });
 
+  // Calculate totals dynamically and robustly
+  const totalAmount = parseFloat(sale.totalAmount) || 0;
+  
+  let totalPaid = parseFloat(sale.totalPaid);
+  if (isNaN(totalPaid) || sale.totalPaid === undefined || sale.totalPaid === null) {
+    if (sale.paymentStatus === "paid") {
+      totalPaid = totalAmount;
+    } else {
+      totalPaid = sale.payments && Array.isArray(sale.payments)
+        ? sale.payments.reduce((acc: number, p: any) => acc + (parseFloat(p.amount) || 0), 0)
+        : 0;
+    }
+  }
+
+  const isCredit = sale.paymentStatus === "credit" || sale.paymentType === "Nisyə";
+  let remainingDebt = 0;
+  if (isCredit) {
+    const customRemaining = sale.remainingDebt !== undefined && sale.remainingDebt !== null 
+      ? parseFloat(sale.remainingDebt) 
+      : null;
+    remainingDebt = customRemaining !== null ? customRemaining : Math.max(0, totalAmount - totalPaid);
+  }
+
   // Dynamically build items HTML
   let itemsHtml = "";
   if (sale.items && Array.isArray(sale.items)) {
@@ -82,16 +105,12 @@ export function generateReceiptHtml(sale: any, settings: any): string {
 
   // Debt details if applicable
   let debtHtml = "";
-  if (sale.paymentStatus === "credit") {
-    const totalAmount = parseFloat(sale.totalAmount) || 0;
-    const totalPaid = parseFloat(sale.totalPaid) || 0;
-    const remainingDebt = sale.remainingDebt !== undefined ? parseFloat(sale.remainingDebt) : null;
-    const remaining = (remainingDebt !== null ? remainingDebt : (totalAmount - totalPaid)).toFixed(2);
+  if (isCredit) {
     debtHtml = `
       <table class="receipt-table" style="color: #000000; font-weight: bold;">
         <tr>
           <td>Qalıq Borc:</td>
-          <td>${remaining} ₼</td>
+          <td>${remainingDebt.toFixed(2)} ₼</td>
         </tr>
       </table>
     `;
@@ -169,8 +188,8 @@ export function generateReceiptHtml(sale: any, settings: any): string {
           line-height: 1.4;
           color: #000000;
           background-color: #ffffff;
-          padding: 2px;
-          width: ${width === "58mm" ? "44mm" : "70mm"};
+          padding: 2px 4mm 20px 4mm;
+          width: ${width === "58mm" ? "40mm" : "64mm"};
           margin: 0 auto;
         }
         .text-center {
@@ -254,12 +273,13 @@ export function generateReceiptHtml(sale: any, settings: any): string {
         }
         @media print {
           body {
-            width: 100%;
-            padding: 0;
-            margin: 0;
+            width: ${width === "58mm" ? "40mm" : "64mm"};
+            padding: 2px 4mm 20px 4mm;
+            margin: 0 auto;
           }
           @page {
             margin: 0;
+            size: auto;
           }
         }
       </style>
@@ -318,13 +338,13 @@ export function generateReceiptHtml(sale: any, settings: any): string {
         <table class="receipt-table" style="font-weight: bold; font-size: 11.5pt;">
           <tr>
             <td style="width: 60%; text-align: left; font-size: 11.5pt;">CƏMİ:</td>
-            <td style="width: 40%; text-align: right; font-size: 11.5pt;">${(parseFloat(sale.totalAmount) || 0).toFixed(2)} ₼</td>
+            <td style="width: 40%; text-align: right; font-size: 11.5pt;">${totalAmount.toFixed(2)} ₼</td>
           </tr>
         </table>
         <table class="receipt-table">
           <tr>
             <td>Ödənilən:</td>
-            <td>${(parseFloat(sale.totalPaid) || 0).toFixed(2)} ₼</td>
+            <td>${totalPaid.toFixed(2)} ₼</td>
           </tr>
         </table>
         ${debtHtml}
