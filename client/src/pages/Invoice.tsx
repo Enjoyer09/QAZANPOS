@@ -260,9 +260,9 @@ export default function Invoice({ params }: InvoiceProps) {
                     <td className="py-4 font-bold text-gray-900">{item.productName}</td>
                     <td className="py-4 text-right text-gray-500 font-medium">{item.unit}</td>
                     <td className="py-4 text-right font-semibold text-gray-800 font-mono">{item.quantity}</td>
-                    <td className="py-4 text-right text-gray-600 font-mono">{item.salePrice.toFixed(2)} ₼</td>
+                    <td className="py-4 text-right text-gray-600 font-mono">{Number(item.salePrice || 0).toFixed(2)} ₼</td>
                     <td className="py-4 text-right font-bold text-gray-950 font-mono pr-2">
-                      {(item.quantity * item.salePrice).toFixed(2)} ₼
+                      {Number((item.quantity * item.salePrice) || 0).toFixed(2)} ₼
                     </td>
                   </tr>
                 ))}
@@ -276,19 +276,19 @@ export default function Invoice({ params }: InvoiceProps) {
               <div className="flex justify-between">
                 <span>Cəmi məbləğ</span>
                 <span className="font-bold text-gray-950 font-mono text-sm">
-                  {invoice.totalAmount.toFixed(2)} ₼
+                  {Number(invoice.totalAmount || 0).toFixed(2)} ₼
                 </span>
               </div>
               <div className="flex justify-between">
                 <span>Ödənilən məbləğ</span>
                 <span className="font-bold text-green-600 font-mono text-sm">
-                  {invoice.totalPaid.toFixed(2)} ₼
+                  {Number(invoice.totalPaid || 0).toFixed(2)} ₼
                 </span>
               </div>
               {isCredit && (
                 <div className="flex justify-between items-center text-red-600 bg-red-50 p-2.5 rounded-xl border border-red-100 mt-2">
                   <span className="font-bold">Qalıq Borc</span>
-                  <span className="font-black font-mono text-base">{invoice.remainingDebt.toFixed(2)} ₼</span>
+                  <span className="font-black font-mono text-base">{Number(invoice.remainingDebt || 0).toFixed(2)} ₼</span>
                 </div>
               )}
             </div>
@@ -322,7 +322,7 @@ export default function Invoice({ params }: InvoiceProps) {
                     <span className="text-gray-500">
                       {idx + 1}. Ödəniş ({new Date(p.paymentDate).toLocaleDateString("az-AZ")})
                     </span>
-                    <span className="font-bold font-mono text-gray-950">{p.amount.toFixed(2)} ₼</span>
+                    <span className="font-bold font-mono text-gray-950">{Number(p.amount || 0).toFixed(2)} ₼</span>
                   </div>
                 ))}
               </div>
