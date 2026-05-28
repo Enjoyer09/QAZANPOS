@@ -22,7 +22,8 @@ import {
 } from "lucide-react";
 
 // Reusable components
-import { ToastProvider, ToastViewport } from "./components/Toast.tsx";
+import { ToastProvider, ToastViewport, useToast } from "./components/Toast.tsx";
+import { syncOfflineSalesToServer } from "./lib/offlineSync.ts";
 
 // Pages (will implement them next)
 import Dashboard from "./pages/Dashboard.tsx";
@@ -95,8 +96,63 @@ const queryClient = new QueryClient({
 });
 
 function AppLayout({ children, user, onLogout }: { children: React.ReactNode; user: any; onLogout: () => void }) {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { toast } = useToast();
+
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      syncOfflineSalesToServer((count) => {
+        toast({
+          title: "Əlaqə Bərpa Olundu",
+          description: `${count} ədəd oflayn satış uğurla buluda sinxronizasiya edildi!`,
+          variant: "success",
+        });
+      });
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+      toast({
+        title: "İnternet Kəsildi!",
+        description: "POS terminalı avtomatik olaraq Fövqəladə Oflayn rejiminə keçdi.",
+        variant: "destructive",
+      });
+    };
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [toast]);
+
+  // Gracefully redirect to POS if offline and not in POS/Stock
+  useEffect(() => {
+    if (!isOnline && location !== "/pos" && location !== "/anbar") {
+      setLocation("/pos");
+    }
+  }, [isOnline, location, setLocation]);
+
+  // Regular background sync check every 30 seconds
+  useEffect(() => {
+    if (!isOnline) return;
+
+    const interval = setInterval(() => {
+      syncOfflineSalesToServer((count) => {
+        toast({
+          title: "Arxaplan Sinxronizasiyası",
+          description: `${count} ədəd oflayn satış uğurla buluda sinxronizasiya edildi!`,
+          variant: "success",
+        });
+      });
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [isOnline, toast]);
 
   const isAdmin = user?.role === "Admin";
 
@@ -164,12 +220,25 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
                 ? location === "/anbar"
                 : location.startsWith(item.href);
 
+            const isItemDisabled = !isOnline && item.href !== "/pos" && item.href !== "/anbar";
+
             if (item.isHighlight) {
               return (
-                <Link key={item.href} href={item.href}>
+                <Link key={item.href} href={item.href} onClick={(e) => {
+                  if (isItemDisabled) {
+                    e.preventDefault();
+                    toast({
+                      title: "Oflayn Rejim Kilidi 🔒",
+                      description: "Bu bölmə yalnız onlayn rejimdə aktivdir. Oflayn rejimdə yalnız POS Satış və Qalıqlar bölmələri keçərlidir.",
+                      variant: "destructive",
+                    });
+                  }
+                }}>
                   <div
                     className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-xs cursor-pointer shadow-md transition-all hover-elevate ${
-                      isActive
+                      isItemDisabled
+                        ? "bg-gray-200 text-gray-400 opacity-50 cursor-not-allowed"
+                        : isActive
                         ? "bg-primary text-white shadow-primary/20 border border-primary/20"
                         : "bg-primary/10 text-primary hover:bg-primary/20 border border-primary/10"
                     }`}
@@ -182,16 +251,28 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
             }
 
             return (
-              <Link key={item.href} href={item.href}>
+              <Link key={item.href} href={item.href} onClick={(e) => {
+                if (isItemDisabled) {
+                  e.preventDefault();
+                  toast({
+                    title: "Oflayn Rejim Kilidi 🔒",
+                    description: "Bu bölmə yalnız onlayn rejimdə aktivdir. Oflayn rejimdə yalnız POS Satış və Qalıqlar bölmələri keçərlidir.",
+                    variant: "destructive",
+                  });
+                }
+              }}>
                 <div
                   className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-xs cursor-pointer transition-all ${
-                    isActive
+                    isItemDisabled
+                      ? "text-gray-300 opacity-50 cursor-not-allowed"
+                      : isActive
                       ? "bg-gray-900/10 text-gray-900 font-extrabold"
                       : "text-gray-500 hover:text-gray-900 hover:bg-gray-50/50"
                   }`}
                 >
-                  <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? "text-primary" : "text-gray-400"}`} />
+                  <Icon className={`w-3.5 h-3.5 shrink-0 ${isItemDisabled ? "text-gray-300" : isActive ? "text-primary" : "text-gray-400"}`} />
                   <span>{item.label}</span>
+                  {isItemDisabled && <span className="text-[9px] text-gray-400 ml-0.5">🔒</span>}
                 </div>
               </Link>
             );
@@ -200,10 +281,17 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
 
         {/* Status Indicator & Profile */}
         <div className="flex items-center gap-2 sm:gap-4">
-          <div className="hidden xs:flex items-center gap-1.5 bg-green-50/50 px-2.5 py-1.5 rounded-lg border border-green-100/50 text-[10px] font-bold text-green-700 glass">
-            <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse"></span>
-            <span>Lokal</span>
-          </div>
+          {isOnline ? (
+            <div className="hidden xs:flex items-center gap-1.5 bg-emerald-50/50 px-2.5 py-1.5 rounded-lg border border-emerald-100/50 text-[10px] font-bold text-emerald-700 glass">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>Onlayn</span>
+            </div>
+          ) : (
+            <div className="hidden xs:flex items-center gap-1.5 bg-amber-50/80 px-2.5 py-1.5 rounded-lg border border-amber-200/80 text-[10px] font-bold text-amber-700 glass shadow-md shadow-amber-500/5">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-ping"></span>
+              <span>Fövqəladə Oflayn</span>
+            </div>
+          )}
 
           <div className="flex items-center gap-2">
             <div className="text-right hidden sm:block">
@@ -269,17 +357,37 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
                       ? location === "/anbar"
                       : location.startsWith(item.href);
 
+                  const isItemDisabled = !isOnline && item.href !== "/pos" && item.href !== "/anbar";
+
                   return (
-                    <Link key={item.href} href={item.href} onClick={() => setIsMobileMenuOpen(false)}>
+                    <Link 
+                      key={item.href} 
+                      href={item.href} 
+                      onClick={(e) => {
+                        if (isItemDisabled) {
+                          e.preventDefault();
+                          toast({
+                            title: "Oflayn Rejim Kilidi 🔒",
+                            description: "Bu bölmə yalnız onlayn rejimdə aktivdir. Oflayn rejimdə yalnız POS Satış və Qalıqlar bölmələri keçərlidir.",
+                            variant: "destructive",
+                          });
+                        } else {
+                          setIsMobileMenuOpen(false);
+                        }
+                      }}
+                    >
                       <div
                         className={`flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-xs cursor-pointer transition-all ${
-                          isActive
+                          isItemDisabled
+                            ? "text-gray-300 opacity-40 cursor-not-allowed"
+                            : isActive
                             ? "bg-primary/10 text-primary font-extrabold"
                             : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
                         }`}
                       >
-                        <Icon className="w-4 h-4 shrink-0" />
+                        <Icon className={`w-4 h-4 shrink-0 ${isItemDisabled ? "text-gray-300" : ""}`} />
                         <span>{item.label}</span>
+                        {isItemDisabled && <span className="text-[9px] text-gray-400 ml-auto">🔒</span>}
                       </div>
                     </Link>
                   );

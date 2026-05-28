@@ -1,17 +1,26 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
+  Search,
   ShoppingCart,
-  Plus,
   Trash2,
-  Users,
-  Calendar,
-  AlertTriangle,
-  Receipt,
   CheckCircle,
-  PlusCircle,
+  Plus,
+  Minus,
+  Barcode,
+  Receipt,
+  UserPlus,
 } from "lucide-react";
+import { 
+  cacheProducts, 
+  cacheCustomers, 
+  cacheSettings,
+  getCachedProducts,
+  getCachedCustomers,
+  getCachedSettings,
+  saveOfflineSale
+} from "../lib/offlineSync.ts";
 import { useToast } from "../components/Toast.tsx";
 import { printReceipt } from "../components/ReceiptPrint.tsx";
 
@@ -26,8 +35,21 @@ interface BasketItem {
 
 export default function POS() {
   const queryClient = useQueryClient();
-  const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
+
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
 
   const user = (() => {
     try {
@@ -96,6 +118,7 @@ export default function POS() {
       if (!res.ok) throw new Error();
       return res.json();
     },
+    enabled: isOnline,
   });
 
   const { data: customers } = useQuery<any[]>({
@@ -105,10 +128,35 @@ export default function POS() {
       if (!res.ok) throw new Error();
       return res.json();
     },
+    enabled: isOnline,
   });
 
+  // Silent automatic cache updates
+  useEffect(() => {
+    if (isOnline && settings) {
+      cacheSettings(settings);
+    }
+  }, [isOnline, settings]);
+
+  useEffect(() => {
+    if (isOnline && stockLevels && Array.isArray(stockLevels)) {
+      cacheProducts(stockLevels);
+    }
+  }, [isOnline, stockLevels]);
+
+  useEffect(() => {
+    if (isOnline && customers && Array.isArray(customers)) {
+      cacheCustomers(customers);
+    }
+  }, [isOnline, customers]);
+
+  // Read from local storage if offline
+  const activeSettings = isOnline ? settings : getCachedSettings();
+  const activeStockLevels = isOnline ? stockLevels : getCachedProducts();
+  const activeCustomers = isOnline ? customers : getCachedCustomers();
+
   // Filter products that have positive stock levels
-  const sellableProducts = stockLevels?.filter((p) => p.currentQuantity > 0) || [];
+  const sellableProducts = activeStockLevels?.filter((p) => parseFloat(p.currentQuantity) > 0) || [];
 
   // Add item to basket
   const handleAddToBasket = () => {
@@ -178,7 +226,7 @@ export default function POS() {
 
         // If updating quantity, verify it doesn't exceed stock limit
         if (field === "quantity") {
-          const prod = stockLevels?.find((p) => p.productId === id);
+          const prod = activeStockLevels?.find((p) => p.productId === id);
           if (prod && value > prod.currentQuantity) {
             toast({
               title: "Xəta!",
@@ -223,7 +271,7 @@ export default function POS() {
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/recent-sales"] });
 
       // Find active customer if existing selected
-      const activeCustomer = customers?.find((c) => c.id === parseInt(selectedCustomerId));
+      const activeCustomer = activeCustomers?.find((c) => c.id === parseInt(selectedCustomerId));
 
       // Construct a rich local snapshot of the sale object to pass to the receipt generator
       const saleObj = {
@@ -302,7 +350,7 @@ export default function POS() {
     let customerAddress: string | null = null;
 
     if (customerMode === "existing" && selectedCustomerId) {
-      const cust = customers?.find((c) => c.id === parseInt(selectedCustomerId));
+      const cust = activeCustomers?.find((c) => c.id === parseInt(selectedCustomerId));
       if (cust) {
         customerId = cust.id;
         customerName = cust.name;
@@ -335,6 +383,38 @@ export default function POS() {
         purchasePrice: item.minPrice,
       })),
     };
+
+    if (!isOnline) {
+      try {
+        const enrichedOfflineSale = saveOfflineSale(payload);
+        
+        // Enrich items with catalog properties for thermal prints
+        enrichedOfflineSale.items = basket.map((item) => ({
+          productId: item.productId,
+          productName: item.productName,
+          unit: item.unit,
+          quantity: item.quantity,
+          salePrice: item.salePrice,
+          purchasePrice: item.minPrice,
+        }));
+
+        setLastCreatedSale(enrichedOfflineSale);
+        setShowSuccessModal(true);
+
+        toast({
+          title: isCredit ? "Oflayn Nisyə satışı qeydə alındı" : "Oflayn Satış tamamlandı 🧾",
+          description: `Satış yaddaşda saxlanıldı. İnternet bərpa olunduqda avtomatik buluda sinxronizasiya ediləcək.`,
+          variant: "success",
+        });
+      } catch (err) {
+        toast({
+          title: "Xəta!",
+          description: "Oflayn satışı qeydə alarkən xəta baş verdi.",
+          variant: "destructive",
+        });
+      }
+      return;
+    }
 
     createSaleMutation.mutate(payload);
   };
@@ -531,7 +611,7 @@ export default function POS() {
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 cursor-pointer"
                 >
                   <option value="">Müştəri seçin...</option>
-                  {customers?.map((c) => (
+                  {activeCustomers?.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name} {c.phone ? `(${c.phone})` : ""}
                     </option>
@@ -707,7 +787,7 @@ export default function POS() {
               <button
                 onClick={async () => {
                   try {
-                    const success = await printReceipt(lastCreatedSale, settings);
+                    const success = await printReceipt(lastCreatedSale, activeSettings);
                     if (success) {
                       toast({
                         title: "Çap qoşuldu",
@@ -737,11 +817,19 @@ export default function POS() {
               <div className="grid grid-cols-2 gap-2 text-xs font-bold">
                 <button
                   onClick={() => {
+                    if (!isOnline) {
+                      toast({
+                        title: "Oflayn Rejim Məhdudiyyəti 🔒",
+                        description: "Oflayn satışların ətraflı fakturasına yalnız sinxronizasiyadan sonra (onlayn rejimdə) baxıla bilər.",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
                     const sId = lastCreatedSale.id;
                     handleResetPOS();
                     setLocation(`/satislar/${sId}`);
                   }}
-                  className="py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl cursor-pointer hover:bg-gray-50 transition-all flex items-center justify-center gap-1.5"
+                  className="py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl cursor-pointer hover:bg-gray-50 transition-all flex items-center justify-center gap-1.5 animate-pulse"
                 >
                   Qaiməyə Bax
                 </button>
