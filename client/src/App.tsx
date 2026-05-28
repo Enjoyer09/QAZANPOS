@@ -41,6 +41,7 @@ import Login from "./pages/Login.tsx";
 import Logs from "./pages/Logs.tsx";
 import SuperDashboard from "./pages/SuperDashboard.tsx";
 import Landing from "./pages/Landing.tsx";
+import LimitReachedModal from "./components/LimitReachedModal.tsx";
 
 // Global fetch interceptor to automatically attach x-user-role, x-user-username, and x-tenant-host headers
 const originalFetch = window.fetch;
@@ -84,7 +85,19 @@ window.fetch = async (input, init) => {
       // Ignore
     }
   }
-  return originalFetch(input, init);
+  const response = await originalFetch(input, init);
+  if (response.status === 402) {
+    try {
+      const clone = response.clone();
+      const body = await clone.json();
+      if (body.limitReached) {
+        window.dispatchEvent(new CustomEvent("birsaas_limit_reached", { detail: body }));
+      }
+    } catch (e) {
+      // Ignore
+    }
+  }
+  return response;
 };
 
 const queryClient = new QueryClient({
@@ -622,6 +635,23 @@ function MainRoutes({ user, onLogout }: { user: any; onLogout: () => void }) {
 function AppContent() {
   const [user, setUser] = useState<any>(null);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
+  const [activeLimitError, setActiveLimitError] = useState<{ limitType: "products" | "sales" | "users"; current: number; max: number; tier: string } | null>(null);
+
+  useEffect(() => {
+    const handleLimitReached = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      setActiveLimitError({
+        limitType: detail.limitType,
+        current: detail.current,
+        max: detail.max,
+        tier: detail.tier
+      });
+    };
+    window.addEventListener("birsaas_limit_reached", handleLimitReached);
+    return () => {
+      window.removeEventListener("birsaas_limit_reached", handleLimitReached);
+    };
+  }, []);
 
   const host = window.location.hostname;
   const parts = host.split(".");
@@ -801,6 +831,15 @@ function AppContent() {
         <Landing />
       ) : (
         <Login onLoginSuccess={handleLoginSuccess} />
+      )}
+      {activeLimitError && (
+        <LimitReachedModal
+          limitType={activeLimitError.limitType}
+          current={activeLimitError.current}
+          max={activeLimitError.max}
+          tier={activeLimitError.tier}
+          onClose={() => setActiveLimitError(null)}
+        />
       )}
       <ToastViewport />
     </ToastProvider>

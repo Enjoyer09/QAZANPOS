@@ -201,6 +201,37 @@ export default function SuperDashboard() {
     },
   });
 
+  // Update billing tier mutation
+  const updateBillingTierMutation = useMutation({
+    mutationFn: async ({ id, billingTier }: { id: number; billingTier: string }) => {
+      const res = await fetch(`/api/super/tenants/${id}/billing-tier`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ billingTier }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Biznes tarifi dəyişdirilə bilmədi");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/super/tenants"] });
+      toast({
+        title: "Tarif Planı Yeniləndi",
+        description: "Biznesin abunəlik limitləri uğurla tətbiq edildi.",
+        variant: "success",
+      });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Xəta!",
+        description: err.message || "Biznes tarifi yenilənərkən xəta baş verdi.",
+        variant: "destructive",
+      });
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="py-24 text-center text-xs text-gray-400 font-semibold animate-pulse space-y-4">
@@ -311,6 +342,7 @@ export default function SuperDashboard() {
                 <th className="p-4">Biznes Kodu (Subdomain)</th>
                 <th className="p-4 text-center">Status</th>
                 <th className="p-4">Yayımlanma Dərəcəsi</th>
+                <th className="p-4">Tarif Planı</th>
                 <th className="p-4 text-center">Kassa Sayı</th>
                 <th className="p-4 text-center">Satış Həcmi</th>
                 <th className="p-4 text-right pr-6 w-56">Əməliyyatlar</th>
@@ -350,6 +382,21 @@ export default function SuperDashboard() {
                           <option value="stable">Stable (Sabit)</option>
                           <option value="beta">Beta (Sınaqçılar)</option>
                           <option value="canary">Canary (Testlər)</option>
+                        </select>
+                      </div>
+                    </td>
+                    <td className="p-4">
+                      <div className="flex items-center gap-1.5">
+                        <select
+                          value={tenant.billingTier || "free"}
+                          onChange={(e) => updateBillingTierMutation.mutate({ id: tenant.id, billingTier: e.target.value })}
+                          disabled={isSuper}
+                          className="px-2.5 py-1.5 border border-amber-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500 bg-amber-50/20 text-[10px] font-extrabold cursor-pointer text-amber-800"
+                        >
+                          <option value="free">Sınaq (Free)</option>
+                          <option value="mini">Mini Plan</option>
+                          <option value="pro">Pro Plan</option>
+                          <option value="enterprise">Enterprise</option>
                         </select>
                       </div>
                     </td>

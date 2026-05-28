@@ -107,6 +107,59 @@ function getMonthBoundaries() {
   return { firstDay, lastDay };
 }
 
+// SaaS Tier Limits mapping
+const TIER_LIMITS: Record<string, { products: number; sales: number; users: number }> = {
+  free: { products: 10, sales: 20, users: 1 },
+  mini: { products: 100, sales: 500, users: 3 },
+  pro: { products: 1000, sales: 5000, users: 10 },
+  enterprise: { products: Infinity, sales: Infinity, users: Infinity }
+};
+
+// Helper to check and verify tenant limits
+async function verifyTenantLimit(tenantId: number, type: "products" | "sales" | "users") {
+  // 1. Fetch tenant's current billing tier
+  const tenant = await db.query.tenants.findFirst({
+    where: eq(schema.tenants.id, tenantId)
+  });
+
+  const tier = tenant?.billingTier || "free";
+  const limits = TIER_LIMITS[tier] || TIER_LIMITS.free;
+  const maxLimit = limits[type];
+
+  if (maxLimit === Infinity) {
+    return { allowed: true, current: 0, max: Infinity, tier };
+  }
+
+  // 2. Count current records in the database for this tenant
+  let currentCount = 0;
+  if (type === "products") {
+    const result = await db
+      .select({ count: sql`COUNT(id)` })
+      .from(schema.products)
+      .where(eq(schema.products.tenantId, tenantId));
+    currentCount = parseInt((result[0]?.count as string) || "0");
+  } else if (type === "sales") {
+    const result = await db
+      .select({ count: sql`COUNT(id)` })
+      .from(schema.sales)
+      .where(eq(schema.sales.tenantId, tenantId));
+    currentCount = parseInt((result[0]?.count as string) || "0");
+  } else if (type === "users") {
+    const result = await db
+      .select({ count: sql`COUNT(id)` })
+      .from(schema.users)
+      .where(eq(schema.users.tenantId, tenantId));
+    currentCount = parseInt((result[0]?.count as string) || "0");
+  }
+
+  return {
+    allowed: currentCount < maxLimit,
+    current: currentCount,
+    max: maxLimit,
+    tier
+  };
+}
+
 // ----------------------------------------------------
 // 0. AUTH ENDPOINTS
 // ----------------------------------------------------
@@ -208,6 +261,19 @@ router.post("/products", requireAdmin, async (req, res) => {
   try {
     const { name, category, unit, description } = req.body;
     if (!name) return res.status(400).json({ message: "Ad tələb olunur" });
+
+    // Enforce SaaS resource limits
+    const limitCheck = await verifyTenantLimit(req.tenantId, "products");
+    if (!limitCheck.allowed) {
+      return res.status(402).json({
+        limitReached: true,
+        limitType: "products",
+        current: limitCheck.current,
+        max: limitCheck.max,
+        tier: limitCheck.tier,
+        message: `Məhsul limitinə çatdınız! Mövcud planınızda limit: ${limitCheck.max} məhsul.`
+      });
+    }
 
     const newProduct = await db
       .insert(schema.products)
@@ -611,6 +677,19 @@ router.post("/sales", async (req, res) => {
 
     if (!items || items.length === 0 || !paymentType) {
       return res.status(400).json({ message: "Çek məlumatları boş ola bilməz" });
+    }
+
+    // Enforce SaaS resource limits
+    const limitCheck = await verifyTenantLimit(req.tenantId, "sales");
+    if (!limitCheck.allowed) {
+      return res.status(402).json({
+        limitReached: true,
+        limitType: "sales",
+        current: limitCheck.current,
+        max: limitCheck.max,
+        tier: limitCheck.tier,
+        message: `Satış limitinə çatdınız! Mövcud planınızda limit: ${limitCheck.max} satış.`
+      });
     }
 
     const isCredit = paymentType === "Nisyə";
@@ -1474,6 +1553,19 @@ router.post("/users", requireAdmin, async (req, res) => {
       return res.status(400).json({ message: "Bu istifadəçi adı bu biznesdə artıq mövcuddur" });
     }
 
+    // Enforce SaaS resource limits
+    const limitCheck = await verifyTenantLimit(req.tenantId, "users");
+    if (!limitCheck.allowed) {
+      return res.status(402).json({
+        limitReached: true,
+        limitType: "users",
+        current: limitCheck.current,
+        max: limitCheck.max,
+        tier: limitCheck.tier,
+        message: `İstifadəçi limitinə çatdınız! Mövcud planınızda limit: ${limitCheck.max} istifadəçi.`
+      });
+    }
+
     const newUser = await db
       .insert(schema.users)
       .values({
@@ -1831,6 +1923,35 @@ router.delete("/super/tenants/:id", requireSuperAdmin, async (req, res) => {
   } catch (error: any) {
     console.error("Error deleting tenant:", error);
     res.status(500).json({ message: "Biznes silinərkən xəta baş verdi" });
+  }
+});
+
+// Set tenant billing plan (only for Super Admin)
+router.put("/super/tenants/:id/billing-tier", requireSuperAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { billingTier } = req.body;
+
+    if (!billingTier || !["free", "mini", "pro", "enterprise"].includes(billingTier)) {
+      return res.status(400).json({ message: "Yanlış tarif planı daxil edilib" });
+    }
+
+    const updated = await db
+      .update(schema.tenants)
+      .set({ billingTier })
+      .where(eq(schema.tenants.id, id))
+      .returning();
+
+    if (updated.length === 0) {
+      return res.status(404).json({ message: "Biznes tapılmadı" });
+    }
+
+    await logActivity(req, "UPDATE_TENANT_BILLING_TIER", `'${updated[0].name}' biznesinin abunəlik tarifini dəyişdi: ${billingTier}`);
+
+    res.json(updated[0]);
+  } catch (error) {
+    console.error("Error updating tenant billing tier:", error);
+    res.status(500).json({ message: "Biznes tarifi yenilənərkən xəta baş verdi" });
   }
 });
 

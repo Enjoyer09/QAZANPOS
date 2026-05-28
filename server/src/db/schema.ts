@@ -8,6 +8,7 @@ export const tenants = pgTable("tenants", {
   slug: text("slug").notNull().unique(), // E.g. "demo", "super", "restoran1"
   status: text("status").notNull().default("active"), // "active", "suspended"
   releaseTier: text("release_tier").notNull().default("stable"), // "stable", "beta", "canary"
+  billingTier: text("billing_tier").notNull().default("free"), // "free", "mini", "pro", "enterprise"
   createdAt: text("created_at").notNull(),
 });
 
