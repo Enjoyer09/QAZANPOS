@@ -197,6 +197,14 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
 
   return (
     <div className="relative min-h-screen w-screen flex flex-col overflow-x-hidden pb-12 select-none">
+      {/* 0. Demo Session Alert Banner */}
+      {sessionStorage.getItem("birsaas_demo_active") === "true" && (
+        <div className="w-full bg-emerald-500 hover:bg-emerald-600 text-white text-[11px] font-black tracking-wide py-2.5 px-4 text-center select-none flex items-center justify-center gap-2 animate-pulse no-print shadow-md shadow-emerald-500/10 z-100">
+          <Sparkles className="w-3.5 h-3.5 animate-spin duration-3000" />
+          <span>BİRSAAS DEMO SINAQ REJİMİ: Bütün etdiyiniz əməliyyatlar müvəqqətidir və çıxış edildikdə tamamilə silinəcəkdir.</span>
+        </div>
+      )}
+
       {/* Dynamic Liquid Background Blobs */}
       <div className="liquid-bg">
         <div className="liquid-blob-1"></div>
@@ -635,26 +643,43 @@ function AppContent() {
     retry: false,
   });
 
+  const isDemoActive = sessionStorage.getItem("birsaas_demo_active") === "true";
+
   useEffect(() => {
-    const userStr = localStorage.getItem("qazanpos_user");
+    const userStr = isDemoActive 
+      ? sessionStorage.getItem("qazanpos_user") 
+      : localStorage.getItem("qazanpos_user");
     if (userStr) {
       try {
         setUser(JSON.parse(userStr));
       } catch (e) {
-        localStorage.removeItem("qazanpos_user");
+        if (isDemoActive) {
+          sessionStorage.removeItem("qazanpos_user");
+        } else {
+          localStorage.removeItem("qazanpos_user");
+        }
       }
     }
     setIsCheckingSession(false);
-  }, []);
+  }, [isDemoActive]);
 
   const handleLoginSuccess = (userData: any) => {
-    localStorage.setItem("qazanpos_user", JSON.stringify(userData));
+    if (isDemoActive) {
+      sessionStorage.setItem("qazanpos_user", JSON.stringify(userData));
+    } else {
+      localStorage.setItem("qazanpos_user", JSON.stringify(userData));
+    }
     setUser(userData);
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("qazanpos_user");
+    if (isDemoActive) {
+      sessionStorage.clear();
+    } else {
+      localStorage.removeItem("qazanpos_user");
+    }
     setUser(null);
+    window.location.reload();
   };
 
   if (isCheckingSession || isCheckingTenant) {

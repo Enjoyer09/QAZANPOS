@@ -54,6 +54,23 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     }
   };
 
+  const handleEnterDemo = () => {
+    sessionStorage.setItem("birsaas_demo_active", "true");
+    const mockUser = { id: 9999, username: "demo_admin", role: "Admin" };
+    sessionStorage.setItem("qazanpos_user", JSON.stringify(mockUser));
+    
+    toast({
+      title: "Sınaq Rejimi Aktivdir! 🚀",
+      description: "İzolyasiya olunmuş müvəqqəti Demo mühitinə daxil olursunuz. Xoş sınaqlar!",
+      variant: "success",
+    });
+
+    onLoginSuccess(mockUser);
+    setTimeout(() => {
+      window.location.reload();
+    }, 100);
+  };
+
   return (
     <div className="min-h-screen w-screen flex items-center justify-center relative overflow-hidden select-none pb-12">
       {/* Liquid background blobs specifically for login screen context */}
@@ -100,7 +117,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                 </span>
                 <input
                   type="text"
-                  placeholder="admin və ya satici"
+                  placeholder="Məs. admin"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="w-full pl-11 pr-4 py-3.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 text-gray-950 font-bold"
@@ -149,8 +166,20 @@ export default function Login({ onLoginSuccess }: LoginProps) {
             </button>
           </form>
 
+          {/* Epic Neon Demo Sandbox Entry Button */}
+          <div className="mt-4 pt-4 border-t border-gray-100/50">
+            <button
+              type="button"
+              onClick={handleEnterDemo}
+              className="w-full py-4 bg-white hover:bg-emerald-50/20 text-emerald-600 font-extrabold rounded-xl border-2 border-dashed border-emerald-400 hover:border-emerald-500 shadow-md shadow-emerald-500/5 flex items-center justify-center gap-2.5 text-sm cursor-pointer transition-all hover-elevate"
+            >
+              <Sparkles className="size-4 text-emerald-500 animate-pulse" />
+              Sınaq Rejimi (Demo) 🔄
+            </button>
+          </div>
+
           {/* Quick instructions / Help */}
-          <div className="mt-8 pt-6 border-t border-gray-50 text-[10px] text-gray-400 text-center font-medium leading-relaxed">
+          <div className="mt-6 pt-5 border-t border-gray-50 text-[10px] text-gray-400 text-center font-medium leading-relaxed">
             <p>Admin hesabı: <strong className="text-gray-600">admin</strong> / şifrə: <strong className="text-gray-600 font-mono">admin123</strong></p>
             <p className="mt-1">Satıcı hesabı: <strong className="text-gray-600">satici</strong> / şifrə: <strong className="text-gray-600 font-mono">satici123</strong></p>
           </div>
