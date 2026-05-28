@@ -178,21 +178,23 @@ export function generateReceiptHtml(sale: any, settings: any): string {
           margin: 6px 0;
         }
         .flex-row {
-          display: block;
-          clear: both;
           width: 100%;
           margin-bottom: 2px;
+          white-space: nowrap;
         }
         .flex-row span:first-child {
-          float: left;
+          display: inline-block;
+          width: 60%;
+          text-align: left;
+          vertical-align: top;
+          white-space: normal;
         }
         .flex-row span:last-child {
-          float: right;
-        }
-        .flex-row::after {
-          content: "";
-          display: block;
-          clear: both;
+          display: inline-block;
+          width: 40%;
+          text-align: right;
+          vertical-align: top;
+          font-weight: bold;
         }
         .pt-1 {
           padding-top: 4px;
@@ -202,12 +204,7 @@ export function generateReceiptHtml(sale: any, settings: any): string {
         }
         .item-row {
           margin-bottom: 6px;
-          clear: both;
-        }
-        .item-row::after {
-          content: "";
-          display: block;
-          clear: both;
+          width: 100%;
         }
         .item-name {
           font-weight: bold;
@@ -217,21 +214,24 @@ export function generateReceiptHtml(sale: any, settings: any): string {
         }
         .item-details {
           display: block;
-          clear: both;
           width: 100%;
           font-size: 8.5pt;
           padding-left: 4px;
+          white-space: nowrap;
         }
         .item-details span:first-child {
-          float: left;
+          display: inline-block;
+          width: 60%;
+          text-align: left;
+          vertical-align: top;
         }
         .item-details span:last-child {
-          float: right;
-        }
-        .item-details::after {
-          content: "";
-          display: block;
-          clear: both;
+          display: inline-block;
+          width: 40%;
+          text-align: right;
+          vertical-align: top;
+          font-weight: bold;
+          font-family: monospace;
         }
         .item-total {
           font-weight: bold;
@@ -241,12 +241,7 @@ export function generateReceiptHtml(sale: any, settings: any): string {
           border-top: 1px dashed #000000;
           padding-top: 4px;
           margin-top: 6px;
-          clear: both;
-        }
-        .total-box::after {
-          content: "";
-          display: block;
-          clear: both;
+          width: 100%;
         }
         .grand-total {
           font-size: 11.5pt;
@@ -262,7 +257,6 @@ export function generateReceiptHtml(sale: any, settings: any): string {
           text-align: center;
           margin: 10px auto 6px auto;
           width: 100%;
-          clear: both;
         }
         .barcode-container svg {
           display: inline-block;
@@ -273,7 +267,6 @@ export function generateReceiptHtml(sale: any, settings: any): string {
           font-style: italic;
           margin-top: 8px;
           line-height: 1.3;
-          clear: both;
         }
         @media print {
           body {
