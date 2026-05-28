@@ -1349,6 +1349,132 @@ router.get("/dashboard/summary", requireAdmin, async (req, res) => {
   }
 });
 
+router.get("/dashboard/analytics", requireAdmin, async (req, res) => {
+  try {
+    // 1. Fetch sales, expenses, and saleItems with product details
+    const sales = await db.select().from(schema.sales).where(eq(schema.sales.tenantId, req.tenantId));
+    const expenses = await db.select().from(schema.expenses).where(eq(schema.expenses.tenantId, req.tenantId));
+    const saleItemsList = await db.query.saleItems.findMany({
+      where: eq(schema.saleItems.tenantId, req.tenantId),
+      with: { product: true }
+    });
+
+    // --- A. Monthly Trend (Past 6 Months) ---
+    // Generate last 6 months (including current month)
+    const monthlyData: Record<string, { month: string; revenue: number; expenses: number; cost: number; profit: number }> = {};
+    const monthNames = ["Yan", "Fev", "Mar", "Apr", "May", "İyun", "İyul", "Avq", "Sen", "Okt", "Noy", "Dek"];
+    
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const year = d.getFullYear();
+      const monthNum = d.getMonth();
+      const key = `${year}-${String(monthNum + 1).padStart(2, "0")}`; // YYYY-MM
+      const label = `${monthNames[monthNum]} ${year}`;
+      monthlyData[key] = { month: label, revenue: 0, expenses: 0, cost: 0, profit: 0 };
+    }
+
+    // Accumulate sales revenue and cost per month
+    for (const sale of sales) {
+      const key = sale.saleDate.substring(0, 7); // YYYY-MM
+      if (monthlyData[key]) {
+        monthlyData[key].revenue += sale.totalAmount;
+        monthlyData[key].cost += sale.totalCost;
+      }
+    }
+
+    // Accumulate expenses per month
+    for (const exp of expenses) {
+      const key = exp.date.substring(0, 7); // YYYY-MM
+      if (monthlyData[key]) {
+        monthlyData[key].expenses += exp.amount;
+      }
+    }
+
+    // Calculate profits per month
+    const monthlyTrend = Object.keys(monthlyData).sort().map(key => {
+      const m = monthlyData[key];
+      m.profit = m.revenue - m.cost - m.expenses;
+      return {
+        month: m.month,
+        revenue: parseFloat(m.revenue.toFixed(2)),
+        expenses: parseFloat(m.expenses.toFixed(2)),
+        profit: parseFloat(m.profit.toFixed(2))
+      };
+    });
+
+    // --- B. Weekly Sales peak day ---
+    const weekdays = ["Bazar", "Bazar ertəsi", "Çərşənbə axşamı", "Çərşənbə", "Cümə axşamı", "Cümə", "Şənbə"];
+    const weeklyData: Record<string, { day: string; sales: number; revenue: number }> = {};
+    for (const day of weekdays) {
+      weeklyData[day] = { day, sales: 0, revenue: 0 };
+    }
+
+    for (const sale of sales) {
+      const dayIndex = new Date(sale.saleDate).getDay();
+      const dayName = weekdays[dayIndex];
+      if (weeklyData[dayName]) {
+        weeklyData[dayName].sales += 1;
+        weeklyData[dayName].revenue += sale.totalAmount;
+      }
+    }
+
+    const weeklyDistribution = weekdays.map(day => ({
+      day,
+      sales: weeklyData[day].sales,
+      revenue: parseFloat(weeklyData[day].revenue.toFixed(2))
+    }));
+
+    // --- C. Top 5 Product Categories ---
+    const categoryTotals: Record<string, { category: string; salesCount: number; revenue: number }> = {};
+    for (const item of saleItemsList) {
+      const cat = item.product?.category || "Kateqoriyasız";
+      if (!categoryTotals[cat]) {
+        categoryTotals[cat] = { category: cat, salesCount: 0, revenue: 0 };
+      }
+      categoryTotals[cat].salesCount += item.quantity;
+      categoryTotals[cat].revenue += item.quantity * item.salePrice;
+    }
+
+    const topCategories = Object.values(categoryTotals)
+      .sort((a, b) => b.salesCount - a.salesCount)
+      .slice(0, 5)
+      .map(cat => ({
+        category: cat.category,
+        salesCount: parseFloat(cat.salesCount.toFixed(2)),
+        revenue: parseFloat(cat.revenue.toFixed(2))
+      }));
+
+    // --- D. COGS Margin Audit ---
+    const totalRevenue = sales.reduce((sum, sale) => sum + sale.totalAmount, 0);
+    const totalCost = sales.reduce((sum, sale) => sum + sale.totalCost, 0);
+    const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+
+    const grossProfit = totalRevenue - totalCost;
+    const netProfit = grossProfit - totalExpenses;
+
+    const grossMargin = totalRevenue > 0 ? parseFloat(((grossProfit / totalRevenue) * 100).toFixed(2)) : 0;
+    const netMargin = totalRevenue > 0 ? parseFloat(((netProfit / totalRevenue) * 100).toFixed(2)) : 0;
+
+    res.json({
+      monthlyTrend,
+      weeklyDistribution,
+      topCategories,
+      cogsAudit: {
+        totalRevenue: parseFloat(totalRevenue.toFixed(2)),
+        totalCost: parseFloat(totalCost.toFixed(2)),
+        totalExpenses: parseFloat(totalExpenses.toFixed(2)),
+        grossProfit: parseFloat(grossProfit.toFixed(2)),
+        netProfit: parseFloat(netProfit.toFixed(2)),
+        grossMargin,
+        netMargin
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Analitika hesablanarkən xəta baş verdi" });
+  }
+});
+
 router.get("/dashboard/recent-sales", async (req, res) => {
   try {
     const recent = await db.query.sales.findMany({
