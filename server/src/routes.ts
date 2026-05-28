@@ -1713,8 +1713,9 @@ router.post("/super/tenants", requireSuperAdmin, async (req, res) => {
     await logActivity(req, "PROVISION_TENANT", `Yeni biznes hesabını aktivləşdirdi: '${name}' (Kod: ${normalizedSlug}, Admin: ${normalizedUsername})`);
 
     res.json(newTenant[0]);
-  } catch (error) {
-    res.status(500).json({ message: "Biznes yaradılarkən xəta baş verdi" });
+  } catch (error: any) {
+    console.error("Tenant provisioning error:", error);
+    res.status(500).json({ message: `Biznes yaradılarkən xəta baş verdi: ${error.message || error}` });
   }
 });
 
