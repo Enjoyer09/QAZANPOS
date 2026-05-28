@@ -246,8 +246,12 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
                   Q
                 </div>
                 <div>
-                  <h1 className="font-extrabold text-gray-900 text-sm leading-none">Qazan POS</h1>
-                  <span className="text-[10px] font-bold text-gray-400 mt-1 block">ANBAR & SATIŞ</span>
+                  <h1 className="font-extrabold text-gray-900 text-sm leading-none">
+                    {isSuperTenant ? "Qazan SaaS" : "Qazan POS"}
+                  </h1>
+                  <span className="text-[10px] font-bold text-gray-400 mt-1 block">
+                    {isSuperTenant ? "PLATFORMA PANELİ" : "ANBAR & SATIŞ"}
+                  </span>
                 </div>
               </div>
 
