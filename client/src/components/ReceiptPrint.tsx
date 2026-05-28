@@ -29,10 +29,12 @@ export function generateReceiptHtml(sale: any, settings: any): string {
       itemsHtml += `
         <div class="item-row">
           <div class="item-name">${name}</div>
-          <div class="item-details">
-            <span>${qty} ${unit} x ${price.toFixed(2)} ₼</span>
-            <span class="item-total">${total} ₼</span>
-          </div>
+          <table class="receipt-table" style="font-size: 8.5pt;">
+            <tr>
+              <td style="width: 65%; text-align: left; font-size: 8.5pt; padding: 1px 0;">${qty} ${unit} x ${price.toFixed(2)} ₼</td>
+              <td style="width: 35%; text-align: right; font-weight: bold; font-family: monospace; font-size: 8.5pt; padding: 1px 0;">${total} ₼</td>
+            </tr>
+          </table>
         </div>
       `;
     });
@@ -40,33 +42,41 @@ export function generateReceiptHtml(sale: any, settings: any): string {
 
   // Dynamic Payment info
   let paymentDetailsHtml = `
-    <div class="flex-row">
-      <span>Ödəniş Üsulu:</span>
-      <span>${sale.paymentType}</span>
-    </div>
+    <table class="receipt-table">
+      <tr>
+        <td>Ödəniş Üsulu:</td>
+        <td>${sale.paymentType}</td>
+      </tr>
+    </table>
   `;
 
   if (sale.paymentStatus === "credit") {
     paymentDetailsHtml += `
-      <div class="flex-row text-red">
-        <span>Ödəniş Statusu:</span>
-        <span class="bold">Nisyə (Ödənilməyib)</span>
-      </div>
+      <table class="receipt-table">
+        <tr style="color: #000000;">
+          <td>Ödəniş Statusu:</td>
+          <td style="font-weight: bold;">Nisyə (Ödənilməyib)</td>
+        </tr>
+      </table>
     `;
     if (sale.creditDueDate) {
       paymentDetailsHtml += `
-        <div class="flex-row text-red">
-          <span>Ödəniş Tarixi:</span>
-          <span>${new Date(sale.creditDueDate).toLocaleDateString("az-AZ")}</span>
-        </div>
+        <table class="receipt-table">
+          <tr style="color: #000000;">
+            <td>Ödəniş Tarixi:</td>
+            <td>${new Date(sale.creditDueDate).toLocaleDateString("az-AZ")}</td>
+          </tr>
+        </table>
       `;
     }
   } else {
     paymentDetailsHtml += `
-      <div class="flex-row">
-        <span>Ödəniş Statusu:</span>
-        <span class="bold text-green">Ödənilib</span>
-      </div>
+      <table class="receipt-table">
+        <tr>
+          <td>Ödəniş Statusu:</td>
+          <td style="font-weight: bold;">Ödənilib</td>
+        </tr>
+      </table>
     `;
   }
 
@@ -78,10 +88,12 @@ export function generateReceiptHtml(sale: any, settings: any): string {
     const remainingDebt = sale.remainingDebt !== undefined ? parseFloat(sale.remainingDebt) : null;
     const remaining = (remainingDebt !== null ? remainingDebt : (totalAmount - totalPaid)).toFixed(2);
     debtHtml = `
-      <div class="flex-row text-red bold font-medium">
-        <span>Qalıq Borc:</span>
-        <span>${remaining} ₼</span>
-      </div>
+      <table class="receipt-table" style="color: #000000; font-weight: bold;">
+        <tr>
+          <td>Qalıq Borc:</td>
+          <td>${remaining} ₼</td>
+        </tr>
+      </table>
     `;
   }
 
@@ -89,15 +101,21 @@ export function generateReceiptHtml(sale: any, settings: any): string {
   let customerHtml = "";
   if (showCustomerInfo === 1 && (sale.customerName || sale.customerId)) {
     customerHtml = `
-      <div class="flex-row border-top-dash pt-1">
-        <span>Müştəri:</span>
-        <span class="bold">${sale.customerName || "Seçilməyib"}</span>
+      <div style="border-top: 1px dashed #000000; margin-top: 4px; padding-top: 4px;">
+        <table class="receipt-table">
+          <tr>
+            <td>Müştəri:</td>
+            <td style="font-weight: bold;">${sale.customerName || "Seçilməyib"}</td>
+          </tr>
+        </table>
       </div>
       ${(sale.customerPhone && showStorePhone === 1) ? `
-      <div class="flex-row">
-        <span>Telefon:</span>
-        <span>${sale.customerPhone}</span>
-      </div>
+      <table class="receipt-table">
+        <tr>
+          <td>Telefon:</td>
+          <td>${sale.customerPhone}</td>
+        </tr>
+      </table>
       ` : ""}
     `;
   }
@@ -177,30 +195,8 @@ export function generateReceiptHtml(sale: any, settings: any): string {
           border-top: 1px dashed #000000;
           margin: 6px 0;
         }
-        .flex-row {
-          width: 100%;
-          margin-bottom: 2px;
-          white-space: nowrap;
-        }
-        .flex-row span:first-child {
-          display: inline-block;
-          width: 60%;
-          text-align: left;
-          vertical-align: top;
-          white-space: normal;
-        }
-        .flex-row span:last-child {
-          display: inline-block;
-          width: 40%;
-          text-align: right;
-          vertical-align: top;
-          font-weight: bold;
-        }
         .pt-1 {
           padding-top: 4px;
-        }
-        .border-top-dash {
-          border-top: 1px dashed #000000;
         }
         .item-row {
           margin-bottom: 6px;
@@ -212,30 +208,24 @@ export function generateReceiptHtml(sale: any, settings: any): string {
           display: block;
           width: 100%;
         }
-        .item-details {
-          display: block;
+        .receipt-table {
           width: 100%;
-          font-size: 8.5pt;
-          padding-left: 4px;
-          white-space: nowrap;
+          border-collapse: collapse;
+          margin-bottom: 2px;
         }
-        .item-details span:first-child {
-          display: inline-block;
-          width: 60%;
+        .receipt-table td {
+          padding: 1px 0;
+          vertical-align: top;
+          font-size: 9.5pt;
+          color: #000000;
+        }
+        .receipt-table td:first-child {
           text-align: left;
-          vertical-align: top;
+          width: 60%;
         }
-        .item-details span:last-child {
-          display: inline-block;
-          width: 40%;
+        .receipt-table td:last-child {
           text-align: right;
-          vertical-align: top;
-          font-weight: bold;
-          font-family: monospace;
-        }
-        .item-total {
-          font-weight: bold;
-          font-family: monospace;
+          width: 40%;
         }
         .total-box {
           border-top: 1px dashed #000000;
@@ -246,12 +236,6 @@ export function generateReceiptHtml(sale: any, settings: any): string {
         .grand-total {
           font-size: 11.5pt;
           font-weight: 900;
-        }
-        .text-red {
-          color: #000000; /* Force black for maximum contrast on thermal printers */
-        }
-        .text-green {
-          color: #000000;
         }
         .barcode-container {
           text-align: center;
@@ -299,24 +283,30 @@ export function generateReceiptHtml(sale: any, settings: any): string {
       <div class="divider"></div>
 
       <!-- Info Block -->
-      <div class="flex-row">
-        <span>Qaimə №:</span>
-        <span class="bold">${saleIdStr}</span>
-      </div>
-      <div class="flex-row">
-        <span>Tarix:</span>
-        <span>${dateStr}</span>
-      </div>
+      <table class="receipt-table">
+        <tr>
+          <td>Qaimə №:</td>
+          <td style="font-weight: bold;">${saleIdStr}</td>
+        </tr>
+      </table>
+      <table class="receipt-table">
+        <tr>
+          <td>Tarix:</td>
+          <td>${dateStr}</td>
+        </tr>
+      </table>
       
       ${customerHtml}
 
       <div class="divider"></div>
 
       <!-- Listing Header -->
-      <div class="flex-row bold" style="font-size: 9pt; margin-bottom: 4px;">
-        <span>Məhsul</span>
-        <span>Məbləğ</span>
-      </div>
+      <table class="receipt-table" style="font-weight: bold; font-size: 9pt; margin-bottom: 4px;">
+        <tr>
+          <td style="width: 60%; text-align: left; font-size: 9pt;">Məhsul</td>
+          <td style="width: 40%; text-align: right; font-size: 9pt;">Məbləğ</td>
+        </tr>
+      </table>
 
       <!-- Listing Items -->
       <div class="items-list">
@@ -325,14 +315,18 @@ export function generateReceiptHtml(sale: any, settings: any): string {
 
       <!-- Totals -->
       <div class="total-box">
-        <div class="flex-row grand-total">
-          <span>CƏMİ:</span>
-          <span>${(parseFloat(sale.totalAmount) || 0).toFixed(2)} ₼</span>
-        </div>
-        <div class="flex-row">
-          <span>Ödənilən:</span>
-          <span>${(parseFloat(sale.totalPaid) || 0).toFixed(2)} ₼</span>
-        </div>
+        <table class="receipt-table" style="font-weight: bold; font-size: 11.5pt;">
+          <tr>
+            <td style="width: 60%; text-align: left; font-size: 11.5pt;">CƏMİ:</td>
+            <td style="width: 40%; text-align: right; font-size: 11.5pt;">${(parseFloat(sale.totalAmount) || 0).toFixed(2)} ₼</td>
+          </tr>
+        </table>
+        <table class="receipt-table">
+          <tr>
+            <td>Ödənilən:</td>
+            <td>${(parseFloat(sale.totalPaid) || 0).toFixed(2)} ₼</td>
+          </tr>
+        </table>
         ${debtHtml}
       </div>
 
@@ -343,10 +337,12 @@ export function generateReceiptHtml(sale: any, settings: any): string {
       <div class="payment-info">
         ${paymentDetailsHtml}
         ${sale.notes ? `
-          <div class="flex-row pt-1" style="font-size: 8.5pt; font-style: italic;">
-            <span>Qeyd:</span>
-            <span>${sale.notes}</span>
-          </div>
+          <table class="receipt-table" style="font-size: 8.5pt; font-style: italic;">
+            <tr>
+              <td>Qeyd:</td>
+              <td>${sale.notes}</td>
+            </tr>
+          </table>
         ` : ""}
       </div>
       <div class="divider"></div>
