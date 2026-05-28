@@ -623,8 +623,9 @@ function AppContent() {
   const { data: tenantConfig, error: tenantError, isLoading: isCheckingTenant } = useQuery<any>({
     queryKey: ["/api/settings", host],
     queryFn: async () => {
-      // If super, localhost, or bare domains, they are always valid fallbacks
-      if (isSuperTenant || parts.length <= 1 || parts[0] === "localhost" || parts[0] === "www" || parts[0] === "qazanpos-production" || parts[0].includes("127.0.0.1")) {
+      // If super, sinaq/demo sandboxes, localhost, or bare domains, they are always valid fallbacks
+      const isSinaq = parts.length > 0 && (parts[0].toLowerCase() === "sinaq" || parts[0].toLowerCase() === "demo");
+      if (isSuperTenant || isSinaq || parts.length <= 1 || parts[0] === "localhost" || parts[0] === "www" || parts[0] === "qazanpos-production" || parts[0].includes("127.0.0.1")) {
         return { valid: true };
       }
       
