@@ -40,6 +40,7 @@ import SettingsPage from "./pages/Settings.tsx";
 import Login from "./pages/Login.tsx";
 import Logs from "./pages/Logs.tsx";
 import SuperDashboard from "./pages/SuperDashboard.tsx";
+import Landing from "./pages/Landing.tsx";
 
 // Global fetch interceptor to automatically attach x-user-role, x-user-username, and x-tenant-host headers
 const originalFetch = window.fetch;
@@ -787,6 +788,8 @@ function AppContent() {
     );
   }
 
+  const isWwwOrBare = parts.length <= 1 || parts[0].toLowerCase() === "www";
+
   return (
     <ToastProvider>
       {user ? (
@@ -794,6 +797,8 @@ function AppContent() {
           <MainRoutes user={user} onLogout={handleLogout} />
           {!isSuperTenant && <OverdueDebtCheck />}
         </>
+      ) : isWwwOrBare ? (
+        <Landing />
       ) : (
         <Login onLoginSuccess={handleLoginSuccess} />
       )}
