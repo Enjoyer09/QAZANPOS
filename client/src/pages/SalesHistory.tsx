@@ -77,8 +77,8 @@ export default function SalesHistory() {
     );
   });
 
-  const totalSalesRevenue = filteredSales ? filteredSales.reduce((sum, s) => sum + s.totalAmount, 0) : 0;
-  const totalSalesCost = filteredSales ? filteredSales.reduce((sum, s) => sum + s.totalCost, 0) : 0;
+  const totalSalesRevenue = filteredSales ? filteredSales.reduce((sum, s) => sum + Number(s.totalAmount || 0), 0) : 0;
+  const totalSalesCost = filteredSales ? filteredSales.reduce((sum, s) => sum + Number(s.totalCost || 0), 0) : 0;
   const totalSalesProfit = totalSalesRevenue - totalSalesCost;
 
   return (
@@ -148,7 +148,7 @@ export default function SalesHistory() {
           <div className="p-3 bg-white/70 border border-gray-100/50 rounded-xl">
             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Dövr Gəliri</span>
             <span className="text-xl font-bold text-gray-900 font-mono block mt-1">
-              {totalSalesRevenue.toFixed(2)} ₼
+              {Number(totalSalesRevenue).toFixed(2)} ₼
             </span>
           </div>
           {isAdmin && (
@@ -156,13 +156,13 @@ export default function SalesHistory() {
               <div className="p-3 bg-white/70 border border-gray-100/50 rounded-xl">
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Dövr Mayası</span>
                 <span className="text-xl font-bold text-gray-900 font-mono block mt-1">
-                  {totalSalesCost.toFixed(2)} ₼
+                  {Number(totalSalesCost).toFixed(2)} ₼
                 </span>
               </div>
               <div className="p-3 bg-white/70 border border-gray-100/50 rounded-xl text-green-600">
                 <span className="text-[10px] font-bold text-green-600/60 uppercase tracking-wider block">Dövr Mənfəəti</span>
                 <span className="text-xl font-bold font-mono block mt-1">
-                  +{totalSalesProfit.toFixed(2)} ₼
+                  +{Number(totalSalesProfit).toFixed(2)} ₼
                 </span>
               </div>
             </>
@@ -201,7 +201,7 @@ export default function SalesHistory() {
                 </tr>
               ) : (
                 filteredSales.map((sale) => {
-                  const profit = sale.totalAmount - sale.totalCost;
+                  const profit = Number(sale.totalAmount || 0) - Number(sale.totalCost || 0);
                   return (
                     <tr key={sale.id} className="border-b border-gray-50 hover:bg-gray-50/30 transition-all text-xs">
                       <td className="p-4 text-center font-mono text-gray-900 font-bold">
@@ -223,12 +223,12 @@ export default function SalesHistory() {
                         </span>
                       </td>
                       <td className="p-4 text-right font-bold text-gray-950 font-mono">
-                        {sale.totalAmount.toFixed(2)} ₼
+                        {Number(sale.totalAmount || 0).toFixed(2)} ₼
                       </td>
                       {isAdmin && (
                         <td className={`p-4 text-right font-bold font-mono ${profit >= 0 ? "text-green-600" : "text-red-500"}`}>
                           {profit >= 0 ? "+" : ""}
-                          {profit.toFixed(2)} ₼
+                          {Number(profit).toFixed(2)} ₼
                         </td>
                       )}
                       <td className="p-4 text-center">
