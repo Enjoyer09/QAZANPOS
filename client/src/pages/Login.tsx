@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { User, Lock, Sparkles, KeyRound } from "lucide-react";
+import { User, Lock, Sparkles, KeyRound, CheckCircle, ArrowRight, TrendingUp, Boxes, WifiOff } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
 
 interface LoginProps {
@@ -11,6 +11,14 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  // Subdomain detection for dedicated public sandbox demo
+  const host = window.location.hostname;
+  const parts = host.split(".");
+  const isSinaqSubdomain = parts.length > 0 && (
+    parts[0].toLowerCase() === "sinaq" || 
+    parts[0].toLowerCase() === "demo"
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,8 +68,8 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     sessionStorage.setItem("qazanpos_user", JSON.stringify(mockUser));
     
     toast({
-      title: "Sınaq Rejimi Aktivdir! 🚀",
-      description: "İzolyasiya olunmuş müvəqqəti Demo mühitinə daxil olursunuz. Xoş sınaqlar!",
+      title: "Demo Sessiyası Başladı! 🚀",
+      description: "İzolyasiya olunmuş müvəqqəti sınaq mühitinə daxil olursunuz. Uğurlar!",
       variant: "success",
     });
 
@@ -95,95 +103,146 @@ export default function Login({ onLoginSuccess }: LoginProps) {
           </div>
         </div>
 
-        {/* Login Glass Card */}
-        <div className="bg-white border border-gray-100 rounded-3xl p-8 shadow-2xl glass-card relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-4 text-primary/10">
-            <KeyRound className="size-12" />
-          </div>
+        {/* Dynamic Layout Scoping */}
+        {isSinaqSubdomain ? (
+          /* Gorgeous Public Welcoming Sandbox Card */
+          <div className="bg-white border border-gray-100 rounded-3xl p-8 shadow-2xl glass-card relative overflow-hidden space-y-6 animate-in fade-in duration-300">
+            <div className="absolute top-0 right-0 p-4 text-emerald-500/10">
+              <Sparkles className="size-16 animate-pulse" />
+            </div>
 
-          <h2 className="text-lg font-black text-gray-900 tracking-tight mb-6">
-            Sistemə Giriş
-          </h2>
+            <div className="space-y-2">
+              <h2 className="text-xl font-black text-gray-900 tracking-tight leading-snug">
+                Sınaq Dünyasına Xoş Gəlmisiniz! 🚀
+              </h2>
+              <p className="text-xs text-gray-500 font-semibold leading-relaxed">
+                Qeydiyyatdan keçmədən bulud əsaslı POS və Anbar sistemimizi real vaxt rejimində sınaqdan keçirin.
+              </p>
+            </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5 text-xs font-semibold">
-            {/* Username Input */}
-            <div className="space-y-1.5">
-              <label className="text-gray-400 uppercase tracking-wider block text-[10px]">
-                İstifadəçi adı
-              </label>
-              <div className="relative">
-                <span className="absolute left-4 top-3.5 text-gray-400">
-                  <User className="size-4" />
-                </span>
-                <input
-                  type="text"
-                  placeholder="Məs. admin"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 text-gray-950 font-bold"
-                  disabled={isLoading}
-                  autoComplete="username"
-                  required
-                />
+            {/* Feature List Grid */}
+            <div className="space-y-3 pt-2">
+              <div className="flex items-start gap-3 p-3 rounded-xl bg-gray-50/50 border border-gray-100/30">
+                <Sparkles className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="text-xs font-extrabold text-gray-800">Sürətli POS Satış</h4>
+                  <p className="text-[10px] text-gray-400 mt-0.5">Barkod və ya sürətli axtarışla anında qəbz çapı.</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 p-3 rounded-xl bg-gray-50/50 border border-gray-100/30">
+                <TrendingUp className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="text-xs font-extrabold text-gray-800">Maliyyə & KPI Audit</h4>
+                  <p className="text-[10px] text-gray-400 mt-0.5">Net gəlir, COGS və xalis mənfəətin 100% dəqiq izlənməsi.</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 p-3 rounded-xl bg-gray-50/50 border border-gray-100/30">
+                <Boxes className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="text-xs font-extrabold text-gray-800">Geri Qaytarış & Deffekt</h4>
+                  <p className="text-[10px] text-gray-400 mt-0.5">Zədəli malların silinməsi və anbar qalığının bərpası.</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 p-3 rounded-xl bg-gray-50/50 border border-gray-100/30">
+                <WifiOff className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="text-xs font-extrabold text-gray-800">Fövqəladə Oflayn Rejim</h4>
+                  <p className="text-[10px] text-gray-400 mt-0.5">İnternet kəsildikdə belə tam işlək kassa və fon sinxronizasiyası.</p>
+                </div>
               </div>
             </div>
 
-            {/* Password Input */}
-            <div className="space-y-1.5">
-              <label className="text-gray-400 uppercase tracking-wider block text-[10px]">
-                Şifrə
-              </label>
-              <div className="relative">
-                <span className="absolute left-4 top-3.5 text-gray-400">
-                  <Lock className="size-4" />
-                </span>
-                <input
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 text-gray-950 font-bold font-mono"
-                  disabled={isLoading}
-                  autoComplete="current-password"
-                  required
-                />
-              </div>
-            </div>
-
-            {/* Submit Button */}
+            {/* Launch Demo Sandbox */}
             <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full py-4 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 text-sm shadow-md shadow-primary/10 transition-all hover-elevate mt-4"
-            >
-              {isLoading ? (
-                "Yoxlanılır..."
-              ) : (
-                <>
-                  <Sparkles className="size-4" /> Giriş Et
-                </>
-              )}
-            </button>
-          </form>
-
-          {/* Epic Neon Demo Sandbox Entry Button */}
-          <div className="mt-4 pt-4 border-t border-gray-100/50">
-            <button
-              type="button"
               onClick={handleEnterDemo}
-              className="w-full py-4 bg-white hover:bg-emerald-50/20 text-emerald-600 font-extrabold rounded-xl border-2 border-dashed border-emerald-400 hover:border-emerald-500 shadow-md shadow-emerald-500/5 flex items-center justify-center gap-2.5 text-sm cursor-pointer transition-all hover-elevate"
+              className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold rounded-xl shadow-lg shadow-emerald-500/10 cursor-pointer flex items-center justify-center gap-2.5 text-sm transition-all hover-elevate animate-bounce-subtle mt-4"
             >
-              <Sparkles className="size-4 text-emerald-500 animate-pulse" />
-              Sınaq Rejimi (Demo) 🔄
+              <span>Sınaq Turuna Başla</span>
+              <ArrowRight className="w-4 h-4" />
             </button>
           </div>
+        ) : (
+          /* Normal Secure Storefront Login Card (No Demo Buttons) */
+          <div className="bg-white border border-gray-100 rounded-3xl p-8 shadow-2xl glass-card relative overflow-hidden animate-in fade-in duration-300">
+            <div className="absolute top-0 right-0 p-4 text-primary/10">
+              <KeyRound className="size-12" />
+            </div>
 
-          {/* Quick instructions / Help */}
-          <div className="mt-6 pt-5 border-t border-gray-50 text-[10px] text-gray-400 text-center font-medium leading-relaxed">
-            <p>Admin hesabı: <strong className="text-gray-600">admin</strong> / şifrə: <strong className="text-gray-600 font-mono">admin123</strong></p>
-            <p className="mt-1">Satıcı hesabı: <strong className="text-gray-600">satici</strong> / şifrə: <strong className="text-gray-600 font-mono">satici123</strong></p>
+            <h2 className="text-lg font-black text-gray-900 tracking-tight mb-6">
+              Sistemə Giriş
+            </h2>
+
+            <form onSubmit={handleSubmit} className="space-y-5 text-xs font-semibold">
+              {/* Username Input */}
+              <div className="space-y-1.5">
+                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">
+                  İstifadəçi adı
+                </label>
+                <div className="relative">
+                  <span className="absolute left-4 top-3.5 text-gray-400">
+                    <User className="size-4" />
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="Məs. admin"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="w-full pl-11 pr-4 py-3.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 text-gray-950 font-bold"
+                    disabled={isLoading}
+                    autoComplete="username"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Password Input */}
+              <div className="space-y-1.5">
+                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">
+                  Şifrə
+                </label>
+                <div className="relative">
+                  <span className="absolute left-4 top-3.5 text-gray-400">
+                    <Lock className="size-4" />
+                  </span>
+                  <input
+                    type="password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full pl-11 pr-4 py-3.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 text-gray-950 font-bold font-mono"
+                    disabled={isLoading}
+                    autoComplete="current-password"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full py-4 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 text-sm shadow-md shadow-primary/10 transition-all hover-elevate mt-4"
+              >
+                {isLoading ? (
+                  "Yoxlanılır..."
+                ) : (
+                  <>
+                    <Sparkles className="size-4" /> Giriş Et
+                  </>
+                )}
+              </button>
+            </form>
+
+            {/* Quick instructions / Help */}
+            <div className="mt-6 pt-5 border-t border-gray-50 text-[10px] text-gray-400 text-center font-medium leading-relaxed">
+              <p>Admin hesabı: <strong className="text-gray-600">admin</strong> / şifrə: <strong className="text-gray-600 font-mono">admin123</strong></p>
+              <p className="mt-1">Satıcı hesabı: <strong className="text-gray-600">satici</strong> / şifrə: <strong className="text-gray-600 font-mono">satici123</strong></p>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
