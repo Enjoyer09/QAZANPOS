@@ -1,9 +1,23 @@
-import { pgTable, text, integer, serial, doublePrecision } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, serial, doublePrecision, uniqueIndex } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
+
+// 0. Tenants Table (Management Plane)
+export const tenants = pgTable("tenants", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(), // E.g. "demo", "super", "restoran1"
+  status: text("status").notNull().default("active"), // "active", "suspended"
+  releaseTier: text("release_tier").notNull().default("stable"), // "stable", "beta", "canary"
+  createdAt: text("created_at").notNull(),
+});
 
 // 1. Products Directory
 export const products = pgTable("products", {
   id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" })
+    .default(1),
   name: text("name").notNull(),
   category: text("category"),
   unit: text("unit").notNull().default("ədəd"),
@@ -13,6 +27,10 @@ export const products = pgTable("products", {
 // 2. Stock Entries (Warehouse entry / restocking)
 export const stockEntries = pgTable("stock_entries", {
   id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" })
+    .default(1),
   productId: integer("product_id")
     .notNull()
     .references(() => products.id, { onDelete: "cascade" }),
@@ -29,6 +47,10 @@ export const stockEntries = pgTable("stock_entries", {
 // 3. Customers Directory
 export const customers = pgTable("customers", {
   id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" })
+    .default(1),
   name: text("name").notNull(),
   phone: text("phone"),
   email: text("email"),
@@ -39,6 +61,10 @@ export const customers = pgTable("customers", {
 // 4. Sales Table
 export const sales = pgTable("sales", {
   id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" })
+    .default(1),
   customerId: integer("customer_id").references(() => customers.id, {
     onDelete: "set null",
   }),
@@ -56,6 +82,10 @@ export const sales = pgTable("sales", {
 // 5. Sale Items
 export const saleItems = pgTable("sale_items", {
   id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" })
+    .default(1),
   saleId: integer("sale_id")
     .notNull()
     .references(() => sales.id, { onDelete: "cascade" }),
@@ -70,6 +100,10 @@ export const saleItems = pgTable("sale_items", {
 // 6. Credit Payments (Customer paying back their debt partially or fully)
 export const creditPayments = pgTable("credit_payments", {
   id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" })
+    .default(1),
   saleId: integer("sale_id")
     .notNull()
     .references(() => sales.id, { onDelete: "cascade" }),
@@ -80,6 +114,10 @@ export const creditPayments = pgTable("credit_payments", {
 // 7. General Expenses
 export const expenses = pgTable("expenses", {
   id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" })
+    .default(1),
   amount: doublePrecision("amount").notNull(),
   category: text("category").notNull(), // "Maaş", "İcarə", "Kommunal", "Nəqliyyat", "Digər"
   description: text("description"),
@@ -89,6 +127,11 @@ export const expenses = pgTable("expenses", {
 // 8. Application Settings (Business settings and limits)
 export const settings = pgTable("settings", {
   id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" })
+    .default(1)
+    .unique(),
   storeName: text("store_name").notNull().default("Mətbəx Dünyası"),
   phone: text("phone").default("055-123-4567"),
   address: text("address").default("Yuxarı Göyçay"),
@@ -107,24 +150,77 @@ export const settings = pgTable("settings", {
   showPaymentDetails: integer("show_payment_details").notNull().default(1),
 });
 
+// 9. Users Table for Authentication & Authorization
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" })
+    .default(1),
+  username: text("username").notNull(),
+  password: text("password").notNull(),
+  role: text("role").notNull().default("Staff"), // "Admin" or "Staff"
+}, (table) => ({
+  usersTenantUsernameIdx: uniqueIndex("users_tenant_username_idx").on(table.tenantId, table.username)
+}));
+
+// 10. Activity Logs Table for Auditing
+export const activityLogs = pgTable("activity_logs", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" })
+    .default(1),
+  username: text("username").notNull(),
+  action: text("action").notNull(),
+  description: text("description").notNull(),
+  timestamp: text("timestamp").notNull(),
+  archived: integer("archived").notNull().default(0), // 0 = active, 1 = archived
+});
+
 // Relations Definitions for Drizzle ORM queries
-export const productsRelations = relations(products, ({ many }) => ({
+export const tenantsRelations = relations(tenants, ({ many }) => ({
+  products: many(products),
+  stockEntries: many(stockEntries),
+  customers: many(customers),
+  sales: many(sales),
+  expenses: many(expenses),
+  users: many(users),
+}));
+
+export const productsRelations = relations(products, ({ one, many }) => ({
+  tenant: one(tenants, {
+    fields: [products.tenantId],
+    references: [tenants.id],
+  }),
   stockEntries: many(stockEntries),
   saleItems: many(saleItems),
 }));
 
 export const stockEntriesRelations = relations(stockEntries, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [stockEntries.tenantId],
+    references: [tenants.id],
+  }),
   product: one(products, {
     fields: [stockEntries.productId],
     references: [products.id],
   }),
 }));
 
-export const customersRelations = relations(customers, ({ many }) => ({
+export const customersRelations = relations(customers, ({ one, many }) => ({
+  tenant: one(tenants, {
+    fields: [customers.tenantId],
+    references: [tenants.id],
+  }),
   sales: many(sales),
 }));
 
 export const salesRelations = relations(sales, ({ one, many }) => ({
+  tenant: one(tenants, {
+    fields: [sales.tenantId],
+    references: [tenants.id],
+  }),
   customer: one(customers, {
     fields: [sales.customerId],
     references: [customers.id],
@@ -134,6 +230,10 @@ export const salesRelations = relations(sales, ({ one, many }) => ({
 }));
 
 export const saleItemsRelations = relations(saleItems, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [saleItems.tenantId],
+    references: [tenants.id],
+  }),
   sale: one(sales, {
     fields: [saleItems.saleId],
     references: [sales.id],
@@ -145,27 +245,40 @@ export const saleItemsRelations = relations(saleItems, ({ one }) => ({
 }));
 
 export const creditPaymentsRelations = relations(creditPayments, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [creditPayments.tenantId],
+    references: [tenants.id],
+  }),
   sale: one(sales, {
     fields: [creditPayments.saleId],
     references: [sales.id],
   }),
 }));
 
-// 9. Users Table for Authentication & Authorization
-export const users = pgTable("users", {
-  id: serial("id").primaryKey(),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
-  role: text("role").notNull().default("Staff"), // "Admin" or "Staff"
-});
+export const expensesRelations = relations(expenses, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [expenses.tenantId],
+    references: [tenants.id],
+  }),
+}));
 
-// 10. Activity Logs Table for Auditing
-export const activityLogs = pgTable("activity_logs", {
-  id: serial("id").primaryKey(),
-  username: text("username").notNull(),
-  action: text("action").notNull(),
-  description: text("description").notNull(),
-  timestamp: text("timestamp").notNull(),
-  archived: integer("archived").notNull().default(0), // 0 = active, 1 = archived
-});
+export const settingsRelations = relations(settings, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [settings.tenantId],
+    references: [tenants.id],
+  }),
+}));
 
+export const usersRelations = relations(users, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [users.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const activityLogsRelations = relations(activityLogs, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [activityLogs.tenantId],
+    references: [tenants.id],
+  }),
+}));

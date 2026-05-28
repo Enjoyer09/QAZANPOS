@@ -6,12 +6,10 @@ const connectionString = process.env.DATABASE_URL || "postgres://postgres:postgr
 const client = postgres(connectionString);
 const db = drizzle(client, { schema });
 
-
-
 async function seed() {
   console.log("Seeding database...");
 
-  // 1. Clear existing data
+  // 1. Clear existing data in correct dependency order
   await db.delete(schema.creditPayments);
   await db.delete(schema.saleItems);
   await db.delete(schema.sales);
@@ -19,39 +17,72 @@ async function seed() {
   await db.delete(schema.products);
   await db.delete(schema.customers);
   await db.delete(schema.expenses);
+  await db.delete(schema.settings);
+  await db.delete(schema.activityLogs);
   await db.delete(schema.users);
+  await db.delete(schema.tenants);
 
   console.log("Cleared existing data.");
 
-  // 2. Insert Products
+  // 2. Insert Tenants
+  const insertedTenants = await db
+    .insert(schema.tenants)
+    .values([
+      {
+        id: 1,
+        name: "Mətbəx Dünyası",
+        slug: "demo",
+        status: "active",
+        releaseTier: "stable",
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: 2,
+        name: "Super Platform Admin",
+        slug: "super",
+        status: "active",
+        releaseTier: "stable",
+        createdAt: new Date().toISOString(),
+      },
+    ])
+    .returning();
+
+  console.log(`Inserted ${insertedTenants.length} tenants.`);
+
+  // 3. Insert Products under Tenant 1 (demo)
   const insertedProducts = await db
     .insert(schema.products)
     .values([
       {
+        tenantId: 1,
         name: "Qazan 24sm (Korkmaz)",
         category: "Qazan",
         unit: "ədəd",
         description: "Paslanmaz polad, Korkmaz premium keyfiyyət",
       },
       {
+        tenantId: 1,
         name: "Tava 28sm (Tefal)",
         category: "Tava",
         unit: "ədəd",
         description: "Tefal teflon örtüklü tava, yapışmayan",
       },
       {
+        tenantId: 1,
         name: "Çaydan 3L (Tefal)",
         category: "Mətbəx",
         unit: "ədəd",
         description: "Gümüşü rəngli paslanmaz polad çaydan",
       },
       {
+        tenantId: 1,
         name: "Şüşə Qab Dəsti 6-lı",
         category: "Qablar",
         unit: "dəst",
         description: "Paşabahçe şüşə salat qabları",
       },
       {
+        tenantId: 1,
         name: "Bıçaq Dəsti (Solingen)",
         category: "Bıçaqlar",
         unit: "dəst",
@@ -68,23 +99,26 @@ async function seed() {
   const qab = insertedProducts.find((p) => p.name.includes("Şüşə"))!;
   const bicag = insertedProducts.find((p) => p.name.includes("Bıçaq"))!;
 
-  // 3. Insert Customers
+  // 4. Insert Customers under Tenant 1 (demo)
   const insertedCustomers = await db
     .insert(schema.customers)
     .values([
       {
+        tenantId: 1,
         name: "Emin Məmmədov",
         phone: "055-123-45-67",
         address: "Bakı, Yasamal rayonu",
         notes: "Daimi müştəri, etibarlıdır",
       },
       {
+        tenantId: 1,
         name: "Aysel Əliyeva",
         phone: "070-987-65-43",
         address: "Bakı, Nərimanov metrosu yaxınlığı",
         notes: "Gecikməyə meyillidir, zənglə xatırladılmalıdır",
       },
       {
+        tenantId: 1,
         name: "Orxan Vəliyev",
         phone: "050-555-44-33",
         address: "Gəncə şəhəri, Atatürk pr.",
@@ -99,7 +133,7 @@ async function seed() {
   const aysel = insertedCustomers.find((c) => c.name.includes("Aysel"))!;
   const orxan = insertedCustomers.find((c) => c.name.includes("Orxan"))!;
 
-  // 4. Insert Stock Entries (Anbar Mədaxili)
+  // 5. Insert Stock Entries (Anbar Mədaxili) under Tenant 1 (demo)
   const dayAgo = (days: number) => {
     const d = new Date();
     d.setDate(d.getDate() - days);
@@ -108,6 +142,7 @@ async function seed() {
 
   await db.insert(schema.stockEntries).values([
     {
+      tenantId: 1,
       productId: qazan.id,
       quantity: 25,
       purchasePrice: 18.5,
@@ -118,6 +153,7 @@ async function seed() {
       paidStatus: "paid",
     },
     {
+      tenantId: 1,
       productId: tava.id,
       quantity: 35,
       purchasePrice: 12.0,
@@ -128,6 +164,7 @@ async function seed() {
       paidStatus: "paid",
     },
     {
+      tenantId: 1,
       productId: caydan.id,
       quantity: 15,
       purchasePrice: 28.0,
@@ -141,6 +178,7 @@ async function seed() {
       paidStatus: "credit",
     },
     {
+      tenantId: 1,
       productId: qab.id,
       quantity: 20,
       purchasePrice: 15.0,
@@ -151,6 +189,7 @@ async function seed() {
       paidStatus: "paid",
     },
     {
+      tenantId: 1,
       productId: bicag.id,
       quantity: 8,
       purchasePrice: 16.0,
@@ -164,11 +203,12 @@ async function seed() {
 
   console.log("Inserted stock entries.");
 
-  // 5. Insert Sales History (Satış Tarixçəsi)
+  // 6. Insert Sales History under Tenant 1 (demo)
   // Sale 1: Cash sale to Emin
   const sale1 = await db
     .insert(schema.sales)
     .values({
+      tenantId: 1,
       customerId: emin.id,
       customerName: emin.name,
       customerPhone: emin.phone,
@@ -181,6 +221,7 @@ async function seed() {
     .returning();
 
   await db.insert(schema.saleItems).values({
+    tenantId: 1,
     saleId: sale1[0].id,
     productId: qazan.id,
     quantity: 2,
@@ -192,6 +233,7 @@ async function seed() {
   const sale2 = await db
     .insert(schema.sales)
     .values({
+      tenantId: 1,
       customerId: orxan.id,
       customerName: orxan.name,
       customerPhone: orxan.phone,
@@ -205,6 +247,7 @@ async function seed() {
 
   await db.insert(schema.saleItems).values([
     {
+      tenantId: 1,
       saleId: sale2[0].id,
       productId: caydan.id,
       quantity: 1,
@@ -212,6 +255,7 @@ async function seed() {
       purchasePrice: 28.0,
     },
     {
+      tenantId: 1,
       saleId: sale2[0].id,
       productId: tava.id,
       quantity: 3,
@@ -226,6 +270,7 @@ async function seed() {
   const sale3 = await db
     .insert(schema.sales)
     .values({
+      tenantId: 1,
       customerId: aysel.id,
       customerName: aysel.name,
       customerPhone: aysel.phone,
@@ -240,6 +285,7 @@ async function seed() {
 
   await db.insert(schema.saleItems).values([
     {
+      tenantId: 1,
       saleId: sale3[0].id,
       productId: qazan.id,
       quantity: 1,
@@ -247,6 +293,7 @@ async function seed() {
       purchasePrice: 18.5,
     },
     {
+      tenantId: 1,
       saleId: sale3[0].id,
       productId: qab.id,
       quantity: 2,
@@ -261,6 +308,7 @@ async function seed() {
   const sale4 = await db
     .insert(schema.sales)
     .values({
+      tenantId: 1,
       customerId: emin.id,
       customerName: emin.name,
       customerPhone: emin.phone,
@@ -274,6 +322,7 @@ async function seed() {
     .returning();
 
   await db.insert(schema.saleItems).values({
+    tenantId: 1,
     saleId: sale4[0].id,
     productId: bicag.id,
     quantity: 2,
@@ -283,21 +332,24 @@ async function seed() {
 
   console.log("Inserted sales and sale items.");
 
-  // 6. Insert Expenses (Xərclər)
+  // 7. Insert Expenses under Tenant 1 (demo)
   await db.insert(schema.expenses).values([
     {
+      tenantId: 1,
       amount: 150.0,
       category: "İcarə",
       description: "Anbar icarə haqqı - May ayı",
       date: dayAgo(20),
     },
     {
+      tenantId: 1,
       amount: 45.2,
       category: "Kommunal",
       description: "Elektrik və su xərcləri",
       date: dayAgo(12),
     },
     {
+      tenantId: 1,
       amount: 80.0,
       category: "Nəqliyyat",
       description: "Mal gətirilməsi üçün nəqliyyat xərci",
@@ -307,21 +359,49 @@ async function seed() {
 
   console.log("Inserted expenses.");
 
-  // 7. Insert Users
-  await db.insert(schema.users).values([
+  // 8. Insert Settings for both tenants
+  await db.insert(schema.settings).values([
     {
+      tenantId: 1,
+      storeName: "Mətbəx Dünyası",
+      phone: "055-123-4567",
+      address: "Yuxarı Göyçay",
+    },
+    {
+      tenantId: 2,
+      storeName: "SaaS Control Plane",
+      phone: "010-000-0000",
+      address: "Mərkəz bulud serverləri",
+    },
+  ]);
+
+  console.log("Inserted business settings for both tenants.");
+
+  // 9. Insert Users associated with Tenant IDs
+  await db.insert(schema.users).values([
+    // Tenant 1 (demo) users
+    {
+      tenantId: 1,
       username: "admin",
       password: "admin123",
       role: "Admin",
     },
     {
+      tenantId: 1,
       username: "satici",
       password: "satici123",
       role: "Staff",
     },
+    // Tenant 2 (super admin portal) users
+    {
+      tenantId: 2,
+      username: "superadmin",
+      password: "superadmin123",
+      role: "Admin",
+    },
   ]);
 
-  console.log("Inserted default users (admin/admin123, satici/satici123).");
+  console.log("Inserted default users (demo: admin/admin123, satici/satici123; super: superadmin/superadmin123).");
   console.log("Database seeded successfully!");
 }
 

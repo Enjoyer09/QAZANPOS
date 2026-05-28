@@ -3,7 +3,59 @@ import { db } from "./db/index.js";
 import * as schema from "./db/schema.js";
 import { eq, and, lte, gte, sql, desc } from "drizzle-orm";
 
+declare global {
+  namespace Express {
+    interface Request {
+      tenantId: number;
+      tenantSlug: string;
+      tenantReleaseTier: string;
+    }
+  }
+}
+
 const router = Router();
+
+// ----------------------------------------------------
+// MIDDLEWARES
+// ----------------------------------------------------
+
+// Middleware to resolve tenant dynamically based on subdomain Host
+async function resolveTenant(req: any, res: any, next: any) {
+  const rawHost = req.headers["x-tenant-host"];
+  const host = typeof rawHost === "string" ? rawHost : (req.headers.host || "");
+  const parts = host.split(".");
+  
+  // Default tenant fallback for bare domains or localhost testing
+  let slug = "demo";
+  
+  if (parts.length > 1 && parts[0] !== "www" && parts[0] !== "localhost" && !parts[0].includes("127.0.0.1")) {
+    slug = parts[0].toLowerCase();
+  }
+
+  try {
+    const tenant = await db.query.tenants.findFirst({
+      where: eq(schema.tenants.slug, slug)
+    });
+
+    if (!tenant) {
+      return res.status(404).json({ errorType: "TENANT_NOT_FOUND", message: `Biznes tapılmadı: '${slug}'` });
+    }
+
+    if (tenant.status === "suspended") {
+      return res.status(403).json({ message: "Bu biznes hesabı müvəqqəti olaraq dayandırılıb." });
+    }
+
+    req.tenantId = tenant.id;
+    req.tenantSlug = tenant.slug;
+    req.tenantReleaseTier = tenant.releaseTier;
+    next();
+  } catch (error) {
+    res.status(500).json({ message: "Biznes yoxlanılarkən daxili xəta baş verdi" });
+  }
+}
+
+// Mount the resolver globally for all API endpoints under this router
+router.use(resolveTenant);
 
 // Middleware to verify user role is Admin
 function requireAdmin(req: any, res: any, next: any) {
@@ -14,20 +66,37 @@ function requireAdmin(req: any, res: any, next: any) {
   next();
 }
 
-// Helper to log user activities
+// Middleware to verify active tenant is the Super Admin control plane
+function requireSuperAdmin(req: any, res: any, next: any) {
+  const role = req.headers["x-user-role"];
+  if (req.tenantId !== 2 || role !== "Admin") {
+    return res.status(403).json({ message: "Bu əməliyyat üçün yalnız Platforma Administratoru səlahiyyəti tələb olunur." });
+  }
+  next();
+}
+
+// Helper to log user activities with tenant scope
 async function logActivity(req: any, action: string, description: string) {
   try {
     const username = req.headers["x-user-username"] || (req.headers["x-user-role"] === "Admin" ? "admin" : "satici") || "Sistem";
     await db.insert(schema.activityLogs).values({
+      tenantId: req.tenantId,
       username,
       action,
       description,
       timestamp: new Date().toISOString(),
-      archived: 0,
     });
   } catch (error) {
     console.error("Failed to log activity:", error);
   }
+}
+
+// Helper to get date boundaries
+function getMonthBoundaries() {
+  const now = new Date();
+  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
+  return { firstDay, lastDay };
 }
 
 // ----------------------------------------------------
@@ -44,7 +113,8 @@ router.post("/auth/login", async (req, res) => {
     const user = await db.query.users.findFirst({
       where: and(
         eq(schema.users.username, username.trim().toLowerCase()),
-        eq(schema.users.password, password)
+        eq(schema.users.password, password),
+        eq(schema.users.tenantId, req.tenantId)
       )
     });
 
@@ -52,23 +122,23 @@ router.post("/auth/login", async (req, res) => {
       return res.status(401).json({ message: "İstifadəçi adı və ya şifrə yanlışdır" });
     }
 
+    // Fetch tenant name
+    const tenant = await db.query.tenants.findFirst({
+      where: eq(schema.tenants.id, req.tenantId)
+    });
+
     res.json({
       id: user.id,
       username: user.username,
-      role: user.role
+      role: user.role,
+      tenantId: req.tenantId,
+      tenantName: tenant?.name || "Qazan POS",
+      tenantSlug: req.tenantSlug
     });
   } catch (error) {
     res.status(500).json({ message: "Giriş zamanı xəta baş verdi" });
   }
 });
-
-// Helper to get date boundaries
-function getMonthBoundaries() {
-  const now = new Date();
-  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
-  return { firstDay, lastDay };
-}
 
 // ----------------------------------------------------
 // 1. PRODUCTS ENDPOINTS
@@ -77,7 +147,10 @@ function getMonthBoundaries() {
 // List all products
 router.get("/products", async (req, res) => {
   try {
-    const list = await db.select().from(schema.products);
+    const list = await db
+      .select()
+      .from(schema.products)
+      .where(eq(schema.products.tenantId, req.tenantId));
     res.json(list);
   } catch (error) {
     res.status(500).json({ message: "Məhsulları gətirərkən xəta baş verdi" });
@@ -93,6 +166,7 @@ router.post("/products", requireAdmin, async (req, res) => {
     const newProduct = await db
       .insert(schema.products)
       .values({
+        tenantId: req.tenantId,
         name,
         category: category || null,
         unit: unit || "ədəd",
@@ -122,7 +196,7 @@ router.put("/products/:id", requireAdmin, async (req, res) => {
         unit: unit || "ədəd",
         description: description || null,
       })
-      .where(eq(schema.products.id, id))
+      .where(and(eq(schema.products.id, id), eq(schema.products.tenantId, req.tenantId)))
       .returning();
 
     if (updated.length === 0)
@@ -142,7 +216,7 @@ router.delete("/products/:id", requireAdmin, async (req, res) => {
     const id = parseInt(req.params.id);
     const deleted = await db
       .delete(schema.products)
-      .where(eq(schema.products.id, id))
+      .where(and(eq(schema.products.id, id), eq(schema.products.tenantId, req.tenantId)))
       .returning();
 
     if (deleted.length === 0)
@@ -164,11 +238,11 @@ router.delete("/products/:id", requireAdmin, async (req, res) => {
 router.get("/stock/entries", async (req, res) => {
   try {
     const entries = await db.query.stockEntries.findMany({
+      where: eq(schema.stockEntries.tenantId, req.tenantId),
       with: { product: true },
       orderBy: [desc(schema.stockEntries.entryDate)],
     });
 
-    // Format output for client mapping
     const result = entries.map((entry) => ({
       id: entry.id,
       productId: entry.productId,
@@ -206,6 +280,7 @@ router.post("/stock/entries", requireAdmin, async (req, res) => {
     const newEntry = await db
       .insert(schema.stockEntries)
       .values({
+        tenantId: req.tenantId,
         productId,
         quantity: parseFloat(quantity),
         purchasePrice: parseFloat(purchasePrice),
@@ -218,7 +293,7 @@ router.post("/stock/entries", requireAdmin, async (req, res) => {
       })
       .returning();
 
-    const productList = await db.select().from(schema.products).where(eq(schema.products.id, productId)).limit(1);
+    const productList = await db.select().from(schema.products).where(and(eq(schema.products.id, productId), eq(schema.products.tenantId, req.tenantId))).limit(1);
     const productName = productList[0] ? productList[0].name : `ID: ${productId}`;
     const unit = productList[0] ? productList[0].unit : "ədəd";
     await logActivity(
@@ -236,7 +311,7 @@ router.post("/stock/entries", requireAdmin, async (req, res) => {
 // Fetch stock levels (current quantities, latest purchase prices, total value)
 router.get("/stock/levels", async (req, res) => {
   try {
-    const allProducts = await db.select().from(schema.products);
+    const allProducts = await db.select().from(schema.products).where(eq(schema.products.tenantId, req.tenantId));
     const stockLevels = [];
 
     for (const product of allProducts) {
@@ -244,14 +319,14 @@ router.get("/stock/levels", async (req, res) => {
       const restockedResult = await db
         .select({ total: sql`SUM(quantity)` })
         .from(schema.stockEntries)
-        .where(eq(schema.stockEntries.productId, product.id));
+        .where(and(eq(schema.stockEntries.productId, product.id), eq(schema.stockEntries.tenantId, req.tenantId)));
       const totalRestocked = parseFloat((restockedResult[0]?.total as string) || "0");
 
       // 2. Calculate total sold
       const soldResult = await db
         .select({ total: sql`SUM(quantity)` })
         .from(schema.saleItems)
-        .where(eq(schema.saleItems.productId, product.id));
+        .where(and(eq(schema.saleItems.productId, product.id), eq(schema.saleItems.tenantId, req.tenantId)));
       const totalSold = parseFloat((soldResult[0]?.total as string) || "0");
 
       const currentQuantity = totalRestocked - totalSold;
@@ -260,7 +335,7 @@ router.get("/stock/levels", async (req, res) => {
       const latestEntry = await db
         .select({ price: schema.stockEntries.purchasePrice })
         .from(schema.stockEntries)
-        .where(eq(schema.stockEntries.productId, product.id))
+        .where(and(eq(schema.stockEntries.productId, product.id), eq(schema.stockEntries.tenantId, req.tenantId)))
         .orderBy(desc(schema.stockEntries.entryDate))
         .limit(1);
       const lastPurchasePrice = latestEntry[0]?.price || 0;
@@ -286,7 +361,7 @@ router.get("/stock/levels", async (req, res) => {
 router.get("/stock/my-debts", requireAdmin, async (req, res) => {
   try {
     const debts = await db.query.stockEntries.findMany({
-      where: eq(schema.stockEntries.paidStatus, "credit"),
+      where: and(eq(schema.stockEntries.paidStatus, "credit"), eq(schema.stockEntries.tenantId, req.tenantId)),
       with: { product: true },
       orderBy: [desc(schema.stockEntries.entryDate)],
     });
@@ -311,54 +386,50 @@ router.get("/stock/my-debts", requireAdmin, async (req, res) => {
 
 // Pay supplier debt
 router.patch("/stock/entries/:id/pay", requireAdmin, async (req, res) => {
-
   try {
     const id = parseInt(req.params.id);
     const { paymentType, paymentFrom, notes } = req.body;
 
     const entry = await db.query.stockEntries.findFirst({
-      where: eq(schema.stockEntries.id, id)
+      where: and(eq(schema.stockEntries.id, id), eq(schema.stockEntries.tenantId, req.tenantId))
     });
 
-    if (!entry) return res.status(404).json({ message: "Mədaxil tapılmadı" });
+    if (!entry) {
+      return res.status(404).json({ message: "Mədaxil tapılmadı" });
+    }
 
-    const existingNotes = entry.notes ? `${entry.notes} | ` : "";
-    const updatedNotes = `${existingNotes}Ödənildi: ${paymentFrom || "Təyin edilməyib"} (Qeyd: ${notes || "yoxdur"})`;
-
-    const updated = await db
+    await db
       .update(schema.stockEntries)
-      .set({ 
-        paidStatus: "paid",
-        paymentType: paymentType || "Nəğd",
-        notes: updatedNotes
-      })
-      .where(eq(schema.stockEntries.id, id))
-      .returning();
+      .set({ paidStatus: "paid" })
+      .where(eq(schema.stockEntries.id, id));
 
-    const productList = await db.select().from(schema.products).where(eq(schema.products.id, entry.productId)).limit(1);
+    const productList = await db.select().from(schema.products).where(and(eq(schema.products.id, entry.productId), eq(schema.products.tenantId, req.tenantId))).limit(1);
     const productName = productList[0] ? productList[0].name : `ID: ${entry.productId}`;
-    const unit = productList[0] ? productList[0].unit : "ədəd";
-    const totalAmount = entry.quantity * entry.purchasePrice;
+    const debtAmount = entry.quantity * entry.purchasePrice;
+
     await logActivity(
       req,
       "PAY_SUPPLIER_DEBT",
-      `Tədarükçüyə olan borcu ödədi: '${productName}' məhsulu üzrə ${entry.quantity} ${unit} üçün ${totalAmount.toFixed(2)} ₼ ödəniş edildi (Tədarükçü: ${entry.supplier || "Yoxdur"}, Ödəniş üsulu: ${paymentType || "Nəğd"})`
+      `Tədarükçüyə olan borcu ödədi: ${debtAmount.toFixed(2)} ₼ (Məhsul: '${productName}', Tədarükçü: ${entry.supplier || "Yoxdur"}, Kassadan: ${paymentFrom || "Əsas"})`
     );
 
-    res.json({ message: "Borc ödənildi" });
+    res.json({ message: "Borc uğurla ödənildi" });
   } catch (error) {
     res.status(500).json({ message: "Borc ödənilərkən xəta baş verdi" });
   }
 });
 
 // ----------------------------------------------------
-// 3. CUSTOMER ENDPOINTS
+// 3. CUSTOMERS ENDPOINTS
 // ----------------------------------------------------
 
 // List all customers
 router.get("/customers", async (req, res) => {
   try {
-    const list = await db.select().from(schema.customers);
+    const list = await db
+      .select()
+      .from(schema.customers)
+      .where(eq(schema.customers.tenantId, req.tenantId));
     res.json(list);
   } catch (error) {
     res.status(500).json({ message: "Müştəriləri gətirərkən xəta baş verdi" });
@@ -369,11 +440,12 @@ router.get("/customers", async (req, res) => {
 router.post("/customers", async (req, res) => {
   try {
     const { name, phone, email, address, notes } = req.body;
-    if (!name) return res.status(400).json({ message: "Ad tələb olunur" });
+    if (!name) return res.status(400).json({ message: "Müştəri adı tələb olunur" });
 
     const newCustomer = await db
       .insert(schema.customers)
       .values({
+        tenantId: req.tenantId,
         name,
         phone: phone || null,
         email: email || null,
@@ -382,7 +454,7 @@ router.post("/customers", async (req, res) => {
       })
       .returning();
 
-    await logActivity(req, "CREATE_CUSTOMER", `Yeni müştəri əlavə etdi: '${name}' (Telefon: ${phone || "yoxdur"})`);
+    await logActivity(req, "CREATE_CUSTOMER", `Yeni müştəri profili yaratdı: '${name}' (Tel: ${phone || "yoxdur"})`);
 
     res.json(newCustomer[0]);
   } catch (error) {
@@ -405,13 +477,13 @@ router.put("/customers/:id", async (req, res) => {
         address: address || null,
         notes: notes || null,
       })
-      .where(eq(schema.customers.id, id))
+      .where(and(eq(schema.customers.id, id), eq(schema.customers.tenantId, req.tenantId)))
       .returning();
 
     if (updated.length === 0)
       return res.status(404).json({ message: "Müştəri tapılmadı" });
 
-    await logActivity(req, "UPDATE_CUSTOMER", `'${name}' (ID: ${id}) müştərisinin məlumatlarını yenilədi`);
+    await logActivity(req, "UPDATE_CUSTOMER", `'${name}' (ID: ${id}) müştərisinin əlaqə məlumatlarını yenilədi`);
 
     res.json(updated[0]);
   } catch (error) {
@@ -425,13 +497,13 @@ router.delete("/customers/:id", requireAdmin, async (req, res) => {
     const id = parseInt(req.params.id);
     const deleted = await db
       .delete(schema.customers)
-      .where(eq(schema.customers.id, id))
+      .where(and(eq(schema.customers.id, id), eq(schema.customers.tenantId, req.tenantId)))
       .returning();
 
     if (deleted.length === 0)
       return res.status(404).json({ message: "Müştəri tapılmadı" });
 
-    await logActivity(req, "DELETE_CUSTOMER", `'${deleted[0].name}' (ID: ${id}) müştərisini sistemdən sildi`);
+    await logActivity(req, "DELETE_CUSTOMER", `'${deleted[0].name}' (ID: ${id}) müştəri profilini sistemdən sildi`);
 
     res.json({ message: "Müştəri silindi" });
   } catch (error) {
@@ -439,294 +511,172 @@ router.delete("/customers/:id", requireAdmin, async (req, res) => {
   }
 });
 
-// Fetch customer's sales
+// Get customer sales and overall debts summary
 router.get("/customers/:id/sales", async (req, res) => {
   try {
     const customerId = parseInt(req.params.id);
     const customerSales = await db.query.sales.findMany({
-      where: eq(schema.sales.customerId, customerId),
+      where: and(eq(schema.sales.customerId, customerId), eq(schema.sales.tenantId, req.tenantId)),
+      with: { items: { with: { product: true } }, payments: true },
       orderBy: [desc(schema.sales.saleDate)],
     });
+
     res.json(customerSales);
   } catch (error) {
-    res.status(500).json({ message: "Müştərinin satış tarixçəsini gətirərkən xəta baş verdi" });
+    res.status(500).json({ message: "Müştəri satışlarını gətirərkən xəta baş verdi" });
   }
 });
 
 // ----------------------------------------------------
-// 4. SALES & POS ENDPOINTS
+// 4. SALES ENDPOINTS
 // ----------------------------------------------------
 
-// List all sales (supports date range filters)
+// List sales history
 router.get("/sales", async (req, res) => {
   try {
-    const { from, to } = req.query;
-    let queryFilter = undefined;
-
-    if (from && to) {
-      queryFilter = and(
-        gte(schema.sales.saleDate, `${from}T00:00:00.000Z`),
-        lte(schema.sales.saleDate, `${to}T23:59:59.999Z`)
-      );
-    } else if (from) {
-      queryFilter = gte(schema.sales.saleDate, `${from}T00:00:00.000Z`);
-    } else if (to) {
-      queryFilter = lte(schema.sales.saleDate, `${to}T23:59:59.999Z`);
-    }
-
     const list = await db.query.sales.findMany({
-      where: queryFilter,
+      where: eq(schema.sales.tenantId, req.tenantId),
+      with: { payments: true },
       orderBy: [desc(schema.sales.saleDate)],
     });
-
     res.json(list);
   } catch (error) {
     res.status(500).json({ message: "Satış tarixçəsini gətirərkən xəta baş verdi" });
   }
 });
 
-// Create sale (POS checkout)
+// Process a POS sale / checkout
 router.post("/sales", async (req, res) => {
   try {
-    const { 
-      customerId, 
-      customerName, 
-      customerPhone, 
-      customerEmail,
-      customerAddress,
-      paymentType, 
-      creditDueDate, 
-      notes, 
-      items 
-    } = req.body;
+    const { customerId, paymentType, creditDueDate, notes, items, totalAmount, totalCost, paidAmount } = req.body;
 
-    if (!items || !Array.isArray(items) || items.length === 0 || !paymentType) {
-      return res.status(400).json({ message: "Səbət boşdur və ya ödəniş növü seçilməyib" });
+    if (!items || items.length === 0 || !paymentType) {
+      return res.status(400).json({ message: "Çek məlumatları boş ola bilməz" });
     }
 
     const isCredit = paymentType === "Nisyə";
     if (isCredit && !creditDueDate) {
-      return res.status(400).json({ message: "Nisyə üçün son tarix daxil edilməlidir" });
+      return res.status(400).json({ message: "Nisyə satış üçün ödəniş tarixi mütləqdir" });
     }
 
-    let finalCustomerId = customerId;
-    
-    // Dynamically insert a new persistent customer if customerId is null but customerName is provided
-    if (!customerId && customerName && customerName.trim()) {
-      const trimmedName = customerName.trim();
-      
-      // Prevent duplicates by checking if a customer with the same name exists
+    let customerName = "Anonim Müştəri";
+    let customerPhone = "";
+    if (customerId) {
       const existingCust = await db.query.customers.findFirst({
-        where: eq(schema.customers.name, trimmedName)
+        where: and(eq(schema.customers.id, customerId), eq(schema.customers.tenantId, req.tenantId))
       });
-
       if (existingCust) {
-        finalCustomerId = existingCust.id;
-      } else {
-        const newCust = await db
-          .insert(schema.customers)
-          .values({
-            name: trimmedName,
-            phone: customerPhone || null,
-            email: customerEmail || null,
-            address: customerAddress || null,
-          })
-          .returning();
-        finalCustomerId = newCust[0].id;
+        customerName = existingCust.name;
+        customerPhone = existingCust.phone || "";
       }
     }
 
-    let totalAmount = 0;
-    let totalCost = 0;
-    const validatedItems = [];
-
-    // Verify stock and fetch snapshot cost prices (purchasePrice)
-    for (const item of items) {
-      const { productId, quantity, salePrice } = item;
-
-      // Calculate stock level dynamically
-      const restockedResult = await db
-        .select({ total: sql`SUM(quantity)` })
-        .from(schema.stockEntries)
-        .where(eq(schema.stockEntries.productId, productId));
-      const totalRestocked = parseFloat((restockedResult[0]?.total as string) || "0");
-
-      const soldResult = await db
-        .select({ total: sql`SUM(quantity)` })
-        .from(schema.saleItems)
-        .where(eq(schema.saleItems.productId, productId));
-      const totalSold = parseFloat((soldResult[0]?.total as string) || "0");
-
-      const currentQuantity = totalRestocked - totalSold;
-
-      if (currentQuantity < parseFloat(quantity)) {
-        const prod = await db.select().from(schema.products).where(eq(schema.products.id, productId));
-        return res.status(400).json({
-          message: `Yetərsiz anbar balansı: ${prod[0]?.name || "Məhsul"} (Qalıq: ${currentQuantity})`,
-        });
-      }
-
-      // Get latest purchase price
-      const latestEntry = await db
-        .select({ price: schema.stockEntries.purchasePrice })
-        .from(schema.stockEntries)
-        .where(eq(schema.stockEntries.productId, productId))
-        .orderBy(desc(schema.stockEntries.entryDate))
-        .limit(1);
-      const purchasePrice = latestEntry[0]?.price || 0;
-
-      const qty = parseFloat(quantity);
-      const sprice = parseFloat(salePrice);
-
-      totalAmount += qty * sprice;
-      totalCost += qty * purchasePrice;
-
-      validatedItems.push({
-        productId,
-        quantity: qty,
-        salePrice: sprice,
-        purchasePrice,
-      });
-    }
-
-    // Insert Sale header
+    // Insert sale
     const newSale = await db
       .insert(schema.sales)
       .values({
-        customerId: finalCustomerId || null,
-        customerName: customerName || null,
-        customerPhone: customerPhone || null,
+        tenantId: req.tenantId,
+        customerId: customerId || null,
+        customerName,
+        customerPhone,
         paymentType,
         creditDueDate: isCredit ? creditDueDate : null,
         notes: notes || null,
         saleDate: new Date().toISOString(),
-        totalAmount,
-        totalCost,
+        totalAmount: parseFloat(totalAmount),
+        totalCost: parseFloat(totalCost),
         paymentStatus: isCredit ? "credit" : "paid",
       })
       .returning();
 
     const saleId = newSale[0].id;
 
-    // Insert Sale items
-    for (const item of validatedItems) {
+    // Insert items
+    for (const item of items) {
       await db.insert(schema.saleItems).values({
+        tenantId: req.tenantId,
         saleId,
         productId: item.productId,
-        quantity: item.quantity,
-        salePrice: item.salePrice,
-        purchasePrice: item.purchasePrice,
+        quantity: parseFloat(item.quantity),
+        salePrice: parseFloat(item.salePrice),
+        purchasePrice: parseFloat(item.purchasePrice || "0"),
       });
     }
 
-    const formattedId = `#${saleId.toString().padStart(5, "0")}`;
-    const custLabel = customerName ? `'${customerName}'` : "Anonim Müştəri";
+    // If partial initial payment was made on credit
+    if (isCredit && paidAmount && parseFloat(paidAmount) > 0) {
+      await db.insert(schema.creditPayments).values({
+        tenantId: req.tenantId,
+        saleId,
+        paymentDate: new Date().toISOString(),
+        amount: parseFloat(paidAmount),
+      });
+    }
+
     await logActivity(
       req,
-      "CREATE_SALE",
-      `Satış etdi (Qaimə №${formattedId}): ${totalAmount.toFixed(2)} ₼ məbləğində, Müştəri: ${custLabel}, Ödəniş üsulu: ${paymentType}`
+      "CHECKOUT_SALE",
+      `POS satışı həyata keçirdi: Çek № ${saleId} (Məbləğ: ${totalAmount} ₼, Müştəri: ${customerName}, Ödəniş: ${paymentType})`
     );
 
-    res.json({ id: saleId, message: "Satış tamamlandı" });
+    res.json(newSale[0]);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Satış qeydə alınarkən xəta baş verdi" });
+    res.status(500).json({ message: "Satış tamamlanarkən xəta baş verdi" });
   }
 });
 
-// Get specific sale details (invoice)
+// Get invoice by ID
 router.get("/sales/:id", async (req, res) => {
   try {
-    const saleId = parseInt(req.params.id);
-
+    const id = parseInt(req.params.id);
     const sale = await db.query.sales.findFirst({
-      where: eq(schema.sales.id, saleId),
-      with: {
-        items: {
-          with: { product: true },
-        },
-        payments: true,
-      },
+      where: and(eq(schema.sales.id, id), eq(schema.sales.tenantId, req.tenantId)),
+      with: { items: { with: { product: true } }, payments: true },
     });
 
-    if (!sale) return res.status(404).json({ message: "Satış tapılmadı" });
-
-    // Calculate remaining debt
-    const totalPaid = sale.payments.reduce((sum, p) => sum + p.amount, 0);
-    const remainingDebt = sale.paymentStatus === "credit" ? sale.totalAmount - totalPaid : 0;
-
-    const result = {
-      id: sale.id,
-      customerId: sale.customerId,
-      customerName: sale.customerName,
-      customerPhone: sale.customerPhone,
-      paymentType: sale.paymentType,
-      creditDueDate: sale.creditDueDate,
-      notes: sale.notes,
-      saleDate: sale.saleDate,
-      totalAmount: sale.totalAmount,
-      totalCost: sale.totalCost,
-      paymentStatus: sale.paymentStatus,
-      totalPaid,
-      remainingDebt,
-      items: sale.items.map((item) => ({
-        id: item.id,
-        productId: item.productId,
-        productName: item.product.name,
-        unit: item.product.unit,
-        quantity: item.quantity,
-        salePrice: item.salePrice,
-        purchasePrice: item.purchasePrice,
-      })),
-      payments: sale.payments,
-    };
-
-    res.json(result);
+    if (!sale) return res.status(404).json({ message: "Çek tapılmadı" });
+    res.json(sale);
   } catch (error) {
-    res.status(500).json({ message: "Satış məlumatlarını gətirərkən xəta baş verdi" });
+    res.status(500).json({ message: "Çek məlumatlarını gətirərkən xəta baş verdi" });
   }
 });
 
-// Pay customer credit fully
+// Pay customer credit debt fully
 router.patch("/sales/:id/pay-credit", async (req, res) => {
   try {
-    const saleId = parseInt(req.params.id);
-
+    const id = parseInt(req.params.id);
     const sale = await db.query.sales.findFirst({
-      where: eq(schema.sales.id, saleId),
+      where: and(eq(schema.sales.id, id), eq(schema.sales.tenantId, req.tenantId)),
       with: { payments: true },
     });
 
     if (!sale) return res.status(404).json({ message: "Satış tapılmadı" });
-    if (sale.paymentStatus === "paid") {
-      return res.status(400).json({ message: "Bu satışın borcu artıq tam ödənilib" });
+
+    // Calculate total already paid
+    const alreadyPaid = sale.payments.reduce((acc, p) => acc + p.amount, 0);
+    const remaining = sale.totalAmount - alreadyPaid;
+
+    if (remaining > 0) {
+      await db.insert(schema.creditPayments).values({
+        tenantId: req.tenantId,
+        saleId: id,
+        paymentDate: new Date().toISOString(),
+        amount: remaining,
+      });
     }
 
-    const totalPaid = sale.payments.reduce((sum, p) => sum + p.amount, 0);
-    const amountToPay = sale.totalAmount - totalPaid;
-
-    // 1. Record credit payment
-    await db.insert(schema.creditPayments).values({
-      saleId,
-      paymentDate: new Date().toISOString(),
-      amount: amountToPay,
-    });
-
-    // 2. Mark sale as paid
     await db
       .update(schema.sales)
       .set({ paymentStatus: "paid" })
-      .where(eq(schema.sales.id, saleId));
+      .where(eq(schema.sales.id, id));
 
-    const formattedId = `#${saleId.toString().padStart(5, "0")}`;
-    const custLabel = sale.customerName || "Anonim Müştəri";
     await logActivity(
       req,
-      "PAY_CUSTOMER_CREDIT",
-      `Müştəri borcu tam ödənildi: ${custLabel} tərəfindən Qaimə №${formattedId} üzrə olan ${amountToPay.toFixed(2)} ₼ borc tam bağlandı`
+      "COLLECT_CUSTOMER_DEBT",
+      `Müştəri nisyə borcunun hamısını topladı: ${remaining.toFixed(2)} ₼ (Çek № ${id}, Müştəri: ${sale.customerName || "Anonim"})`
     );
 
-    res.json({ message: "Borc tam ödənildi" });
+    res.json({ message: "Nisyə borc tam olaraq ödənildi" });
   } catch (error) {
     res.status(500).json({ message: "Borc ödənilərkən xəta baş verdi" });
   }
@@ -735,79 +685,70 @@ router.patch("/sales/:id/pay-credit", async (req, res) => {
 // Add partial credit payment
 router.patch("/sales/:id/add-payment", async (req, res) => {
   try {
-    const saleId = parseInt(req.params.id);
+    const id = parseInt(req.params.id);
     const { amount } = req.body;
+    const paymentAmount = parseFloat(amount);
 
-    if (!amount || parseFloat(amount) <= 0) {
-      return res.status(400).json({ message: "Düzgün ödəniş məbləği daxil edin" });
+    if (!paymentAmount || paymentAmount <= 0) {
+      return res.status(400).json({ message: "Düzgün ödəniş məbləği daxil edilməlidir" });
     }
 
     const sale = await db.query.sales.findFirst({
-      where: eq(schema.sales.id, saleId),
+      where: and(eq(schema.sales.id, id), eq(schema.sales.tenantId, req.tenantId)),
       with: { payments: true },
     });
 
     if (!sale) return res.status(404).json({ message: "Satış tapılmadı" });
-    if (sale.paymentStatus === "paid") {
-      return res.status(400).json({ message: "Bu satışın borcu artıq tam ödənilib" });
-    }
 
-    const totalPaid = sale.payments.reduce((sum, p) => sum + p.amount, 0);
-    const amountToPay = parseFloat(amount);
-    const remaining = sale.totalAmount - totalPaid;
-
-    if (amountToPay > remaining + 0.01) {
-      return res.status(400).json({
-        message: `Məbləğ qalıq borcdan çox ola bilməz (Qalıq borc: ${remaining.toFixed(2)} ₼)`,
-      });
-    }
-
-    // 1. Record payment
+    // Insert payment
     await db.insert(schema.creditPayments).values({
-      saleId,
+      tenantId: req.tenantId,
+      saleId: id,
       paymentDate: new Date().toISOString(),
-      amount: amountToPay,
+      amount: paymentAmount,
     });
 
-    // 2. Check if credit is fully paid now
-    const newTotalPaid = totalPaid + amountToPay;
-    const isFinished = Math.abs(sale.totalAmount - newTotalPaid) < 0.01 || newTotalPaid >= sale.totalAmount;
-    if (isFinished) {
+    // Check if fully paid now
+    const updatedPayments = await db.query.creditPayments.findMany({
+      where: and(eq(schema.creditPayments.saleId, id), eq(schema.creditPayments.tenantId, req.tenantId))
+    });
+    const totalPaid = updatedPayments.reduce((acc, p) => acc + p.amount, 0);
+
+    if (totalPaid >= sale.totalAmount) {
       await db
         .update(schema.sales)
         .set({ paymentStatus: "paid" })
-        .where(eq(schema.sales.id, saleId));
+        .where(eq(schema.sales.id, id));
     }
 
-    const formattedId = `#${saleId.toString().padStart(5, "0")}`;
-    const custLabel = sale.customerName || "Anonim Müştəri";
     await logActivity(
       req,
-      "ADD_CUSTOMER_PAYMENT",
-      `Müştəri borc ödənişi qəbul edildi: ${custLabel} tərəfindən Qaimə №${formattedId} üçün ${amountToPay.toFixed(2)} ₼ məbləğində ödəniş alındı (${isFinished ? "Borc tam bağlandı" : `Qalıq borc: ${(sale.totalAmount - newTotalPaid).toFixed(2)} ₼`})`
+      "COLLECT_CUSTOMER_DEBT_PARTIAL",
+      `Müştəri nisyə borcundan qismən ödəniş aldı: ${paymentAmount.toFixed(2)} ₼ (Çek № ${id}, Müştəri: ${sale.customerName || "Anonim"})`
     );
 
-    res.json({ message: "Ödəniş qəbul edildi" });
+    res.json({ message: "Qismən ödəniş uğurla qeydə alındı" });
   } catch (error) {
-    res.status(500).json({ message: "Ödəniş qeyd edilərkən xəta baş verdi" });
+    res.status(500).json({ message: "Ödəniş qeydə alınarkən xəta baş verdi" });
   }
 });
 
 // ----------------------------------------------------
-// 5. CREDIT/DEBT ALERTS
+// 5. CREDIT MONITORING ENDPOINTS
 // ----------------------------------------------------
 
-// Fetch overdue customer credits
+// List overdue customer credits
 router.get("/credits/overdue", async (req, res) => {
   try {
     const today = new Date().toISOString().split("T")[0];
-
     const overdueSales = await db.query.sales.findMany({
       where: and(
         eq(schema.sales.paymentStatus, "credit"),
-        lte(schema.sales.creditDueDate, today)
+        lte(schema.sales.creditDueDate, today),
+        eq(schema.sales.tenantId, req.tenantId)
       ),
       with: { payments: true },
+      orderBy: [desc(schema.sales.creditDueDate)],
     });
 
     const result = overdueSales.map((sale) => {
@@ -817,9 +758,10 @@ router.get("/credits/overdue", async (req, res) => {
         customerId: sale.customerId,
         customerName: sale.customerName,
         customerPhone: sale.customerPhone,
-        saleDate: sale.saleDate,
+        totalAmount: sale.totalAmount,
+        remainingDebt: sale.totalAmount - paid,
         creditDueDate: sale.creditDueDate,
-        totalAmount: sale.totalAmount - paid,
+        saleDate: sale.saleDate,
       };
     });
 
@@ -829,17 +771,18 @@ router.get("/credits/overdue", async (req, res) => {
   }
 });
 
-// Fetch pending customer credits (active debts not overdue yet)
+// List pending (non-overdue) customer credits
 router.get("/credits/pending", async (req, res) => {
   try {
     const today = new Date().toISOString().split("T")[0];
-
     const pendingSales = await db.query.sales.findMany({
       where: and(
         eq(schema.sales.paymentStatus, "credit"),
-        gte(schema.sales.creditDueDate, today)
+        gte(schema.sales.creditDueDate, today),
+        eq(schema.sales.tenantId, req.tenantId)
       ),
       with: { payments: true },
+      orderBy: [desc(schema.sales.creditDueDate)],
     });
 
     const result = pendingSales.map((sale) => {
@@ -849,9 +792,10 @@ router.get("/credits/pending", async (req, res) => {
         customerId: sale.customerId,
         customerName: sale.customerName,
         customerPhone: sale.customerPhone,
-        saleDate: sale.saleDate,
+        totalAmount: sale.totalAmount,
+        remainingDebt: sale.totalAmount - paid,
         creditDueDate: sale.creditDueDate,
-        totalAmount: sale.totalAmount - paid,
+        saleDate: sale.saleDate,
       };
     });
 
@@ -865,24 +809,25 @@ router.get("/credits/pending", async (req, res) => {
 // 6. EXPENSES ENDPOINTS
 // ----------------------------------------------------
 
-// List all expenses
+// List expenses with category and description filters
 router.get("/expenses", async (req, res) => {
   try {
-    const { from, to } = req.query;
-    let queryFilter = undefined;
+    const { category, search } = req.query;
+    const queryConditions = [eq(schema.expenses.tenantId, req.tenantId)];
 
-    if (from && to) {
-      queryFilter = and(
-        gte(schema.expenses.date, `${from}T00:00:00.000Z`),
-        lte(schema.expenses.date, `${to}T23:59:59.999Z`)
-      );
-    } else if (from) {
-      queryFilter = gte(schema.expenses.date, `${from}T00:00:00.000Z`);
-    } else if (to) {
-      queryFilter = lte(schema.expenses.date, `${to}T23:59:59.999Z`);
+    if (category) {
+      queryConditions.push(eq(schema.expenses.category, category as string));
+    }
+    if (search) {
+      queryConditions.push(sql`${schema.expenses.description} ILIKE ${"%" + search + "%"}`);
     }
 
-    const list = await db.select().from(schema.expenses).where(queryFilter).orderBy(desc(schema.expenses.date));
+    const list = await db
+      .select()
+      .from(schema.expenses)
+      .where(and(...queryConditions))
+      .orderBy(desc(schema.expenses.date));
+
     res.json(list);
   } catch (error) {
     res.status(500).json({ message: "Xərcləri gətirərkən xəta baş verdi" });
@@ -893,14 +838,14 @@ router.get("/expenses", async (req, res) => {
 router.post("/expenses", requireAdmin, async (req, res) => {
   try {
     const { amount, category, description } = req.body;
-
     if (!amount || !category) {
-      return res.status(400).json({ message: "Məlbəğ və kateqoriya tələb olunur" });
+      return res.status(400).json({ message: "Məbləğ və kateqoriya daxil edilməlidir" });
     }
 
     const newExpense = await db
       .insert(schema.expenses)
       .values({
+        tenantId: req.tenantId,
         amount: parseFloat(amount),
         category,
         description: description || null,
@@ -908,11 +853,7 @@ router.post("/expenses", requireAdmin, async (req, res) => {
       })
       .returning();
 
-    await logActivity(
-      req,
-      "CREATE_EXPENSE",
-      `Yeni xərc qeydə aldı: ${amount} ₼ (Kateqoriya: ${category}, Təsvir: ${description || "Yoxdur"})`
-    );
+    await logActivity(req, "CREATE_EXPENSE", `Yeni xərc maddəsi əlavə etdi: ${amount} ₼ (Kateqoriya: ${category}, Təsvir: ${description || "yoxdur"})`);
 
     res.json(newExpense[0]);
   } catch (error) {
@@ -926,17 +867,13 @@ router.delete("/expenses/:id", requireAdmin, async (req, res) => {
     const id = parseInt(req.params.id);
     const deleted = await db
       .delete(schema.expenses)
-      .where(eq(schema.expenses.id, id))
+      .where(and(eq(schema.expenses.id, id), eq(schema.expenses.tenantId, req.tenantId)))
       .returning();
 
     if (deleted.length === 0)
-      return res.status(404).json({ message: "Xərc tapılmadı" });
+      return res.status(404).json({ message: "Xərc maddəsi tapılmadı" });
 
-    await logActivity(
-      req,
-      "DELETE_EXPENSE",
-      `Xərci sildi (ID: ${id}): ${deleted[0].amount} ₼ (Kateqoriya: ${deleted[0].category}, Təsvir: ${deleted[0].description || "Yoxdur"})`
-    );
+    await logActivity(req, "DELETE_EXPENSE", `Xərc maddəsini silindi: ${deleted[0].amount} ₼ (Kateqoriya: ${deleted[0].category})`);
 
     res.json({ message: "Xərc silindi" });
   } catch (error) {
@@ -945,168 +882,102 @@ router.delete("/expenses/:id", requireAdmin, async (req, res) => {
 });
 
 // ----------------------------------------------------
-// 7. DASHBOARD SUMMARY ENDPOINTS
+// 7. DASHBOARD ANALYTICS ENDPOINTS
 // ----------------------------------------------------
 
 router.get("/dashboard/summary", requireAdmin, async (req, res) => {
   try {
-    const { from, to } = req.query;
-
-    // Period boundaries for the filter range (defaults to Today)
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date();
-    todayEnd.setHours(23, 59, 59, 999);
-
-    const fromDateStr = from ? `${from}T00:00:00.000Z` : todayStart.toISOString();
-    const toDateStr = to ? `${to}T23:59:59.999Z` : todayEnd.toISOString();
-
-    const rangeFilter = and(
-      gte(schema.sales.saleDate, fromDateStr),
-      lte(schema.sales.saleDate, toDateStr)
-    );
-
-    // 1. Period sales data
-    const rangeSales = await db.select().from(schema.sales).where(rangeFilter);
-    const todayRevenue = rangeSales.reduce((sum, s) => sum + s.totalAmount, 0);
-    const todayCost = rangeSales.reduce((sum, s) => sum + s.totalCost, 0);
-    const todayProfit = todayRevenue - todayCost;
-    const todaySales = rangeSales.length;
-
-    // 2. Period expenses data
-    const rangeExpensesList = await db
-      .select()
-      .from(schema.expenses)
-      .where(
-        and(
-          gte(schema.expenses.date, fromDateStr),
-          lte(schema.expenses.date, toDateStr)
-        )
-      );
-    const todayExpenses = rangeExpensesList.reduce((sum, e) => sum + e.amount, 0);
-    const todayNetProfit = todayProfit - todayExpenses;
-
-    // 3. Current calendar month data
     const { firstDay, lastDay } = getMonthBoundaries();
 
-    const monthSales = await db
-      .select()
-      .from(schema.sales)
-      .where(
-        and(
-          gte(schema.sales.saleDate, firstDay),
-          lte(schema.sales.saleDate, lastDay)
-        )
-      );
-    const monthRevenue = monthSales.reduce((sum, s) => sum + s.totalAmount, 0);
-    const monthCost = monthSales.reduce((sum, s) => sum + s.totalCost, 0);
-    const monthProfit = monthRevenue - monthCost;
+    const rangeFilter = and(
+      gte(schema.sales.saleDate, firstDay),
+      lte(schema.sales.saleDate, lastDay),
+      eq(schema.sales.tenantId, req.tenantId)
+    );
 
-    const monthExpensesList = await db
-      .select()
+    const rangeSales = await db.select().from(schema.sales).where(rangeFilter);
+
+    const totalRevenue = rangeSales.reduce((sum, sale) => sum + sale.totalAmount, 0);
+    const totalCOGS = rangeSales.reduce((sum, sale) => sum + sale.totalCost, 0);
+    const totalProfit = totalRevenue - totalCOGS;
+
+    // Monthly Expenses
+    const monthlyExpensesResult = await db
+      .select({ sum: sql`SUM(amount)` })
       .from(schema.expenses)
-      .where(
-        and(
-          gte(schema.expenses.date, firstDay),
-          lte(schema.expenses.date, lastDay)
-        )
-      );
-    const monthExpenses = monthExpensesList.reduce((sum, e) => sum + e.amount, 0);
-    const monthNetProfit = monthProfit - monthExpenses;
+      .where(and(gte(schema.expenses.date, firstDay), lte(schema.expenses.date, lastDay), eq(schema.expenses.tenantId, req.tenantId)));
+    const totalExpenses = parseFloat((monthlyExpensesResult[0]?.sum as string) || "0");
 
-    // 4. Warehouse Stock Value (Calculated dynamically)
-    const allProducts = await db.select().from(schema.products);
-    let totalStockValue = 0;
-    let lowStockCount = 0;
+    const netProfit = totalProfit - totalExpenses;
+
+    // Calculate Active customer credit totals
+    const activeCredits = await db.query.sales.findMany({
+      where: and(eq(schema.sales.paymentStatus, "credit"), eq(schema.sales.tenantId, req.tenantId)),
+      with: { payments: true }
+    });
+
+    const activeCreditsTotal = activeCredits.reduce((sum, sale) => {
+      const paid = sale.payments.reduce((pSum, p) => pSum + p.amount, 0);
+      return sum + (sale.totalAmount - paid);
+    }, 0);
+
+    // Calculate our own debts to suppliers
+    const myDebts = await db.query.stockEntries.findMany({
+      where: and(eq(schema.stockEntries.paidStatus, "credit"), eq(schema.stockEntries.tenantId, req.tenantId))
+    });
+    const myDebtsTotal = myDebts.reduce((sum, d) => sum + (d.quantity * d.purchasePrice), 0);
+
+    // Dynamic stock valuation
+    const allProducts = await db.select().from(schema.products).where(eq(schema.products.tenantId, req.tenantId));
+    let totalStockValuation = 0;
 
     for (const product of allProducts) {
-      // Sum restocked
-      const restocked = await db
+      const restockedResult = await db
         .select({ total: sql`SUM(quantity)` })
         .from(schema.stockEntries)
-        .where(eq(schema.stockEntries.productId, product.id));
-      const totalRestocked = parseFloat((restocked[0]?.total as string) || "0");
+        .where(and(eq(schema.stockEntries.productId, product.id), eq(schema.stockEntries.tenantId, req.tenantId)));
+      const totalRestocked = parseFloat((restockedResult[0]?.total as string) || "0");
 
-      // Sum sold
-      const sold = await db
+      const soldResult = await db
         .select({ total: sql`SUM(quantity)` })
         .from(schema.saleItems)
-        .where(eq(schema.saleItems.productId, product.id));
-      const totalSold = parseFloat((sold[0]?.total as string) || "0");
+        .where(and(eq(schema.saleItems.productId, product.id), eq(schema.saleItems.tenantId, req.tenantId)));
+      const totalSold = parseFloat((soldResult[0]?.total as string) || "0");
 
-      const qty = totalRestocked - totalSold;
+      const currentQty = totalRestocked - totalSold;
 
-      // Get latest price
-      const latestPriceResult = await db
+      const latestEntry = await db
         .select({ price: schema.stockEntries.purchasePrice })
         .from(schema.stockEntries)
-        .where(eq(schema.stockEntries.productId, product.id))
+        .where(and(eq(schema.stockEntries.productId, product.id), eq(schema.stockEntries.tenantId, req.tenantId)))
         .orderBy(desc(schema.stockEntries.entryDate))
         .limit(1);
-      const lastPrice = latestPriceResult[0]?.price || 0;
+      const lastPurchasePrice = latestEntry[0]?.price || 0;
 
-      totalStockValue += qty * lastPrice;
-
-      if (qty < 5 && qty > 0) {
-        lowStockCount++;
-      }
+      totalStockValuation += currentQty * lastPurchasePrice;
     }
-
-    // 5. Total outstanding customer credit debts (Nisyələr)
-    const activeCredits = await db.query.sales.findMany({
-      where: eq(schema.sales.paymentStatus, "credit"),
-      with: { payments: true },
-    });
-
-    let totalCreditDebt = 0;
-    let overdueCreditsCount = 0;
-    const todayStr = new Date().toISOString().split("T")[0];
-
-    for (const sale of activeCredits) {
-      const paid = sale.payments.reduce((sum, p) => sum + p.amount, 0);
-      totalCreditDebt += sale.totalAmount - paid;
-
-      if (sale.creditDueDate && sale.creditDueDate <= todayStr) {
-        overdueCreditsCount++;
-      }
-    }
-
-    // 6. Outstanding debts to suppliers (Mənim Borcum)
-    const supplierDebts = await db
-      .select({ qty: schema.stockEntries.quantity, price: schema.stockEntries.purchasePrice })
-      .from(schema.stockEntries)
-      .where(eq(schema.stockEntries.paidStatus, "credit"));
-    const myTotalDebt = supplierDebts.reduce((sum, d) => sum + d.qty * d.price, 0);
 
     res.json({
-      todayRevenue,
-      todayCost,
-      todayProfit,
-      todayExpenses,
-      todayNetProfit,
-      todaySales,
-      monthRevenue,
-      monthProfit,
-      monthExpenses,
-      monthNetProfit,
-      totalStockValue,
-      lowStockCount,
-      totalCreditDebt,
-      overdueCreditsCount,
-      myTotalDebt,
+      totalRevenue,
+      totalCOGS,
+      totalProfit,
+      totalExpenses,
+      netProfit,
+      activeCreditsTotal,
+      myDebtsTotal,
+      totalStockValuation
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Dashboard məlumatlarını hazırlayarkən xəta baş verdi" });
+    res.status(500).json({ message: "Dashboard verilənlərini hesablayarkən xəta baş verdi" });
   }
 });
 
-// Recent Sales (Limit 6)
 router.get("/dashboard/recent-sales", async (req, res) => {
   try {
     const recent = await db.query.sales.findMany({
-      orderBy: [desc(schema.sales.saleDate)],
-      limit: 6,
+      where: eq(schema.sales.tenantId, req.tenantId),
+      limit: 5,
+      orderBy: [desc(schema.sales.saleDate)]
     });
     res.json(recent);
   } catch (error) {
@@ -1114,162 +985,95 @@ router.get("/dashboard/recent-sales", async (req, res) => {
   }
 });
 
-// Low Stock List
 router.get("/dashboard/low-stock", async (req, res) => {
   try {
-    const allProducts = await db.select().from(schema.products);
-    const lowStock = [];
+    // Fetch limits
+    const settingsList = await db.select().from(schema.settings).where(eq(schema.settings.tenantId, req.tenantId)).limit(1);
+    const limitCount = settingsList[0]?.lowStockAlertCount || 5;
+
+    const allProducts = await db.select().from(schema.products).where(eq(schema.products.tenantId, req.tenantId));
+    const lowStockAlerts = [];
 
     for (const product of allProducts) {
-      // Sum restocked
-      const restocked = await db
+      const restockedResult = await db
         .select({ total: sql`SUM(quantity)` })
         .from(schema.stockEntries)
-        .where(eq(schema.stockEntries.productId, product.id));
-      const totalRestocked = parseFloat((restocked[0]?.total as string) || "0");
+        .where(and(eq(schema.stockEntries.productId, product.id), eq(schema.stockEntries.tenantId, req.tenantId)));
+      const totalRestocked = parseFloat((restockedResult[0]?.total as string) || "0");
 
-      // Sum sold
-      const sold = await db
+      const soldResult = await db
         .select({ total: sql`SUM(quantity)` })
         .from(schema.saleItems)
-        .where(eq(schema.saleItems.productId, product.id));
-      const totalSold = parseFloat((sold[0]?.total as string) || "0");
+        .where(and(eq(schema.saleItems.productId, product.id), eq(schema.saleItems.tenantId, req.tenantId)));
+      const totalSold = parseFloat((soldResult[0]?.total as string) || "0");
 
-      const currentQuantity = totalRestocked - totalSold;
+      const currentQty = totalRestocked - totalSold;
 
-      if (currentQuantity < 5 && currentQuantity >= 0) {
-        lowStock.push({
+      if (currentQty <= limitCount) {
+        lowStockAlerts.push({
           productId: product.id,
           productName: product.name,
-          currentQuantity,
+          currentQuantity: currentQty,
           unit: product.unit,
         });
       }
     }
 
-    res.json(lowStock);
+    res.json(lowStockAlerts);
   } catch (error) {
-    res.status(500).json({ message: "Tükənən məhsulları gətirərkən xəta baş verdi" });
+    res.status(500).json({ message: "Kritik anbar qalıqlarını gətirərkən xəta baş verdi" });
   }
 });
 
 // ----------------------------------------------------
-// 8. SETTINGS & DATA EXPORT ENDPOINTS
+// 8. SETTINGS ENDPOINTS
 // ----------------------------------------------------
 
-// Get settings
 router.get("/settings", async (req, res) => {
   try {
-    let list = await db.select().from(schema.settings).limit(1);
+    let list = await db.select().from(schema.settings).where(eq(schema.settings.tenantId, req.tenantId)).limit(1);
+    
+    // Auto-provision settings card if not found for some reason
     if (list.length === 0) {
-      // Insert standard default row if empty
-      const defaultSettings = await db
+      const newSettings = await db
         .insert(schema.settings)
         .values({
-          storeName: "Mətbəx Dünyası",
-          phone: "055-123-45-67",
-          address: "Yuxarı Göyçay",
-          invoiceFooter: "Bizi seçdiyiniz üçün təşəkkür edirik!",
-          lowStockAlertCount: 5,
-          defaultCreditDays: 30,
-          receiptWidth: "80mm",
-          showBarcode: 1,
-          showCustomerInfo: 1,
-          receiptHeader: "MƏTBƏX DÜNYASI",
-          receiptFooter: "Çekimizi saxlamanızı xahiş edirik!",
-          showStorePhone: 1,
-          showStoreAddress: 1,
-          showReceiptHeader: 1,
-          showReceiptFooter: 1,
-          showPaymentDetails: 1,
+          tenantId: req.tenantId,
+          storeName: "Yeni Mağaza",
         })
         .returning();
-      return res.json(defaultSettings[0]);
+      return res.json(newSettings[0]);
     }
+    
     res.json(list[0]);
   } catch (error) {
     res.status(500).json({ message: "Ayarları gətirərkən xəta baş verdi" });
   }
 });
 
-// Update settings
 router.put("/settings", requireAdmin, async (req, res) => {
   try {
-    const {
-      storeName,
-      phone,
-      address,
-      invoiceFooter,
-      lowStockAlertCount,
-      defaultCreditDays,
-      receiptWidth,
-      showBarcode,
-      showCustomerInfo,
-      receiptHeader,
-      receiptFooter,
-      showStorePhone,
-      showStoreAddress,
-      showReceiptHeader,
-      showReceiptFooter,
-      showPaymentDetails,
-    } = req.body;
-    
-    // Check if settings row exists
-    let list = await db.select().from(schema.settings).limit(1);
-    
+    const payload = req.body;
+    const list = await db.select().from(schema.settings).where(eq(schema.settings.tenantId, req.tenantId)).limit(1);
+
     let updated;
     if (list.length === 0) {
       updated = await db
         .insert(schema.settings)
         .values({
-          storeName: storeName || "Mətbəx Dünyası",
-          phone: phone || null,
-          address: address || null,
-          invoiceFooter: invoiceFooter || null,
-          lowStockAlertCount: parseInt(lowStockAlertCount) || 5,
-          defaultCreditDays: parseInt(defaultCreditDays) || 30,
-          receiptWidth: receiptWidth || "80mm",
-          showBarcode: showBarcode !== undefined ? parseInt(showBarcode) : 1,
-          showCustomerInfo: showCustomerInfo !== undefined ? parseInt(showCustomerInfo) : 1,
-          receiptHeader: receiptHeader || null,
-          receiptFooter: receiptFooter || null,
-          showStorePhone: showStorePhone !== undefined ? parseInt(showStorePhone) : 1,
-          showStoreAddress: showStoreAddress !== undefined ? parseInt(showStoreAddress) : 1,
-          showReceiptHeader: showReceiptHeader !== undefined ? parseInt(showReceiptHeader) : 1,
-          showReceiptFooter: showReceiptFooter !== undefined ? parseInt(showReceiptFooter) : 1,
-          showPaymentDetails: showPaymentDetails !== undefined ? parseInt(showPaymentDetails) : 1,
+          tenantId: req.tenantId,
+          ...payload,
         })
         .returning();
     } else {
       updated = await db
         .update(schema.settings)
-        .set({
-          storeName: storeName || "Mətbəx Dünyası",
-          phone: phone || null,
-          address: address || null,
-          invoiceFooter: invoiceFooter || null,
-          lowStockAlertCount: parseInt(lowStockAlertCount) || 5,
-          defaultCreditDays: parseInt(defaultCreditDays) || 30,
-          receiptWidth: receiptWidth || "80mm",
-          showBarcode: showBarcode !== undefined ? parseInt(showBarcode) : 1,
-          showCustomerInfo: showCustomerInfo !== undefined ? parseInt(showCustomerInfo) : 1,
-          receiptHeader: receiptHeader || null,
-          receiptFooter: receiptFooter || null,
-          showStorePhone: showStorePhone !== undefined ? parseInt(showStorePhone) : 1,
-          showStoreAddress: showStoreAddress !== undefined ? parseInt(showStoreAddress) : 1,
-          showReceiptHeader: showReceiptHeader !== undefined ? parseInt(showReceiptHeader) : 1,
-          showReceiptFooter: showReceiptFooter !== undefined ? parseInt(showReceiptFooter) : 1,
-          showPaymentDetails: showPaymentDetails !== undefined ? parseInt(showPaymentDetails) : 1,
-        })
-        .where(eq(schema.settings.id, list[0].id))
+        .set(payload)
+        .where(eq(schema.settings.tenantId, req.tenantId))
         .returning();
     }
 
-    await logActivity(
-      req,
-      "UPDATE_SETTINGS",
-      `Sistem və mağaza ayarlarını yenilədi (Mağaza: '${storeName || "Mətbəx Dünyası"}')`
-    );
+    await logActivity(req, "UPDATE_SETTINGS", "Sistem profil və çek dizayn ayarlarını yenilədi");
 
     res.json(updated[0]);
   } catch (error) {
@@ -1277,38 +1081,67 @@ router.put("/settings", requireAdmin, async (req, res) => {
   }
 });
 
-// Fetch activity logs (Admin only)
+// ----------------------------------------------------
+// 9. ACTIVITY LOGS ENDPOINTS
+// ----------------------------------------------------
+
 router.get("/activity-logs", requireAdmin, async (req, res) => {
   try {
-    const { date } = req.query;
-    const targetDate = (date as string) || new Date().toISOString().split("T")[0]; // YYYY-MM-DD
-    
-    // Auto-archive past logs: update archived=1 where date is older than today and archived=0
-    const todayStr = new Date().toISOString().split("T")[0];
-    await db.update(schema.activityLogs)
-      .set({ archived: 1 })
-      .where(
-        and(
-          sql`LEFT(timestamp, 10) < ${todayStr}`,
-          eq(schema.activityLogs.archived, 0)
-        )
-      );
+    const { date, archived } = req.query;
 
-    // Fetch logs for the target date
-    const logsList = await db
+    const queryFilters = [eq(schema.activityLogs.tenantId, req.tenantId)];
+
+    if (archived !== undefined) {
+      queryFilters.push(eq(schema.activityLogs.archived, parseInt(archived as string)));
+    } else {
+      queryFilters.push(eq(schema.activityLogs.archived, 0));
+    }
+
+    if (date) {
+      queryFilters.push(sql`${schema.activityLogs.timestamp} LIKE ${date as string + "%"}`);
+    }
+
+    const logs = await db
       .select()
       .from(schema.activityLogs)
-      .where(sql`LEFT(timestamp, 10) = ${targetDate}`)
-      .orderBy(desc(schema.activityLogs.id));
+      .where(and(...queryFilters))
+      .orderBy(desc(schema.activityLogs.timestamp))
+      .limit(100);
 
-    res.json(logsList);
+    res.json(logs);
   } catch (error) {
-    console.error("Error in GET /activity-logs:", error);
-    res.status(500).json({ message: "Loqları gətirərkən xəta baş verdi" });
+    res.status(500).json({ message: "Fəaliyyət loqlarını gətirərkən xəta baş verdi" });
   }
 });
 
-// 12. USER MANAGEMENT ENDPOINTS (Admin Only)
+router.post("/activity-logs/archive", requireAdmin, async (req, res) => {
+  try {
+    const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+    
+    // Archive logs older than today
+    await db
+      .update(schema.activityLogs)
+      .set({ archived: 1 })
+      .where(
+        and(
+          eq(schema.activityLogs.archived, 0),
+          sql`${schema.activityLogs.timestamp} < ${today}`,
+          eq(schema.activityLogs.tenantId, req.tenantId)
+        )
+      );
+
+    await logActivity(req, "ARCHIVE_LOGS", "Köhnə fəaliyyət loqlarını arxivləşdirdi.");
+
+    res.json({ message: "Köhnə loqlar uğurla arxivləşdirildi" });
+  } catch (error) {
+    res.status(500).json({ message: "Loqları arxivləşdirərkən xəta baş verdi" });
+  }
+});
+
+// ----------------------------------------------------
+// 10. USER MANAGEMENT ENDPOINTS (Admin Only)
+// ----------------------------------------------------
+
 // List all users
 router.get("/users", requireAdmin, async (req, res) => {
   try {
@@ -1319,6 +1152,7 @@ router.get("/users", requireAdmin, async (req, res) => {
         role: schema.users.role,
       })
       .from(schema.users)
+      .where(eq(schema.users.tenantId, req.tenantId))
       .orderBy(schema.users.username);
     res.json(list);
   } catch (error) {
@@ -1336,17 +1170,18 @@ router.post("/users", requireAdmin, async (req, res) => {
 
     const normalizedUsername = username.trim().toLowerCase();
     
-    // Check if user already exists
+    // Check if user already exists in this tenant
     const existing = await db.query.users.findFirst({
-      where: eq(schema.users.username, normalizedUsername)
+      where: and(eq(schema.users.username, normalizedUsername), eq(schema.users.tenantId, req.tenantId))
     });
     if (existing) {
-      return res.status(400).json({ message: "Bu istifadəçi adı artıq mövcuddur" });
+      return res.status(400).json({ message: "Bu istifadəçi adı bu biznesdə artıq mövcuddur" });
     }
 
     const newUser = await db
       .insert(schema.users)
       .values({
+        tenantId: req.tenantId,
         username: normalizedUsername,
         password: password.trim(),
         role: role || "Staff",
@@ -1379,7 +1214,7 @@ router.put("/users/:id/password", async (req, res) => {
     const reqUsername = req.headers["x-user-username"];
     
     const targetUser = await db.query.users.findFirst({
-      where: eq(schema.users.id, targetUserId)
+      where: and(eq(schema.users.id, targetUserId), eq(schema.users.tenantId, req.tenantId))
     });
     if (!targetUser) {
       return res.status(404).json({ message: "İstifadəçi tapılmadı" });
@@ -1413,12 +1248,13 @@ router.delete("/users/:id", requireAdmin, async (req, res) => {
     const reqUsername = req.headers["x-user-username"];
 
     const targetUser = await db.query.users.findFirst({
-      where: eq(schema.users.id, targetUserId)
+      where: and(eq(schema.users.id, targetUserId), eq(schema.users.tenantId, req.tenantId))
     });
     if (!targetUser) {
       return res.status(404).json({ message: "İstifadəçi tapılmadı" });
     }
 
+    // Cannot delete themselves
     const reqUsernameStr = typeof reqUsername === "string" ? reqUsername.trim().toLowerCase() : "";
     if (reqUsernameStr && targetUser.username === reqUsernameStr) {
       return res.status(400).json({ message: "Öz hesabınızı silə bilməzsiniz!" });
@@ -1436,55 +1272,205 @@ router.delete("/users/:id", requireAdmin, async (req, res) => {
   }
 });
 
+// ----------------------------------------------------
+// 11. DATA BACKUP EXPORT ENDPOINTS (CSV)
+// ----------------------------------------------------
 
-// Export database tables as CSV (Data backup & portability)
 router.get("/backup/export/:table", requireAdmin, async (req, res) => {
   try {
-    const table = req.params.table;
+    const { table } = req.params;
     let data: any[] = [];
-    let filename = `${table}_backup.csv`;
 
     if (table === "products") {
-      data = await db.select().from(schema.products);
+      data = await db.select().from(schema.products).where(eq(schema.products.tenantId, req.tenantId));
     } else if (table === "customers") {
-      data = await db.select().from(schema.customers);
+      data = await db.select().from(schema.customers).where(eq(schema.customers.tenantId, req.tenantId));
     } else if (table === "expenses") {
-      data = await db.select().from(schema.expenses);
+      data = await db.select().from(schema.expenses).where(eq(schema.expenses.tenantId, req.tenantId));
     } else if (table === "sales") {
-      data = await db.select().from(schema.sales);
+      data = await db.select().from(schema.sales).where(eq(schema.sales.tenantId, req.tenantId));
     } else if (table === "stock_entries") {
-      data = await db.select().from(schema.stockEntries);
+      data = await db.select().from(schema.stockEntries).where(eq(schema.stockEntries.tenantId, req.tenantId));
     } else {
-      return res.status(400).json({ message: "Yanlış cədvəl adı" });
+      return res.status(400).json({ message: "Yanlış yedəkləmə cədvəli" });
     }
 
     if (data.length === 0) {
-      res.setHeader("Content-Type", "text/csv; charset=utf-8");
-      res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
-      return res.send("No records found");
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", `attachment; filename=backup_${table}.csv`);
+      return res.send("");
     }
 
-    // Convert array of objects to CSV string
-    const headers = Object.keys(data[0]);
-    const csvRows = [headers.join(",")];
+    const headers = Object.keys(data[0]).join(",");
+    const rows = data.map((row) =>
+      Object.values(row)
+        .map((val) => {
+          if (val === null || val === undefined) return "";
+          const str = String(val).replace(/"/g, '""');
+          return str.includes(",") || str.includes("\n") || str.includes('"') ? `"${str}"` : str;
+        })
+        .join(",")
+    );
 
-    for (const row of data) {
-      const values = headers.map((header) => {
-        const val = row[header];
-        if (val === null || val === undefined) return '""';
-        const escaped = ("" + val).replace(/"/g, '""'); // Proper CSV quote escape
-        return `"${escaped}"`;
-      });
-      csvRows.push(values.join(","));
-    }
+    const csvContent = [headers, ...rows].join("\n");
 
-    const csvContent = "\uFEFF" + csvRows.join("\n"); // Add BOM for Excel UTF-8 Azerbaijani support
+    await logActivity(req, "BACKUP_EXPORT", `Sistem verilənlərini yedəklədi: '${table}' cədvəlini CSV formatında ixrac etdi`);
 
-    res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
-    res.status(200).send(csvContent);
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename=backup_${table}.csv`);
+    res.send(csvContent);
   } catch (error) {
-    res.status(500).json({ message: "Məlumatları ixrac edərkən xəta baş verdi" });
+    res.status(500).json({ message: "Verilənləri ixrac edərkən xəta baş verdi" });
+  }
+});
+
+// ----------------------------------------------------
+// 12. SAAS SUPER ADMIN ENDPOINTS (super.birsaas.com control plane)
+// ----------------------------------------------------
+
+// List all tenants with stats (Super Admin only)
+router.get("/super/tenants", requireSuperAdmin, async (req, res) => {
+  try {
+    const allTenants = await db.select().from(schema.tenants).orderBy(desc(schema.tenants.id));
+    const result = [];
+
+    for (const tenant of allTenants) {
+      // Fetch user count for this tenant
+      const userCountResult = await db
+        .select({ count: sql`COUNT(id)` })
+        .from(schema.users)
+        .where(eq(schema.users.tenantId, tenant.id));
+      const userCount = parseInt((userCountResult[0]?.count as string) || "0");
+
+      // Fetch sale count
+      const saleCountResult = await db
+        .select({ count: sql`COUNT(id)` })
+        .from(schema.sales)
+        .where(eq(schema.sales.tenantId, tenant.id));
+      const saleCount = parseInt((saleCountResult[0]?.count as string) || "0");
+
+      result.push({
+        id: tenant.id,
+        name: tenant.name,
+        slug: tenant.slug,
+        status: tenant.status,
+        releaseTier: tenant.releaseTier,
+        createdAt: tenant.createdAt,
+        userCount,
+        saleCount
+      });
+    }
+
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ message: "Biznesləri gətirərkən xəta baş verdi" });
+  }
+});
+
+// Create/Provision a new Tenant (SaaS sign up)
+router.post("/super/tenants", requireSuperAdmin, async (req, res) => {
+  try {
+    const { name, slug, adminUsername, adminPassword } = req.body;
+    if (!name || !slug || !adminUsername || !adminPassword) {
+      return res.status(400).json({ message: "Bütün məlumatları doldurun" });
+    }
+
+    const normalizedSlug = slug.trim().toLowerCase();
+    
+    // Check if slug is already taken
+    const existingTenant = await db.query.tenants.findFirst({
+      where: eq(schema.tenants.slug, normalizedSlug)
+    });
+    if (existingTenant) {
+      return res.status(400).json({ message: "Bu Biznes Kodu artıq istifadə olunur" });
+    }
+
+    // Insert tenant
+    const newTenant = await db
+      .insert(schema.tenants)
+      .values({
+        name,
+        slug: normalizedSlug,
+        status: "active",
+        releaseTier: "stable",
+        createdAt: new Date().toISOString()
+      })
+      .returning();
+
+    const tenantId = newTenant[0].id;
+
+    // Initialize Settings for the new tenant
+    await db.insert(schema.settings).values({
+      tenantId,
+      storeName: name,
+    });
+
+    // Create the initial admin user for this tenant
+    const normalizedUsername = adminUsername.trim().toLowerCase();
+    await db.insert(schema.users).values({
+      tenantId,
+      username: normalizedUsername,
+      password: adminPassword.trim(),
+      role: "Admin"
+    });
+
+    await logActivity(req, "PROVISION_TENANT", `Yeni biznes hesabını aktivləşdirdi: '${name}' (Kod: ${normalizedSlug}, Admin: ${normalizedUsername})`);
+
+    res.json(newTenant[0]);
+  } catch (error) {
+    res.status(500).json({ message: "Biznes yaradılarkən xəta baş verdi" });
+  }
+});
+
+// Toggle tenant active/suspended status
+router.put("/super/tenants/:id/status", requireSuperAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { status } = req.body;
+
+    if (id === 2) {
+      return res.status(400).json({ message: "Super platforma admin tenantı dayandırıla bilməz!" });
+    }
+
+    const updated = await db
+      .update(schema.tenants)
+      .set({ status })
+      .where(eq(schema.tenants.id, id))
+      .returning();
+
+    if (updated.length === 0) {
+      return res.status(404).json({ message: "Biznes tapılmadı" });
+    }
+
+    await logActivity(req, "TOGGLE_TENANT_STATUS", `'${updated[0].name}' biznesinin statusunu yenilədi: ${status}`);
+
+    res.json(updated[0]);
+  } catch (error) {
+    res.status(500).json({ message: "Biznes statusu dəyişdirilərkən xəta baş verdi" });
+  }
+});
+
+// Set tenant release updates tier
+router.put("/super/tenants/:id/tier", requireSuperAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { releaseTier } = req.body;
+
+    const updated = await db
+      .update(schema.tenants)
+      .set({ releaseTier })
+      .where(eq(schema.tenants.id, id))
+      .returning();
+
+    if (updated.length === 0) {
+      return res.status(404).json({ message: "Biznes tapılmadı" });
+    }
+
+    await logActivity(req, "UPDATE_TENANT_TIER", `'${updated[0].name}' biznesinin yenilənmə dərəcəsini dəyişdi: ${releaseTier}`);
+
+    res.json(updated[0]);
+  } catch (error) {
+    res.status(500).json({ message: "Biznes dərəcəsi dəyişdirilərkən xəta baş verdi" });
   }
 });
 

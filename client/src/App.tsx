@@ -35,16 +35,30 @@ import Expenses from "./pages/Expenses.tsx";
 import SettingsPage from "./pages/Settings.tsx";
 import Login from "./pages/Login.tsx";
 import Logs from "./pages/Logs.tsx";
+import SuperDashboard from "./pages/SuperDashboard.tsx";
 
-// Global fetch interceptor to automatically attach x-user-role and x-user-username headers
+// Global fetch interceptor to automatically attach x-user-role, x-user-username, and x-tenant-host headers
 const originalFetch = window.fetch;
 window.fetch = async (input, init) => {
+  init = init || {};
+  init.headers = init.headers || {};
+  
+  // Inject original browser host domain for dynamic subdomain routing
+  if (init.headers instanceof Headers) {
+    init.headers.set("x-tenant-host", window.location.host);
+  } else if (Array.isArray(init.headers)) {
+    const hasHeaderHost = init.headers.some(([k]) => k.toLowerCase() === "x-tenant-host");
+    if (!hasHeaderHost) {
+      init.headers.push(["x-tenant-host", window.location.host]);
+    }
+  } else {
+    (init.headers as Record<string, string>)["x-tenant-host"] = window.location.host;
+  }
+
   const userStr = localStorage.getItem("qazanpos_user");
   if (userStr) {
     try {
       const user = JSON.parse(userStr);
-      init = init || {};
-      init.headers = init.headers || {};
       if (init.headers instanceof Headers) {
         init.headers.set("x-user-role", user.role);
         init.headers.set("x-user-username", user.username);
@@ -83,20 +97,30 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
 
   const isAdmin = user?.role === "Admin";
 
+  // Dynamic Subdomain Resolution
+  const host = window.location.hostname;
+  const parts = host.split(".");
+  const isSuperTenant = parts.length > 1 && parts[0].toLowerCase() === "super";
+
   // Navigation links - optimized and compact
-  const menuItems = [
-    ...(isAdmin ? [{ href: "/", label: "Panel", icon: LayoutDashboard }] : []),
-    { href: "/pos", label: "POS ⚡", icon: Sparkles, isHighlight: true },
-    { href: "/nisye", label: "Borclar", icon: AlertTriangle },
-    { href: "/musteriler", label: "Müştərilər", icon: Users },
-    { href: "/anbar", label: "Qalıqlar", icon: Boxes },
-    ...(isAdmin ? [{ href: "/anbar/daxil", label: "Mədaxil", icon: PlusCircle }] : []),
-    ...(isAdmin ? [{ href: "/mehsullar", label: "Kataloq", icon: FolderKanban }] : []),
-    { href: "/satislar", label: "Tarixçə", icon: History },
-    ...(isAdmin ? [{ href: "/xercler", label: "Xərclər", icon: TrendingDown }] : []),
-    ...(isAdmin ? [{ href: "/loqlar", label: "Loqlar", icon: Activity }] : []),
-    { href: "/ayarlar", label: "Ayarlar", icon: SettingsIcon },
-  ];
+  const menuItems = isSuperTenant
+    ? [
+        { href: "/", label: "SaaS Panel", icon: LayoutDashboard },
+        { href: "/loqlar", label: "Audit Loqları", icon: Activity },
+      ]
+    : [
+        ...(isAdmin ? [{ href: "/", label: "Panel", icon: LayoutDashboard }] : []),
+        { href: "/pos", label: "POS ⚡", icon: Sparkles, isHighlight: true },
+        { href: "/nisye", label: "Borclar", icon: AlertTriangle },
+        { href: "/musteriler", label: "Müştərilər", icon: Users },
+        { href: "/anbar", label: "Qalıqlar", icon: Boxes },
+        ...(isAdmin ? [{ href: "/anbar/daxil", label: "Mədaxil", icon: PlusCircle }] : []),
+        ...(isAdmin ? [{ href: "/mehsullar", label: "Kataloq", icon: FolderKanban }] : []),
+        { href: "/satislar", label: "Tarixçə", icon: History },
+        ...(isAdmin ? [{ href: "/xercler", label: "Xərclər", icon: TrendingDown }] : []),
+        ...(isAdmin ? [{ href: "/loqlar", label: "Loqlar", icon: Activity }] : []),
+        { href: "/ayarlar", label: "Ayarlar", icon: SettingsIcon },
+      ];
 
   return (
     <div className="relative min-h-screen w-screen flex flex-col overflow-x-hidden pb-12 select-none">
@@ -110,17 +134,17 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
       {/* 1. Centered Floating Liquid Glass Navbar */}
       <header className="w-[calc(100%-2rem)] sm:w-full max-w-7xl mx-auto px-4 sm:px-6 py-3.5 mt-4 sm:mt-6 rounded-2xl glass-navbar flex items-center justify-between shadow-xl sticky top-4 sm:top-6 z-50 no-print">
         {/* Brand Logo & Name */}
-        <Link href={isAdmin ? "/" : "/pos"}>
+        <Link href={isSuperTenant ? "/" : (isAdmin ? "/" : "/pos")}>
           <div className="flex items-center gap-3 cursor-pointer group">
             <div className="size-9 rounded-xl bg-primary flex items-center justify-center text-white font-black text-lg shadow-md shadow-primary/20 transition-transform group-hover:scale-105">
               Q
             </div>
             <div>
               <h1 className="font-extrabold text-gray-900 tracking-tight text-sm leading-none transition-colors group-hover:text-primary">
-                Qazan POS
+                {isSuperTenant ? "Qazan SaaS" : "Qazan POS"}
               </h1>
               <span className="text-[10px] font-bold text-gray-400 mt-1 block tracking-wide">
-                ANBAR & SATIŞ
+                {isSuperTenant ? "PLATFORMA PANELİ" : "ANBAR & SATIŞ"}
               </span>
             </div>
           </div>
@@ -387,26 +411,40 @@ function OverdueDebtCheck() {
 
 function MainRoutes({ user, onLogout }: { user: any; onLogout: () => void }) {
   const isAdmin = user?.role === "Admin";
+  
+  const host = window.location.hostname;
+  const parts = host.split(".");
+  const isSuperTenant = parts.length > 1 && parts[0].toLowerCase() === "super";
+
   return (
     <AppLayout user={user} onLogout={onLogout}>
       <Switch>
-        {isAdmin && <Route path="/" component={Dashboard} />}
-        <Route path="/pos" component={POS} />
-        <Route path="/nisye" component={Debts} />
-        <Route path="/musteriler" component={Customers} />
-        <Route path="/anbar" component={Stock} />
-        {isAdmin && <Route path="/anbar/daxil" component={StockIn} />}
-        {isAdmin && <Route path="/mehsullar" component={Products} />}
-        <Route path="/satislar" component={SalesHistory} />
-        <Route path="/satislar/:id" component={Invoice} />
-        {isAdmin && <Route path="/xercler" component={Expenses} />}
-        {isAdmin && <Route path="/loqlar" component={Logs} />}
-        <Route path="/ayarlar" component={SettingsPage} />
+        {isSuperTenant ? (
+          <>
+            <Route path="/" component={SuperDashboard} />
+            <Route path="/loqlar" component={Logs} />
+          </>
+        ) : (
+          <>
+            {isAdmin && <Route path="/" component={Dashboard} />}
+            <Route path="/pos" component={POS} />
+            <Route path="/nisye" component={Debts} />
+            <Route path="/musteriler" component={Customers} />
+            <Route path="/anbar" component={Stock} />
+            {isAdmin && <Route path="/anbar/daxil" component={StockIn} />}
+            {isAdmin && <Route path="/mehsullar" component={Products} />}
+            <Route path="/satislar" component={SalesHistory} />
+            <Route path="/satislar/:id" component={Invoice} />
+            {isAdmin && <Route path="/xercler" component={Expenses} />}
+            {isAdmin && <Route path="/loqlar" component={Logs} />}
+            <Route path="/ayarlar" component={SettingsPage} />
+          </>
+        )}
         <Route>
           <div className="flex flex-col items-center justify-center py-20">
             <h1 className="text-6xl font-extrabold text-primary">403</h1>
             <p className="text-gray-500 mt-2 font-medium">Giriş qadağandır və ya səhifə mövcud deyil.</p>
-            <Link href={isAdmin ? "/" : "/pos"} className="mt-4 text-sm text-primary font-bold hover:underline">
+            <Link href={isSuperTenant ? "/" : (isAdmin ? "/" : "/pos")} className="mt-4 text-sm text-primary font-bold hover:underline">
               Geri qayıt
             </Link>
           </div>

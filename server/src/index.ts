@@ -35,32 +35,87 @@ app.get("*", (req, res, next) => {
 import { db } from "./db/index.js";
 import * as schema from "./db/schema.js";
 
-async function ensureDefaultUsers() {
+async function ensureDefaultTenantsAndUsers() {
   try {
+    // 1. Ensure Tenants exist
+    const existingTenants = await db.select().from(schema.tenants).limit(1);
+    if (existingTenants.length === 0) {
+      console.log("No tenants found. Creating default tenants (demo & super)...");
+      await db.insert(schema.tenants).values([
+        {
+          id: 1,
+          name: "Mətbəx Dünyası",
+          slug: "demo",
+          status: "active",
+          releaseTier: "stable",
+          createdAt: new Date().toISOString(),
+        },
+        {
+          id: 2,
+          name: "Super Platform Admin",
+          slug: "super",
+          status: "active",
+          releaseTier: "stable",
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+      console.log("Default tenants created successfully.");
+    }
+
+    // 2. Ensure Settings exist for both tenants
+    const existingSettings = await db.select().from(schema.settings).limit(1);
+    if (existingSettings.length === 0) {
+      console.log("No settings found. Initializing default business settings...");
+      await db.insert(schema.settings).values([
+        {
+          tenantId: 1,
+          storeName: "Mətbəx Dünyası",
+          phone: "055-123-4567",
+          address: "Yuxarı Göyçay",
+        },
+        {
+          tenantId: 2,
+          storeName: "SaaS Control Plane",
+          phone: "010-000-0000",
+          address: "Mərkəz bulud serverləri",
+        },
+      ]);
+      console.log("Default settings initialized.");
+    }
+
+    // 3. Ensure default users exist
     const existingUsers = await db.select().from(schema.users).limit(1);
     if (existingUsers.length === 0) {
       console.log("No users found. Creating default accounts...");
       await db.insert(schema.users).values([
         {
+          tenantId: 1,
           username: "admin",
           password: "admin123",
           role: "Admin",
         },
         {
+          tenantId: 1,
           username: "satici",
           password: "satici123",
           role: "Staff",
         },
+        {
+          tenantId: 2,
+          username: "superadmin",
+          password: "superadmin123",
+          role: "Admin",
+        },
       ]);
-      console.log("Default accounts created: admin/admin123, satici/satici123");
+      console.log("Default accounts created (admin, satici, superadmin).");
     }
   } catch (error) {
-    console.error("Failed to ensure default users on startup:", error);
+    console.error("Failed to ensure default tenants/users on startup:", error);
   }
 }
 
 app.listen(PORT, async () => {
   console.log(`Server listening on port ${PORT}`);
-  await ensureDefaultUsers();
+  await ensureDefaultTenantsAndUsers();
 });
 
