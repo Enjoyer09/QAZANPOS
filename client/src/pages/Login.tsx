@@ -240,11 +240,6 @@ export default function Login({ onLoginSuccess }: LoginProps) {
               </button>
             </form>
 
-            {/* Quick instructions / Help */}
-            <div className="mt-6 pt-5 border-t border-gray-50 text-[10px] text-gray-400 text-center font-medium leading-relaxed">
-              <p>Admin hesabı: <strong className="text-gray-600">admin</strong> / şifrə: <strong className="text-gray-600 font-mono">admin123</strong></p>
-              <p className="mt-1">Satıcı hesabı: <strong className="text-gray-600">satici</strong> / şifrə: <strong className="text-gray-600 font-mono">satici123</strong></p>
-            </div>
           </div>
         )}
       </div>
