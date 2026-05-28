@@ -1410,19 +1410,34 @@ router.get("/settings", async (req, res) => {
   try {
     let list = await db.select().from(schema.settings).where(eq(schema.settings.tenantId, req.tenantId)).limit(1);
     
+    // Fetch tenant's details to expose billing plan
+    const tenant = await db.query.tenants.findFirst({
+      where: eq(schema.tenants.id, req.tenantId)
+    });
+
     // Auto-provision settings card if not found for some reason
     if (list.length === 0) {
       const newSettings = await db
         .insert(schema.settings)
         .values({
           tenantId: req.tenantId,
-          storeName: "Yeni Mağaza",
+          storeName: tenant?.name || "Yeni Mağaza",
         })
         .returning();
-      return res.json(newSettings[0]);
+      return res.json({
+        ...newSettings[0],
+        billingTier: tenant?.billingTier || "free",
+        tenantSlug: tenant?.slug || "demo",
+        tenantName: tenant?.name || "BirSaaS Store"
+      });
     }
     
-    res.json(list[0]);
+    res.json({
+      ...list[0],
+      billingTier: tenant?.billingTier || "free",
+      tenantSlug: tenant?.slug || "demo",
+      tenantName: tenant?.name || "BirSaaS Store"
+    });
   } catch (error) {
     res.status(500).json({ message: "Ayarları gətirərkən xəta baş verdi" });
   }

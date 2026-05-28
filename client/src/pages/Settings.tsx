@@ -61,6 +61,52 @@ export default function SettingsPage() {
 
   const isAdmin = activeUser?.role === "Admin";
 
+  const getPlanDetails = (tier: string) => {
+    switch (tier?.toLowerCase()) {
+      case "mini":
+        return {
+          name: "Mini Plan",
+          color: "from-blue-500 to-indigo-600 shadow-blue-500/20 text-white",
+          badgeColor: "bg-blue-50 text-blue-700 border-blue-200",
+          products: "100 ədəd",
+          sales: "500 ədəd",
+          users: "3 nəfər",
+          price: "15 ₼ / ay"
+        };
+      case "pro":
+        return {
+          name: "Pro Plan",
+          color: "from-purple-600 to-indigo-700 shadow-purple-500/20 text-white",
+          badgeColor: "bg-purple-50 text-purple-700 border-purple-200",
+          products: "1,000 ədəd",
+          sales: "5,000 ədəd",
+          users: "10 nəfər",
+          price: "35 ₼ / ay"
+        };
+      case "enterprise":
+        return {
+          name: "Enterprise Plan",
+          color: "from-amber-500 to-red-600 shadow-amber-500/20 text-white",
+          badgeColor: "bg-amber-50 text-amber-700 border-amber-200",
+          products: "Limitsiz",
+          sales: "Limitsiz",
+          users: "Limitsiz",
+          price: "Fərdi qiymət"
+        };
+      case "free":
+      default:
+        return {
+          name: "Sınaq (Pulsuz)",
+          color: "from-gray-500 to-slate-600 shadow-gray-500/20 text-white",
+          badgeColor: "bg-gray-50 text-gray-700 border-gray-200",
+          products: "10 ədəd",
+          sales: "20 ədəd",
+          users: "1 nəfər",
+          price: "0 ₼"
+        };
+    }
+  };
+
   // User Management State
   const [newUsername, setNewUsername] = useState("");
   const [newUserPassword, setNewUserPassword] = useState("");
@@ -449,6 +495,63 @@ export default function SettingsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         {/* Left Forms column */}
         <form onSubmit={handleSave} className="lg:col-span-2 space-y-6">
+          {/* Plan Status Card */}
+          {settingsData && (
+            <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card relative overflow-hidden">
+              <div className="absolute right-0 top-0 w-24 h-24 bg-primary/5 rounded-full blur-2xl"></div>
+              
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100/50 pb-4 mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="size-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-gray-900 text-sm">Cari Tarif Planınız</h3>
+                    <span className="text-[10px] font-bold text-gray-400 mt-0.5 block">Abunəlik və limit detalları</span>
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <span className={`px-3 py-1 rounded-lg text-xs font-black border uppercase tracking-wider ${getPlanDetails(settingsData.billingTier).badgeColor}`}>
+                    {getPlanDetails(settingsData.billingTier).name}
+                  </span>
+                  <span className="text-xs font-black text-gray-900 bg-gray-50 border border-gray-100 px-2.5 py-1 rounded-lg">
+                    {getPlanDetails(settingsData.billingTier).price}
+                  </span>
+                </div>
+              </div>
+              
+              {/* Limit specs */}
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div className="bg-gray-50/50 border border-gray-100 rounded-xl p-3">
+                  <span className="text-[9px] font-bold text-gray-400 block uppercase tracking-wider mb-1">Məhsul Limiti</span>
+                  <span className="text-xs font-black text-gray-800 block mt-0.5">{getPlanDetails(settingsData.billingTier).products}</span>
+                </div>
+                <div className="bg-gray-50/50 border border-gray-100 rounded-xl p-3">
+                  <span className="text-[9px] font-bold text-gray-400 block uppercase tracking-wider mb-1">Satış Limiti</span>
+                  <span className="text-xs font-black text-gray-800 block mt-0.5">{getPlanDetails(settingsData.billingTier).sales}</span>
+                </div>
+                <div className="bg-gray-50/50 border border-gray-100 rounded-xl p-3">
+                  <span className="text-[9px] font-bold text-gray-400 block uppercase tracking-wider mb-1">İstifadəçi Limiti</span>
+                  <span className="text-xs font-black text-gray-800 block mt-0.5">{getPlanDetails(settingsData.billingTier).users}</span>
+                </div>
+              </div>
+              
+              {settingsData.billingTier !== "enterprise" && (
+                <div className="mt-4 flex justify-end">
+                  <a
+                    href="https://wa.me/994551234567?text=Salam,%20BirSaaS%20tarif%20planımı%20yüksəltmək%20istəyirəm."
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black text-[10px] rounded-lg shadow-sm tracking-wide uppercase cursor-pointer transition-all hover-elevate"
+                  >
+                    Planı Yüksəlt ⚡
+                  </a>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Card 1: Shop profile */}
           <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card">
             <div className="flex items-center gap-2 mb-6 border-b border-gray-100/50 pb-3">
