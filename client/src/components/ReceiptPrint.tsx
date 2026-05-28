@@ -151,8 +151,8 @@ export function generateReceiptHtml(sale: any, settings: any): string {
           line-height: 1.4;
           color: #000000;
           background-color: #ffffff;
-          padding: 4px;
-          width: ${width === "58mm" ? "54mm" : "76mm"};
+          padding: 2px;
+          width: ${width === "58mm" ? "44mm" : "70mm"};
           margin: 0 auto;
         }
         .text-center {

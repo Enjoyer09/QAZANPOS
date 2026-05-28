@@ -89,9 +89,10 @@ export class QzTrayService {
       }
 
       const widthVal = options.width || "80mm";
+      const printableWidth = widthVal === "58mm" ? 48 : 72;
       const config = qz.configs.create(printerName, {
         units: "mm",
-        size: { width: parseFloat(widthVal) || 80, height: 300 },
+        size: { width: printableWidth, height: 300 },
         margins: 0,
         scaleContent: false
       });
