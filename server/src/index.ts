@@ -3,6 +3,7 @@ import cors from "cors";
 import router from "./routes.js";
 import path from "path";
 import { fileURLToPath } from "url";
+import { eq, desc } from "drizzle-orm";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -144,8 +145,83 @@ async function ensureDefaultTenantsAndUsers() {
   }
 }
 
+async function selfHealDatabaseTotals() {
+  try {
+    console.log("Database Self-Healing: Checking for incomplete financial records...");
+    
+    // Fetch all sales (with their items loaded)
+    const salesList = await db.query.sales.findMany({
+      with: { items: true }
+    });
+    
+    let healedSalesCount = 0;
+    
+    for (const sale of salesList) {
+      const isTotalAmountCorrupt = !sale.totalAmount || isNaN(sale.totalAmount) || sale.totalAmount === 0;
+      
+      if (isTotalAmountCorrupt) {
+        console.log(`Self-Healing: Repairing Sale #${sale.id.toString().padStart(5, "0")}...`);
+        
+        let calculatedTotalAmount = 0;
+        let calculatedTotalCost = 0;
+        
+        for (const item of sale.items) {
+          const qty = item.quantity || 0;
+          const price = item.salePrice || 0;
+          let cost = item.purchasePrice || 0;
+          
+          // If purchasePrice is 0 (missing snapshot), try to find the product's actual last purchase price from stock entries
+          if (cost === 0) {
+            const latestEntry = await db
+              .select({ price: schema.stockEntries.purchasePrice })
+              .from(schema.stockEntries)
+              .where(eq(schema.stockEntries.productId, item.productId))
+              .orderBy(desc(schema.stockEntries.entryDate))
+              .limit(1);
+            
+            if (latestEntry && latestEntry.length > 0) {
+              cost = latestEntry[0].price || price;
+            } else {
+              cost = price;
+            }
+            
+            // Update the saleItem with the reconstructed purchasePrice
+            await db.update(schema.saleItems)
+              .set({ purchasePrice: cost })
+              .where(eq(schema.saleItems.id, item.id));
+            console.log(`  -> Repaired SaleItem #${item.id} (Product ID: ${item.productId}, Reconstructed Cost: ${cost} ₼)`);
+          }
+          
+          calculatedTotalAmount += qty * price;
+          calculatedTotalCost += qty * cost;
+        }
+        
+        // Update the main sale record with corrected totals
+        await db.update(schema.sales)
+          .set({
+            totalAmount: calculatedTotalAmount,
+            totalCost: calculatedTotalCost
+          })
+          .where(eq(schema.sales.id, sale.id));
+          
+        console.log(`  -> Completed Sale #${sale.id}: Set Total Amount = ${calculatedTotalAmount} ₼, Total Cost = ${calculatedTotalCost} ₼`);
+        healedSalesCount++;
+      }
+    }
+    
+    if (healedSalesCount > 0) {
+      console.log(`Database Self-Healing: Successfully repaired ${healedSalesCount} sale transaction(s)!`);
+    } else {
+      console.log("Database Self-Healing: All financial transaction records are healthy.");
+    }
+  } catch (error) {
+    console.error("Database Self-Healing error:", error);
+  }
+}
+
 app.listen(PORT, async () => {
   console.log(`Server listening on port ${PORT}`);
   await ensureDefaultTenantsAndUsers();
+  await selfHealDatabaseTotals();
 });
 

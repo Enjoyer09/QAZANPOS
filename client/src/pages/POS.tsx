@@ -326,10 +326,13 @@ export default function POS() {
       paymentType,
       creditDueDate: isCredit ? creditDueDate : null,
       notes: notes.trim() || null,
+      totalAmount,
+      totalCost,
       items: basket.map((item) => ({
         productId: item.productId,
         quantity: item.quantity,
         salePrice: item.salePrice,
+        purchasePrice: item.minPrice,
       })),
     };
 
