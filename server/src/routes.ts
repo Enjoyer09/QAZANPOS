@@ -69,7 +69,7 @@ function requireAdmin(req: any, res: any, next: any) {
 // Middleware to verify active tenant is the Super Admin control plane
 function requireSuperAdmin(req: any, res: any, next: any) {
   const role = req.headers["x-user-role"];
-  if (req.tenantId !== 2 || role !== "Admin") {
+  if (req.tenantSlug !== "super" || role !== "Admin") {
     return res.status(403).json({ message: "Bu əməliyyat üçün yalnız Platforma Administratoru səlahiyyəti tələb olunur." });
   }
   next();
