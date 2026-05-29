@@ -15,6 +15,7 @@ interface Sale {
   totalAmount: number;
   totalCost: number;
   paymentStatus: string;
+  items?: any[];
 }
 
 const paymentBadges: Record<string, string> = {
@@ -211,6 +212,15 @@ export default function SalesHistory() {
                         <span className="font-bold text-gray-900 block">{sale.customerName || "Nəğd Satış"}</span>
                         {sale.customerPhone && (
                           <span className="text-[10px] text-gray-400 mt-0.5 block">{sale.customerPhone}</span>
+                        )}
+                        {sale.items && sale.items.length > 0 && (
+                          <div className="text-[10px] text-gray-400 font-medium mt-1.5 flex flex-wrap gap-1">
+                            {sale.items.map((item: any) => (
+                              <span key={item.id} className="inline-flex items-center bg-gray-50 text-gray-600 px-1.5 py-0.5 rounded-md border border-gray-100 text-[9px] font-bold">
+                                {item.product?.name || item.productName || "Məhsul"} ({item.quantity} {item.product?.unit || "ədəd"})
+                              </span>
+                            ))}
+                          </div>
                         )}
                       </td>
                       <td className="p-4 text-gray-500 font-medium">

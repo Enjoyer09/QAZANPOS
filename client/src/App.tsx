@@ -37,6 +37,7 @@ import StockIn from "./pages/StockIn.tsx";
 import POS from "./pages/POS.tsx";
 import SalesHistory from "./pages/SalesHistory.tsx";
 import Invoice from "./pages/Invoice.tsx";
+import ReturnInvoice from "./pages/ReturnInvoice.tsx";
 import Customers from "./pages/Customers.tsx";
 import Debts from "./pages/Debts.tsx";
 import Expenses from "./pages/Expenses.tsx";
@@ -864,6 +865,7 @@ function MainRoutes({ user, onLogout }: { user: any; onLogout: () => void }) {
           {isAdmin && <Route path="/etiketler" component={Labels} />}
           <Route path="/satislar" component={SalesHistory} />
           <Route path="/satislar/:id" component={Invoice} />
+          <Route path="/qaytarislar/:id" component={ReturnInvoice} />
           {isAdmin && <Route path="/xercler" component={Expenses} />}
           {isAdmin && <Route path="/loqlar" component={Logs} />}
           <Route path="/ayarlar" component={SettingsPage} />

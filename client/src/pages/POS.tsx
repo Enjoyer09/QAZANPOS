@@ -1032,25 +1032,21 @@ export default function POS() {
               <div className="grid grid-cols-2 gap-2 text-xs font-bold">
                 <button
                   onClick={() => {
-                    if (lastCreatedSale.customerName === "Qaytarış") {
-                      toast({
-                        title: "Məlumat ℹ️",
-                        description: "Sürətli qaytarışın ayrıca qaimə vərəqi yoxdur.",
-                        variant: "default",
-                      });
-                      return;
-                    }
-                    if (!isOnline) {
+                    if (lastCreatedSale.id && lastCreatedSale.id.toString().startsWith("OFL")) {
                       toast({
                         title: "Oflayn Rejim Məhdudiyyəti 🔒",
-                        description: "Oflayn satışların ətraflı fakturasına yalnız sinxronizasiyadan sonra (onlayn rejimdə) baxıla bilər.",
+                        description: "Oflayn əməliyyatların ətraflı fakturasına yalnız sinxronizasiyadan sonra (onlayn rejimdə) baxıla bilər.",
                         variant: "destructive",
                       });
                       return;
                     }
                     const sId = lastCreatedSale.id;
                     handleResetPOS();
-                    setLocation(`/satislar/${sId}`);
+                    if (lastCreatedSale.customerName === "Qaytarış") {
+                      setLocation(`/qaytarislar/${sId}`);
+                    } else {
+                      setLocation(`/satislar/${sId}`);
+                    }
                   }}
                   className="py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl cursor-pointer hover:bg-gray-50 transition-all flex items-center justify-center gap-1.5 animate-pulse"
                 >

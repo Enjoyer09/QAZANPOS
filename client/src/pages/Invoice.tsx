@@ -351,14 +351,14 @@ export default function Invoice({ params }: InvoiceProps) {
                   return (
                     <tr key={item.id} className="border-b border-gray-50 text-xs">
                       <td className="py-4 font-bold text-gray-900 flex items-center flex-wrap gap-2">
-                        <span>{item.productName}</span>
+                        <span>{item.product?.name || item.productName || "Məhsul"}</span>
                         {returnedQty > 0 && (
                           <span className="bg-amber-50 text-amber-700 border border-amber-100 px-2 py-0.5 rounded-full text-[9px] font-bold">
-                            Qaytarılıb: {returnedQty} {item.unit}
+                            Qaytarılıb: {returnedQty} {item.product?.unit || item.unit || "ədəd"}
                           </span>
                         )}
                       </td>
-                      <td className="py-4 text-right text-gray-500 font-medium">{item.unit}</td>
+                      <td className="py-4 text-right text-gray-500 font-medium">{item.product?.unit || item.unit || "ədəd"}</td>
                       <td className="py-4 text-right font-semibold text-gray-800 font-mono">{item.quantity}</td>
                       <td className="py-4 text-right text-gray-600 font-mono">{Number(item.salePrice || 0).toFixed(2)} ₼</td>
                       <td className="py-4 text-right font-bold text-gray-950 font-mono pr-2">
@@ -431,7 +431,7 @@ export default function Invoice({ params }: InvoiceProps) {
                       <div className="text-[10px] space-y-1 text-gray-500 border-t border-gray-100/50 pt-1.5">
                         {(r.items || []).map((item: any) => (
                           <div key={item.id} className="flex justify-between">
-                            <span>• {item.productName || `Məhsul (ID: ${item.productId})`} ({item.quantity} ədəd)</span>
+                            <span>• {item.product?.name || item.productName || `Məhsul (ID: ${item.productId})`} ({item.quantity} {item.product?.unit || item.unit || "ədəd"})</span>
                             <span className="font-medium">{item.status === "returned_to_stock" ? "🟢 Anbara" : "🔴 Deffekt"}</span>
                           </div>
                         ))}
@@ -552,9 +552,9 @@ export default function Invoice({ params }: InvoiceProps) {
                     <div key={item.id} className="p-4 bg-gray-50/50 border border-gray-100 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 animate-in slide-in-from-top-2">
                       {/* Name */}
                       <div className="flex-1">
-                        <span className="font-bold text-gray-900 block text-xs">{item.productName}</span>
+                        <span className="font-bold text-gray-900 block text-xs">{item.product?.name || item.productName || "Məhsul"}</span>
                         <span className="text-[10px] text-gray-400 mt-1 block">
-                          Satılıb: {item.quantity} {item.unit} | Qaytarıla bilər: {maxQty} {item.unit}
+                          Satılıb: {item.quantity} {item.product?.unit || item.unit || "ədəd"} | Qaytarıla bilər: {maxQty} {item.product?.unit || item.unit || "ədəd"}
                         </span>
                       </div>
 

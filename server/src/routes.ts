@@ -897,12 +897,15 @@ router.get("/customers/:id/sales", async (req, res) => {
 // 4. SALES ENDPOINTS
 // ----------------------------------------------------
 
-// List sales history
 router.get("/sales", async (req, res) => {
   try {
     const list = await db.query.sales.findMany({
       where: eq(schema.sales.tenantId, req.tenantId),
-      with: { payments: true, returns: { with: { items: true } } },
+      with: { 
+        payments: true, 
+        returns: { with: { items: true } },
+        items: { with: { product: true } }
+      },
       orderBy: [desc(schema.sales.saleDate)],
     });
     res.json(list);
@@ -1033,7 +1036,7 @@ router.get("/sales/:id", async (req, res) => {
       with: { 
         items: { with: { product: true } }, 
         payments: true,
-        returns: { with: { items: true } }
+        returns: { with: { items: { with: { product: true } } } }
       },
     });
 
@@ -1151,6 +1154,33 @@ router.get("/returns", async (req, res) => {
     res.json(list);
   } catch (error) {
     res.status(500).json({ message: "Geri qaytarış tarixçəsini gətirərkən xəta baş verdi" });
+  }
+});
+
+// Fetch return details by ID
+router.get("/returns/:id", async (req, res) => {
+  try {
+    const returnId = parseInt(req.params.id);
+    const ret = await db.query.returns.findFirst({
+      where: and(eq(schema.returns.id, returnId), eq(schema.returns.tenantId, req.tenantId)),
+      with: {
+        items: {
+          with: {
+            product: true
+          }
+        },
+        sale: true
+      },
+    });
+
+    if (!ret) {
+      return res.status(404).json({ message: "Qaytarış tapılmadı" });
+    }
+
+    res.json(ret);
+  } catch (error: any) {
+    console.error("Fetch return error:", error);
+    res.status(500).json({ message: "Geri qaytarış məlumatlarını gətirərkən xəta baş verdi: " + error.message });
   }
 });
 
