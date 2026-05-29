@@ -1672,8 +1672,8 @@ export default function SettingsPage() {
       )}
 
       {showResetConfirmModal && (
-        <div className="fixed inset-0 bg-black/55 backdrop-blur-xs z-100 flex items-center justify-center p-4 animate-in fade-in-0 duration-200">
-          <div className="bg-white rounded-3xl border border-red-100 p-8 shadow-2xl max-w-md w-full relative space-y-6 text-center animate-in zoom-in-95 duration-200">
+        <div className="liquid-glass-overlay">
+          <div className="liquid-glass-card max-w-md p-8 text-center space-y-6">
             <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-red-500 to-amber-500 rounded-t-3xl"></div>
             
             <div className="size-16 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center mx-auto mb-2 animate-bounce">
@@ -1786,8 +1786,8 @@ export default function SettingsPage() {
 
       {/* Change Password Modal Overlay */}
       {selectedUserToReset && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs z-100 flex items-center justify-center p-4 animate-in fade-in-0">
-          <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-2xl max-w-sm w-full relative space-y-4">
+        <div className="liquid-glass-overlay">
+          <div className="liquid-glass-card max-w-sm p-6 space-y-4">
             <h3 className="font-extrabold text-gray-900 text-sm border-b border-gray-50 pb-2">
               '{selectedUserToReset.username}' üçün Şifrəni Yenilə
             </h3>
@@ -1837,8 +1837,8 @@ export default function SettingsPage() {
 
       {/* 2FA Setup Modal Overlay */}
       {show2FASetupModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs z-100 flex items-center justify-center p-4 animate-in fade-in-0">
-          <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-2xl max-w-sm w-full relative space-y-5 animate-in zoom-in-95 duration-200 text-center">
+        <div className="liquid-glass-overlay">
+          <div className="liquid-glass-card max-w-sm p-6 text-center space-y-5">
             
             <div className="size-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto text-primary">
               <Lock className="w-6 h-6" />

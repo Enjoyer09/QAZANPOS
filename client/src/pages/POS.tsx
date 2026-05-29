@@ -1313,8 +1313,8 @@ export default function POS() {
 
       {/* Success Modal Overlay */}
       {showSuccessModal && lastCreatedSale && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in-0 duration-300">
-          <div className="bg-white border border-gray-100 p-8 rounded-3xl max-w-md w-full shadow-2xl relative text-center space-y-6 animate-in zoom-in-95 duration-300">
+        <div className="liquid-glass-overlay !z-100">
+          <div className="liquid-glass-card max-w-md p-8 text-center space-y-6">
             
             {/* Success Icon */}
             <div className={`mx-auto size-16 rounded-full flex items-center justify-center border shadow-sm ${

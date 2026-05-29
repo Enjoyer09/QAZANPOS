@@ -751,8 +751,8 @@ export default function Payroll() {
 
       {/* MODAL 1: ADD EMPLOYEE */}
       {isAddEmpModalOpen && (
-        <div className="fixed inset-0 z-100 bg-gray-950/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-gray-100 rounded-3xl w-full max-w-md shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-200 text-left">
+        <div className="liquid-glass-overlay">
+          <div className="liquid-glass-card max-w-md p-6">
             <h3 className="text-base font-black text-gray-900 tracking-tight flex items-center gap-2 border-b border-gray-100 pb-3">
               <Users className="w-5 h-5 text-primary" />
               <span>Yeni Əməkdaş Reyestri</span>
@@ -871,8 +871,8 @@ export default function Payroll() {
 
       {/* MODAL 2: EDIT EMPLOYEE */}
       {isEditEmpModalOpen && selectedEmployee && (
-        <div className="fixed inset-0 z-100 bg-gray-950/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-gray-100 rounded-3xl w-full max-w-md shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-200 text-left">
+        <div className="liquid-glass-overlay">
+          <div className="liquid-glass-card max-w-md p-6">
             <h3 className="text-base font-black text-gray-900 tracking-tight flex items-center gap-2 border-b border-gray-100 pb-3">
               <Edit2 className="w-4 h-4 text-primary" />
               <span>Əməkdaş Məlumatlarını Redaktə Et</span>
@@ -1004,8 +1004,8 @@ export default function Payroll() {
 
       {/* MODAL 3: ADJUST BONUSES & DEDUCTIONS */}
       {isAdjustModalOpen && selectedPayroll && (
-        <div className="fixed inset-0 z-100 bg-gray-950/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-gray-100 rounded-3xl w-full max-w-sm shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-200 text-left">
+        <div className="liquid-glass-overlay">
+          <div className="liquid-glass-card max-w-sm p-6">
             <h3 className="text-base font-black text-gray-900 tracking-tight flex items-center gap-2 border-b border-gray-100 pb-3">
               <Percent className="w-5 h-5 text-indigo-600" />
               <span>Maaş Tənzimlənməsi (Bonus/Cərimə)</span>
@@ -1083,8 +1083,8 @@ export default function Payroll() {
 
       {/* MODAL 4: DISBURSE MAAS PAYMENT */}
       {isPayModalOpen && selectedPayroll && (
-        <div className="fixed inset-0 z-100 bg-gray-950/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-gray-100 rounded-3xl w-full max-w-sm shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-200 text-left">
+        <div className="liquid-glass-overlay">
+          <div className="liquid-glass-card max-w-sm p-6">
             <h3 className="text-base font-black text-gray-900 tracking-tight flex items-center gap-2 border-b border-gray-100 pb-3">
               <DollarSign className="w-5 h-5 text-emerald-600" />
               <span>Əməkhaqqı Ödənişi</span>
@@ -1171,8 +1171,8 @@ export default function Payroll() {
 
       {/* MODAL 5: SALARY PAYMENT HISTORY LEDGER */}
       {isHistoryModalOpen && selectedPayroll && (
-        <div className="fixed inset-0 z-100 bg-gray-950/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-gray-100 rounded-3xl w-full max-w-md shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-200 text-left">
+        <div className="liquid-glass-overlay">
+          <div className="liquid-glass-card max-w-md p-6">
             <h3 className="text-base font-black text-gray-900 tracking-tight flex items-center gap-2 border-b border-gray-100 pb-3">
               <History className="w-5 h-5 text-gray-700" />
               <span>{selectedPayroll.employee?.name} - Maaş Ödənişləri</span>

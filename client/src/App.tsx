@@ -771,8 +771,8 @@ function OverdueDebtCheck() {
   if (!isOpen || !overdueList || overdueList.length === 0) return null;
 
   return (
-    <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in-0">
-      <div className="bg-white rounded-2xl border border-red-100 p-6 shadow-2xl max-w-md w-full relative">
+    <div className="liquid-glass-overlay">
+      <div className="liquid-glass-card max-w-md p-6">
         <div className="flex items-center gap-3 text-red-600 mb-4">
           <div className="size-10 rounded-full bg-red-50 flex items-center justify-center">
             <AlertTriangle className="w-6 h-6" />

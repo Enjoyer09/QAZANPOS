@@ -272,8 +272,8 @@ export default function Products() {
 
       {/* 1. EDIT / CREATE MODAL */}
       {isOpen && (
-        <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in-0">
-          <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-2xl max-w-md w-full relative">
+        <div className="liquid-glass-overlay">
+          <div className="liquid-glass-card max-w-md p-6">
             <div className="flex items-center justify-between pb-4 border-b border-gray-50 mb-5">
               <h3 className="font-extrabold text-gray-900 text-lg leading-tight">
                 {editingId ? "Məhsulu Düzəlt" : "Yeni Məhsul"}
@@ -387,8 +387,8 @@ export default function Products() {
 
       {/* 2. CONFIRM DELETE MODAL */}
       {deleteId !== null && (
-        <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in-0">
-          <div className="bg-white rounded-2xl border border-red-50 p-6 shadow-2xl max-w-sm w-full relative">
+        <div className="liquid-glass-overlay">
+          <div className="liquid-glass-card max-w-sm p-6">
             <h3 className="font-bold text-gray-900 text-base leading-tight">Silməyi təsdiqləyin</h3>
             <p className="text-xs text-gray-600 mt-2 leading-relaxed">
               Bu məhsulu silmək istədiyinizə əminsiniz? Bu əməliyyat geri qaytarıla bilməz və məhsulla əlaqəli bütün satış və mədaxil tarixçəsinə təsir edə bilər.

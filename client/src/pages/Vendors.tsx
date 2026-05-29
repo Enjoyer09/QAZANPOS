@@ -665,8 +665,8 @@ export default function Vendors() {
 
       {/* MODAL 1: YENİ TƏDARÜKÇÜ */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-100 bg-black/60 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-white border border-gray-200 rounded-3xl w-full max-w-md shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-200 text-left">
+        <div className="liquid-glass-overlay">
+          <div className="liquid-glass-card max-w-md p-6">
             <h3 className="text-lg font-black text-gray-900 tracking-tight flex items-center gap-2 border-b border-gray-100 pb-3 text-left">
               <Truck className="w-5 h-5 text-primary" />
               <span>Yeni Topdansatış Tədarükçüsü</span>
@@ -754,8 +754,8 @@ export default function Vendors() {
 
       {/* MODAL 2: TƏDARÜKÇÜYƏ ÖDƏNİŞ ET */}
       {isPayModalOpen && selectedVendor && (
-        <div className="fixed inset-0 z-100 bg-black/60 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-white border border-gray-200 rounded-3xl w-full max-w-sm shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-200 text-left">
+        <div className="liquid-glass-overlay">
+          <div className="liquid-glass-card max-w-sm p-6">
             <h3 className="text-lg font-black text-gray-900 tracking-tight flex items-center gap-2 border-b border-gray-100 pb-3 text-left">
               <DollarSign className="w-5 h-5 text-emerald-600" />
               <span>Tədarükçüyə Ödəniş</span>

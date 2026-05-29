@@ -533,8 +533,8 @@ export default function Invoice({ params }: InvoiceProps) {
 
       {/* Geri Qaytarış Modal Overlay */}
       {showReturnModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in-0 duration-300">
-          <div className="bg-white border border-gray-100 p-6 rounded-3xl max-w-xl w-full shadow-2xl relative space-y-6 animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto">
+        <div className="liquid-glass-overlay">
+          <div className="liquid-glass-card max-w-xl p-6 relative space-y-6">
             
             {/* Header */}
             <div className="flex justify-between items-start">

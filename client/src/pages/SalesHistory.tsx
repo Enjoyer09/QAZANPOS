@@ -198,7 +198,7 @@ export default function SalesHistory() {
           }`}
         >
           <AlertCircle className="w-4 h-4 text-red-500" />
-          Mayadan Ucuz Satışlar
+          Endirim Məbləği
         </button>
         <button
           onClick={() => setActiveTab("warranty")}
@@ -431,10 +431,10 @@ export default function SalesHistory() {
                     <th className="p-4">Məhsul</th>
                     <th className="p-4">Müştəri / Tarix</th>
                     <th className="p-4 text-right">Maya (Alış)</th>
-                    <th className="p-4 text-right">Satış (Ödəniş)</th>
+                    <th className="p-4 text-right">Ödəniş</th>
                     <th className="p-4 text-center">Miqdar</th>
                     <th className="p-4 text-right">Endirim (Vahid)</th>
-                    <th className="p-4 text-right pr-6">Yekun İtki</th>
+                    <th className="p-4 text-right pr-6">Yekun</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50 text-xs font-bold text-gray-600">

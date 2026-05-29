@@ -226,10 +226,10 @@ export default function LabelPrintModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-100 flex items-center justify-center p-4 animate-in fade-in-0 duration-300">
+    <div className="liquid-glass-overlay">
       
       {/* Modal Container */}
-      <div className="bg-white rounded-3xl border border-gray-100 p-8 shadow-2xl max-w-4xl w-full relative grid grid-cols-1 md:grid-cols-12 gap-8 animate-in zoom-in-95 duration-200">
+      <div className="liquid-glass-card max-w-4xl p-8 grid grid-cols-1 md:grid-cols-12 gap-8">
         
         {/* Close Button */}
         <button 

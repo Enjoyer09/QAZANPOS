@@ -38,11 +38,11 @@ export default function LimitReachedModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-150 flex items-center justify-center p-4 animate-in fade-in-0 duration-300">
+    <div className="liquid-glass-overlay !z-[150]">
       {/* Glow highlight background */}
       <div className="absolute size-[400px] rounded-full bg-amber-500/10 blur-[100px] z-0 animate-pulse"></div>
 
-      <div className="bg-white/80 border border-amber-200/50 rounded-3xl p-8 shadow-2xl max-w-md w-full relative z-10 space-y-6 glass-card border-t-4 border-t-amber-500 animate-in zoom-in-95 duration-200">
+      <div className="liquid-glass-card max-w-md p-8 border-t-4 border-t-amber-500 space-y-6 !z-10">
         
         {/* Close Button */}
         <button
