@@ -7,6 +7,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { verifyTOTP, generateSecret, getOTPAuthURI } from "./db/totp.js";
+import { sendTelegramNotification } from "./lib/telegram.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -618,6 +619,9 @@ router.post("/stock/entries", requireAdmin, async (req, res) => {
     );
 
     res.json(newEntry[0]);
+
+    // Send Telegram Notification in fire-and-forget background thread
+    sendTelegramNotification(req.tenantId, `📦 <b>Yeni Mal Mədaxili!</b>\n\n<b>Məhsul:</b> ${productName}\n<b>Miqdar:</b> ${quantity} ${unit}\n<b>Alış Qiyməti:</b> <code>${purchasePrice} ₼</code>\n<b>Tədarükçü:</b> ${supplier || "Yoxdur"}\n<b>Ödəniş Üsulu:</b> ${paymentType}`).catch(err => console.error("Telegram notification failed:", err));
   } catch (error) {
     res.status(500).json({ message: "Mədaxil edilərkən xəta baş verdi" });
   }
@@ -961,6 +965,9 @@ router.post("/sales", async (req, res) => {
     );
 
     res.json(newSale[0]);
+
+    // Send Telegram Notification in background
+    sendTelegramNotification(req.tenantId, `⚡ <b>Yeni POS Satışı!</b>\n\n<b>Çek №:</b> <code>${saleId}</code>\n<b>Müştəri:</b> ${customerName}\n<b>Ödəniş Üsulu:</b> ${paymentType}\n<b>Ümumi Məbləğ:</b> <code>${parseFloat(totalAmount).toFixed(2)} ₼</code>\n<b>Maya Dəyəri:</b> <code>${parseFloat(totalCost).toFixed(2)} ₼</code>\n<b>Gəlir:</b> <code>${(parseFloat(totalAmount) - parseFloat(totalCost)).toFixed(2)} ₼</code>`).catch(err => console.error("Telegram notification failed:", err));
   } catch (error) {
     res.status(500).json({ message: "Satış tamamlanarkən xəta baş verdi" });
   }
@@ -1797,6 +1804,60 @@ router.put("/settings", requireAdmin, async (req, res) => {
     res.json(updated[0]);
   } catch (error) {
     res.status(500).json({ message: "Ayarları yeniləyərkən xəta baş verdi" });
+  }
+});
+
+router.post("/settings/test-telegram", requireAdmin, async (req, res) => {
+  try {
+    const { token, chatId } = req.body;
+    if (!token || !chatId) {
+      return res.status(400).json({ message: "Bot tokeni və Chat ID daxil edilməlidir" });
+    }
+
+    const testMessage = `🤖 <b>BirSaaS POS Telegram Bot bağlantısı uğurludur!</b>\n\nBu çat vasitəsilə mağazanızda baş verən anlıq satışlar, anbar mədaxilləri və əməkhaqqı ödənişləri barədə anlıq bildirişlər alacaqsınız.\n\n<b>Vaxt:</b> <code>${new Date().toLocaleString("az-AZ")}</code>`;
+
+    // Make manual request to test credentials
+    const url = `https://api.telegram.org/bot${token.trim()}/sendMessage`;
+    const payload = JSON.stringify({
+      chat_id: chatId.trim(),
+      text: testMessage,
+      parse_mode: "HTML",
+    });
+
+    const https = await import("https");
+    const options = {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(payload),
+      },
+    };
+
+    const request = https.request(url, options, (response) => {
+      let data = "";
+      response.on("data", (chunk) => { data += chunk; });
+      response.on("end", () => {
+        try {
+          const parsed = JSON.parse(data);
+          if (parsed.ok) {
+            res.json({ success: true, message: "Test mesajı uğurla göndərildi!" });
+          } else {
+            res.status(400).json({ message: `Telegram xətası: ${parsed.description}` });
+          }
+        } catch (e) {
+          res.status(500).json({ message: "Telegram cavabını oxuyarkən xəta baş verdi" });
+        }
+      });
+    });
+
+    request.on("error", (e) => {
+      res.status(500).json({ message: `Bağlantı xətası: ${e.message}` });
+    });
+
+    request.write(payload);
+    request.end();
+  } catch (error) {
+    res.status(500).json({ message: "Sınaq göndərişi zamanı texniki xəta baş verdi" });
   }
 });
 
@@ -2841,6 +2902,9 @@ router.post("/payroll/:id/payments", requireAdmin, async (req, res) => {
     );
 
     res.json(newPayment[0]);
+
+    // Send Telegram Notification in background
+    sendTelegramNotification(req.tenantId, `👥 <b>Əməkhaqqı Ödənişi!</b>\n\n<b>Əməkdaş:</b> ${record.employee.name}\n<b>Vəzifə:</b> ${record.employee.position}\n<b>Ödənilən Məbləğ:</b> <code>${parseFloat(amount).toFixed(2)} ₼</code>\n<b>Hesablanma Ayı:</b> ${record.payrollMonth}\n<b>Kassa Ödəniş Üsulu:</b> ${paymentType}`).catch(err => console.error("Telegram notification failed:", err));
   } catch (error) {
     res.status(500).json({ message: "Əməkhaqqı ödənişi edilərkən xəta baş verdi" });
   }

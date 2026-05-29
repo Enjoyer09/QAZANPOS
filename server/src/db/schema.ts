@@ -238,6 +238,9 @@ export const settings = pgTable("settings", {
   showReceiptHeader: integer("show_receipt_header").notNull().default(1),
   showReceiptFooter: integer("show_receipt_footer").notNull().default(1),
   showPaymentDetails: integer("show_payment_details").notNull().default(1),
+  telegramBotToken: text("telegram_bot_token"),
+  telegramChatId: text("telegram_chat_id"),
+  telegramNotificationsEnabled: integer("telegram_notifications_enabled").notNull().default(0),
 });
 
 // 9. Users Table for Authentication & Authorization

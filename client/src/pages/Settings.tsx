@@ -17,6 +17,8 @@ import {
   Lock,
   ShieldCheck,
   User,
+  Send,
+  Bell,
 } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
 import { qzService } from "../lib/qz.ts";
@@ -32,6 +34,12 @@ export default function SettingsPage() {
   const [invoiceFooter, setInvoiceFooter] = useState("");
   const [lowStockAlertCount, setLowStockAlertCount] = useState("5");
   const [defaultCreditDays, setDefaultCreditDays] = useState("30");
+
+  // Telegram Notifications State
+  const [telegramBotToken, setTelegramBotToken] = useState("");
+  const [telegramChatId, setTelegramChatId] = useState("");
+  const [telegramNotificationsEnabled, setTelegramNotificationsEnabled] = useState(0);
+  const [isTestingTelegram, setIsTestingTelegram] = useState(false);
 
   // Thermal Receipt Design State
   const [receiptWidth, setReceiptWidth] = useState("80mm");
@@ -252,6 +260,10 @@ export default function SettingsPage() {
       setShowReceiptHeader(settingsData.showReceiptHeader ?? 1);
       setShowReceiptFooter(settingsData.showReceiptFooter ?? 1);
       setShowPaymentDetails(settingsData.showPaymentDetails ?? 1);
+      
+      setTelegramBotToken(settingsData.telegramBotToken || "");
+      setTelegramChatId(settingsData.telegramChatId || "");
+      setTelegramNotificationsEnabled(settingsData.telegramNotificationsEnabled ?? 0);
     }
   }, [settingsData]);
 
@@ -417,6 +429,52 @@ export default function SettingsPage() {
     },
   });
 
+  const handleTestTelegram = async () => {
+    if (!telegramBotToken || !telegramChatId) {
+      toast({
+        title: "Xəta!",
+        description: "Lütfən, öncə Telegram Bot Token və Chat ID məlumatlarını doldurun.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsTestingTelegram(true);
+    try {
+      const res = await fetch("/api/settings/test-telegram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token: telegramBotToken,
+          chatId: telegramChatId
+        })
+      });
+      
+      const data = await res.json();
+      if (res.ok) {
+        toast({
+          title: "Uğurlu Bağlantı! 🤖",
+          description: "Telegram botunuza test mesajı göndərildi. Zəhmət olmasa çatınızı yoxlayın.",
+          variant: "success"
+        });
+      } else {
+        toast({
+          title: "Telegram Xətası!",
+          description: data.message || "Bot bağlantısı qurula bilmədi.",
+          variant: "destructive"
+        });
+      }
+    } catch (err) {
+      toast({
+        title: "Texniki Xəta!",
+        description: "Serverlə bağlantı kəsildi.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsTestingTelegram(false);
+    }
+  };
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -447,6 +505,9 @@ export default function SettingsPage() {
       showReceiptHeader,
       showReceiptFooter,
       showPaymentDetails,
+      telegramBotToken: telegramBotToken.trim() || null,
+      telegramChatId: telegramChatId.trim() || null,
+      telegramNotificationsEnabled,
     };
 
     updateSettingsMutation.mutate(payload);
@@ -793,6 +854,79 @@ export default function SettingsPage() {
                   >
                     <Printer className="w-4 h-4 inline-block" /> Sertifikatı Yüklə
                   </a>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Card: Telegram Notification Bot (Instant Owner Notifications) */}
+          <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card">
+            <div className="flex items-center gap-2 mb-6 border-b border-gray-100/50 pb-3">
+              <Bell className="w-5 h-5 text-primary" />
+              <h3 className="font-extrabold text-gray-900 text-sm">🤖 Telegram Bildiriş Botu (Instant Notifications)</h3>
+            </div>
+
+            <div className="space-y-4 text-xs font-semibold text-left">
+              <p className="text-gray-400 font-medium leading-normal mb-4">
+                Mağazanızda baş verən kritik hadisələrdən (böyük POS satışları, mal mədaxilləri və əməkhaqqı ödənişləri) anında Telegram vasitəsilə xəbərdar olun.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Telegram Bot Token</label>
+                  <input
+                    type="text"
+                    placeholder="Məsələn: 123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ"
+                    value={telegramBotToken}
+                    onChange={(e) => setTelegramBotToken(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Telegram Chat ID</label>
+                  <input
+                    type="text"
+                    placeholder="Məsələn: 987654321 və ya -100123456789"
+                    value={telegramChatId}
+                    onChange={(e) => setTelegramChatId(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-primary/5 rounded-2xl p-5 border border-primary/10 mt-4 font-bold">
+                <div className="space-y-1">
+                  <span className="font-extrabold text-primary text-xs uppercase tracking-wider block">
+                    Telegram Bildirişləri
+                  </span>
+                  <p className="text-[10px] text-gray-400 font-medium leading-normal">
+                    Kritik mağaza əməliyyatlarının anlıq ötürülməsini aktivləşdirin.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={handleTestTelegram}
+                    disabled={isTestingTelegram}
+                    className="px-5 py-2.5 bg-gray-900 text-white hover:bg-gray-800 font-bold text-xs rounded-xl cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5 transition-all text-center w-full sm:w-auto font-black"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>{isTestingTelegram ? "Test Edilir..." : "Bağlantını Test Et 🤖"}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setTelegramNotificationsEnabled(prev => prev === 1 ? 0 : 1)}
+                    className={`px-5 py-2.5 rounded-xl font-bold text-xs cursor-pointer border transition-all w-full sm:w-auto font-black ${
+                      telegramNotificationsEnabled === 1
+                        ? "bg-green-500 text-white border-green-500 hover:bg-green-600"
+                        : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
+                    }`}
+                  >
+                    {telegramNotificationsEnabled === 1 ? "Aktivdir 👍" : "Deaktivdir ❌"}
+                  </button>
                 </div>
               </div>
             </div>
