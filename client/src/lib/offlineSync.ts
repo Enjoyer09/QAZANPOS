@@ -119,129 +119,157 @@ export function saveOfflineReturn(returnPayload: any): any {
 }
 
 // 3. Background Synchronization Engine
-let isSyncing = false;
+const SYNC_LOCK_KEY = "qazan_pos_sync_lock";
+const LOCK_TIMEOUT_MS = 30000; // 30 seconds
+
+function acquireSyncLock(): boolean {
+  const now = Date.now();
+  const lock = localStorage.getItem(SYNC_LOCK_KEY);
+  if (lock) {
+    const lockTime = parseInt(lock);
+    if (now - lockTime < LOCK_TIMEOUT_MS) {
+      return false; // Lock is active and not expired
+    }
+  }
+  localStorage.setItem(SYNC_LOCK_KEY, now.toString());
+  return true;
+}
+
+function releaseSyncLock() {
+  localStorage.removeItem(SYNC_LOCK_KEY);
+}
 
 export async function syncOfflineSalesToServer(onSuccessToast?: (count: number) => void): Promise<boolean> {
-  if (isSyncing) return false;
-  if (!navigator.onLine) return false;
+  if (!acquireSyncLock()) return false;
+  if (!navigator.onLine) {
+    releaseSyncLock();
+    return false;
+  }
 
   const queue = getOfflineSalesQueue();
-  if (queue.length === 0) return false;
+  if (queue.length === 0) {
+    releaseSyncLock();
+    return false;
+  }
 
-  isSyncing = true;
   console.log(`SyncEngine: Found ${queue.length} offline sale(s) to synchronize.`);
 
   const successfulIds: string[] = [];
 
-  for (const sale of queue) {
-    try {
-      // Map back local sale structure to clean backend post body
-      const postBody = {
-        customerId: sale.customerId,
-        paymentType: sale.paymentType,
-        creditDueDate: sale.creditDueDate,
-        notes: sale.notes,
-        totalAmount: sale.totalAmount,
-        totalCost: sale.totalCost,
-        items: sale.items.map((item: any) => ({
-          productId: item.productId,
-          quantity: item.quantity,
-          salePrice: item.salePrice,
-          purchasePrice: item.purchasePrice,
-        })),
-      };
+  try {
+    for (const sale of queue) {
+      try {
+        // Map back local sale structure to clean backend post body with offlineId
+        const postBody = {
+          customerId: sale.customerId,
+          paymentType: sale.paymentType,
+          creditDueDate: sale.creditDueDate,
+          notes: sale.notes,
+          totalAmount: sale.totalAmount,
+          totalCost: sale.totalCost,
+          offlineId: sale.id, // Unique offline ID mapping
+          items: sale.items.map((item: any) => ({
+            productId: item.productId,
+            quantity: item.quantity,
+            salePrice: item.salePrice,
+            purchasePrice: item.purchasePrice,
+          })),
+        };
 
-      const res = await fetch("/api/sales", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(postBody),
-      });
+        const res = await fetch("/api/sales", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(postBody),
+        });
 
-      if (res.ok) {
-        successfulIds.push(sale.id);
-        console.log(`SyncEngine: Offline Sale ${sale.id} synced successfully.`);
-      } else {
-        console.warn(`SyncEngine: Server rejected offline sale ${sale.id}. Will retry later.`);
+        if (res.ok) {
+          successfulIds.push(sale.id);
+          console.log(`SyncEngine: Offline Sale ${sale.id} synced successfully.`);
+        } else {
+          console.warn(`SyncEngine: Server rejected offline sale ${sale.id}. Will retry later.`);
+        }
+      } catch (err) {
+        console.error(`SyncEngine: Network error syncing sale ${sale.id}. Stopped loop.`, err);
+        break; // stop loop on network failure
       }
-    } catch (err) {
-      console.error(`SyncEngine: Network error syncing sale ${sale.id}. Stopped loop.`, err);
-      break; // stop loop on network failure
     }
-  }
 
-  // Remove successfully synced sales from queue
-  if (successfulIds.length > 0) {
-    const freshQueue = getOfflineSalesQueue().filter((sale) => !successfulIds.includes(sale.id));
-    localStorage.setItem(CACHE_KEYS.OFFLINE_SALES, JSON.stringify(freshQueue));
-    
-    if (onSuccessToast) {
-      onSuccessToast(successfulIds.length);
+    if (successfulIds.length > 0) {
+      const freshQueue = getOfflineSalesQueue().filter((sale) => !successfulIds.includes(sale.id));
+      localStorage.setItem(CACHE_KEYS.OFFLINE_SALES, JSON.stringify(freshQueue));
+      
+      if (onSuccessToast) {
+        onSuccessToast(successfulIds.length);
+      }
+      return true;
     }
-    
-    isSyncing = false;
-    return true;
+    return false;
+  } finally {
+    releaseSyncLock();
   }
-
-  isSyncing = false;
-  return false;
 }
 
 export async function syncOfflineReturnsToServer(onSuccessToast?: (count: number) => void): Promise<boolean> {
-  if (isSyncing) return false;
-  if (!navigator.onLine) return false;
+  if (!acquireSyncLock()) return false;
+  if (!navigator.onLine) {
+    releaseSyncLock();
+    return false;
+  }
 
   const queue = getOfflineReturnsQueue();
-  if (queue.length === 0) return false;
+  if (queue.length === 0) {
+    releaseSyncLock();
+    return false;
+  }
 
-  isSyncing = true;
   console.log(`SyncEngine: Found ${queue.length} offline return(s) to synchronize.`);
 
   const successfulIds: string[] = [];
 
-  for (const ret of queue) {
-    try {
-      const postBody = {
-        saleId: ret.saleId || null,
-        reason: ret.reason,
-        items: ret.items.map((item: any) => ({
-          productId: item.productId,
-          quantity: item.quantity,
-          salePrice: item.salePrice,
-          purchasePrice: item.purchasePrice,
-          status: item.status,
-        })),
-      };
+  try {
+    for (const ret of queue) {
+      try {
+        const postBody = {
+          saleId: ret.saleId || null,
+          reason: ret.reason,
+          items: ret.items.map((item: any) => ({
+            productId: item.productId,
+            quantity: item.quantity,
+            salePrice: item.salePrice,
+            purchasePrice: item.purchasePrice,
+            status: item.status,
+          })),
+        };
 
-      const res = await fetch("/api/returns", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(postBody),
-      });
+        const res = await fetch("/api/returns", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(postBody),
+        });
 
-      if (res.ok) {
-        successfulIds.push(ret.id);
-        console.log(`SyncEngine: Offline Return ${ret.id} synced successfully.`);
-      } else {
-        console.warn(`SyncEngine: Server rejected offline return ${ret.id}.`);
+        if (res.ok) {
+          successfulIds.push(ret.id);
+          console.log(`SyncEngine: Offline Return ${ret.id} synced successfully.`);
+        } else {
+          console.warn(`SyncEngine: Server rejected offline return ${ret.id}.`);
+        }
+      } catch (err) {
+        console.error(`SyncEngine: Network error syncing return ${ret.id}. Stopped loop.`, err);
+        break;
       }
-    } catch (err) {
-      console.error(`SyncEngine: Network error syncing return ${ret.id}. Stopped loop.`, err);
-      break;
     }
-  }
 
-  if (successfulIds.length > 0) {
-    const freshQueue = getOfflineReturnsQueue().filter((ret) => !successfulIds.includes(ret.id));
-    localStorage.setItem(CACHE_KEYS.OFFLINE_RETURNS, JSON.stringify(freshQueue));
-    
-    if (onSuccessToast) {
-      onSuccessToast(successfulIds.length);
+    if (successfulIds.length > 0) {
+      const freshQueue = getOfflineReturnsQueue().filter((ret) => !successfulIds.includes(ret.id));
+      localStorage.setItem(CACHE_KEYS.OFFLINE_RETURNS, JSON.stringify(freshQueue));
+      
+      if (onSuccessToast) {
+        onSuccessToast(successfulIds.length);
+      }
+      return true;
     }
-    
-    isSyncing = false;
-    return true;
+    return false;
+  } finally {
+    releaseSyncLock();
   }
-
-  isSyncing = false;
-  return false;
 }

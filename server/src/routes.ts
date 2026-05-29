@@ -462,6 +462,16 @@ router.post("/products", requireAdmin, async (req, res) => {
     const { name, category, unit, description, barcode } = req.body;
     if (!name) return res.status(400).json({ message: "Ad tələb olunur" });
 
+    // Validate barcode uniqueness
+    if (barcode) {
+      const existingProduct = await db.query.products.findFirst({
+        where: and(eq(schema.products.barcode, barcode), eq(schema.products.tenantId, req.tenantId))
+      });
+      if (existingProduct) {
+        return res.status(400).json({ message: "Bu barkod artıq başqa məhsula təyin edilib" });
+      }
+    }
+
     // Enforce SaaS resource limits
     const limitCheck = await verifyTenantLimit(req.tenantId, "products");
     if (!limitCheck.allowed) {
@@ -500,6 +510,20 @@ router.put("/products/:id", requireAdmin, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const { name, category, unit, description, barcode } = req.body;
+
+    // Validate barcode uniqueness
+    if (barcode) {
+      const existingProduct = await db.query.products.findFirst({
+        where: and(
+          eq(schema.products.barcode, barcode),
+          eq(schema.products.tenantId, req.tenantId),
+          sql`${schema.products.id} != ${id}`
+        )
+      });
+      if (existingProduct) {
+        return res.status(400).json({ message: "Bu barkod artıq başqa məhsula təyin edilib" });
+      }
+    }
 
     const updated = await db
       .update(schema.products)
@@ -890,10 +914,21 @@ router.get("/sales", async (req, res) => {
 // Process a POS sale / checkout
 router.post("/sales", async (req, res) => {
   try {
-    const { customerId, paymentType, creditDueDate, notes, items, totalAmount, totalCost, paidAmount } = req.body;
+    const { customerId, paymentType, creditDueDate, notes, items, totalAmount, totalCost, paidAmount, offlineId } = req.body;
 
     if (!items || items.length === 0 || !paymentType) {
       return res.status(400).json({ message: "Çek məlumatları boş ola bilməz" });
+    }
+
+    // Idempotency check for offline sync
+    if (offlineId) {
+      const existingSale = await db.query.sales.findFirst({
+        where: and(eq(schema.sales.offlineId, offlineId), eq(schema.sales.tenantId, req.tenantId))
+      });
+      if (existingSale) {
+        console.warn(`Duplicate sale with offlineId ${offlineId} ignored.`);
+        return res.json(existingSale);
+      }
     }
 
     // Enforce SaaS resource limits
@@ -926,58 +961,64 @@ router.post("/sales", async (req, res) => {
       }
     }
 
-    // Insert sale
-    const newSale = await db
-      .insert(schema.sales)
-      .values({
-        tenantId: req.tenantId,
-        customerId: customerId || null,
-        customerName,
-        customerPhone,
-        paymentType,
-        creditDueDate: isCredit ? creditDueDate : null,
-        notes: notes || null,
-        saleDate: new Date().toISOString(),
-        totalAmount: parseFloat(totalAmount),
-        totalCost: parseFloat(totalCost),
-        paymentStatus: isCredit ? "credit" : "paid",
-      })
-      .returning();
+    // Execute database operations in a transaction
+    const saleResult = await db.transaction(async (tx) => {
+      // Insert sale
+      const newSale = await tx
+        .insert(schema.sales)
+        .values({
+          tenantId: req.tenantId,
+          customerId: customerId || null,
+          customerName,
+          customerPhone,
+          paymentType,
+          creditDueDate: isCredit ? creditDueDate : null,
+          notes: notes || null,
+          saleDate: new Date().toISOString(),
+          totalAmount: parseFloat(totalAmount),
+          totalCost: parseFloat(totalCost),
+          paymentStatus: isCredit ? "credit" : "paid",
+          offlineId: offlineId || null,
+        })
+        .returning();
 
-    const saleId = newSale[0].id;
+      const saleId = newSale[0].id;
 
-    // Insert items
-    for (const item of items) {
-      await db.insert(schema.saleItems).values({
-        tenantId: req.tenantId,
-        saleId,
-        productId: item.productId,
-        quantity: parseFloat(item.quantity),
-        salePrice: parseFloat(item.salePrice),
-        purchasePrice: parseFloat(item.purchasePrice || "0"),
-      });
-    }
+      // Insert items
+      for (const item of items) {
+        await tx.insert(schema.saleItems).values({
+          tenantId: req.tenantId,
+          saleId,
+          productId: item.productId,
+          quantity: parseFloat(item.quantity),
+          salePrice: parseFloat(item.salePrice),
+          purchasePrice: parseFloat(item.purchasePrice || "0"),
+        });
+      }
 
-    // If partial initial payment was made on credit
-    if (isCredit && paidAmount && parseFloat(paidAmount) > 0) {
-      await db.insert(schema.creditPayments).values({
-        tenantId: req.tenantId,
-        saleId,
-        paymentDate: new Date().toISOString(),
-        amount: parseFloat(paidAmount),
-      });
-    }
+      // If partial initial payment was made on credit
+      if (isCredit && paidAmount && parseFloat(paidAmount) > 0) {
+        await tx.insert(schema.creditPayments).values({
+          tenantId: req.tenantId,
+          saleId,
+          paymentDate: new Date().toISOString(),
+          amount: parseFloat(paidAmount),
+        });
+      }
+
+      return newSale[0];
+    });
 
     await logActivity(
       req,
       "CHECKOUT_SALE",
-      `POS satışı həyata keçirdi: Çek № ${saleId} (Məbləğ: ${totalAmount} ₼, Müştəri: ${customerName}, Ödəniş: ${paymentType})`
+      `POS satışı həyata keçirdi: Çek № ${saleResult.id} (Məbləğ: ${totalAmount} ₼, Müştəri: ${customerName}, Ödəniş: ${paymentType})`
     );
 
-    res.json(newSale[0]);
+    res.json(saleResult);
 
     // Send Telegram Notification in background
-    sendTelegramNotification(req.tenantId, `⚡ <b>Yeni POS Satışı!</b>\n\n<b>Çek №:</b> <code>${saleId}</code>\n<b>Müştəri:</b> ${customerName}\n<b>Ödəniş Üsulu:</b> ${paymentType}\n<b>Ümumi Məbləğ:</b> <code>${parseFloat(totalAmount).toFixed(2)} ₼</code>\n<b>Maya Dəyəri:</b> <code>${parseFloat(totalCost).toFixed(2)} ₼</code>\n<b>Gəlir:</b> <code>${(parseFloat(totalAmount) - parseFloat(totalCost)).toFixed(2)} ₼</code>`).catch(err => console.error("Telegram notification failed:", err));
+    sendTelegramNotification(req.tenantId, `⚡ <b>Yeni POS Satışı!</b>\n\n<b>Çek №:</b> <code>${saleResult.id}</code>\n<b>Müştəri:</b> ${customerName}\n<b>Ödəniş Üsulu:</b> ${paymentType}\n<b>Ümumi Məbləğ:</b> <code>${parseFloat(totalAmount).toFixed(2)} ₼</code>\n<b>Maya Dəyəri:</b> <code>${parseFloat(totalCost).toFixed(2)} ₼</code>\n<b>Gəlir:</b> <code>${(parseFloat(totalAmount) - parseFloat(totalCost)).toFixed(2)} ₼</code>`).catch(err => console.error("Telegram notification failed:", err));
   } catch (error) {
     res.status(500).json({ message: "Satış tamamlanarkən xəta baş verdi" });
   }
@@ -1169,42 +1210,47 @@ router.post("/returns", async (req, res) => {
       calculatedTotalAmount += parseFloat(item.quantity) * parseFloat(item.salePrice);
     }
 
-    // 2. Create the Return record
-    const newReturn = await db
-      .insert(schema.returns)
-      .values({
-        tenantId: req.tenantId,
-        saleId: saleId || null,
-        returnDate: new Date().toISOString(),
-        totalAmount: calculatedTotalAmount,
-        reason: reason || null,
-      })
-      .returning();
+    // Execute return creation inside transaction
+    const returnResult = await db.transaction(async (tx) => {
+      // 2. Create the Return record
+      const newReturn = await tx
+        .insert(schema.returns)
+        .values({
+          tenantId: req.tenantId,
+          saleId: saleId || null,
+          returnDate: new Date().toISOString(),
+          totalAmount: calculatedTotalAmount,
+          reason: reason || null,
+        })
+        .returning();
 
-    const returnId = newReturn[0].id;
+      const returnId = newReturn[0].id;
 
-    // 3. Create Return Items records
-    for (const item of items) {
-      await db.insert(schema.returnItems).values({
-        tenantId: req.tenantId,
-        returnId,
-        productId: item.productId,
-        quantity: parseFloat(item.quantity),
-        salePrice: parseFloat(item.salePrice),
-        purchasePrice: parseFloat(item.purchasePrice || "0"),
-        status: item.status, // "returned_to_stock" or "defective"
-      });
-    }
+      // 3. Create Return Items records
+      for (const item of items) {
+        await tx.insert(schema.returnItems).values({
+          tenantId: req.tenantId,
+          returnId,
+          productId: item.productId,
+          quantity: parseFloat(item.quantity),
+          salePrice: parseFloat(item.salePrice),
+          purchasePrice: parseFloat(item.purchasePrice || "0"),
+          status: item.status, // "returned_to_stock" or "defective"
+        });
+      }
+
+      return newReturn[0];
+    });
 
     // 4. Log Activity
     const saleLogMsg = saleId ? ` (Çek № ${saleId})` : "";
     await logActivity(
       req,
       "RETURN_ITEMS",
-      `Malların geri qaytarılması həyata keçirildi: Qaytarış № ${returnId}${saleLogMsg} (Məbləğ: ${calculatedTotalAmount.toFixed(2)} ₼, Səbəb: ${reason || "Qeyd edilməyib"})`
+      `Malların geri qaytarılması həyata keçirildi: Qaytarış № ${returnResult.id}${saleLogMsg} (Məbləğ: ${calculatedTotalAmount.toFixed(2)} ₼, Səbəb: ${reason || "Qeyd edilməyib"})`
     );
 
-    res.json(newReturn[0]);
+    res.json(returnResult);
   } catch (error) {
     console.error("Return error:", error);
     res.status(500).json({ message: "Geri qaytarış tamamlanarkən xəta baş verdi" });
@@ -1401,8 +1447,9 @@ router.get("/dashboard/summary", requireAdmin, async (req, res) => {
     }
 
     const todayRevenue = rawTodayRevenue - todayRefundedAmount;
-    const todayCost = Math.max(0, rawTodayCost - todayRecoveredCost);
-    const todayProfit = todayRevenue - todayCost;
+    const todayCostVal = rawTodayCost - todayRecoveredCost;
+    const todayCost = Math.max(0, todayCostVal);
+    const todayProfit = todayRevenue - todayCostVal;
 
     // Today's Expenses
     const todayExpensesResult = await db
@@ -1453,8 +1500,9 @@ router.get("/dashboard/summary", requireAdmin, async (req, res) => {
     }
 
     const monthRevenue = rawMonthRevenue - monthRefundedAmount;
-    const monthCost = Math.max(0, rawMonthCost - monthRecoveredCost);
-    const monthProfit = monthRevenue - monthCost;
+    const monthCostVal = rawMonthCost - monthRecoveredCost;
+    const monthCost = Math.max(0, monthCostVal);
+    const monthProfit = monthRevenue - monthCostVal;
 
     // Monthly Expenses
     const monthExpensesResult = await db
@@ -1515,7 +1563,7 @@ router.get("/dashboard/summary", requireAdmin, async (req, res) => {
         .limit(1);
       const lastPurchasePrice = latestEntry[0]?.price || 0;
 
-      totalStockValue += currentQty * lastPurchasePrice;
+      totalStockValue += Math.max(0, currentQty) * lastPurchasePrice;
 
       if (currentQty < lowStockAlertCount) {
         lowStockCount++;
@@ -1539,11 +1587,42 @@ router.get("/dashboard/summary", requireAdmin, async (req, res) => {
       return sale.creditDueDate <= today;
     }).length;
 
-    // 5. Calculate our own debts to suppliers
-    const myDebts = await db.query.stockEntries.findMany({
-      where: and(eq(schema.stockEntries.paidStatus, "credit"), eq(schema.stockEntries.tenantId, req.tenantId))
-    });
-    const myTotalDebt = myDebts.reduce((sum, d) => sum + (d.quantity * d.purchasePrice), 0);
+    // 5. Calculate our own debts to suppliers (aggregating balances per vendor and including anonymous debts)
+    const allVendors = await db.select().from(schema.vendors).where(eq(schema.vendors.tenantId, req.tenantId));
+    let myTotalDebt = 0;
+    for (const vendor of allVendors) {
+      const purchases = await db.select().from(schema.stockEntries).where(
+        and(
+          eq(schema.stockEntries.vendorId, vendor.id),
+          eq(schema.stockEntries.tenantId, req.tenantId)
+        )
+      );
+      const creditPurchases = purchases.filter(p => p.paidStatus === "credit" || p.paymentType === "Nisyə");
+      const totalDebtCreated = creditPurchases.reduce((acc, p) => acc + (p.quantity * p.purchasePrice), 0);
+      
+      const payments = await db.select().from(schema.vendorPayments).where(
+        and(
+          eq(schema.vendorPayments.vendorId, vendor.id),
+          eq(schema.vendorPayments.tenantId, req.tenantId)
+        )
+      );
+      const totalPayments = payments.reduce((acc, pay) => acc + pay.amount, 0);
+      
+      const balance = totalDebtCreated - totalPayments;
+      if (balance > 0) {
+        myTotalDebt += balance;
+      }
+    }
+
+    const anonymousDebts = await db.select().from(schema.stockEntries).where(
+      and(
+        sql`${schema.stockEntries.vendorId} IS NULL`,
+        eq(schema.stockEntries.paidStatus, "credit"),
+        eq(schema.stockEntries.tenantId, req.tenantId)
+      )
+    );
+    const totalAnonDebt = anonymousDebts.reduce((acc, p) => acc + (p.quantity * p.purchasePrice), 0);
+    myTotalDebt += totalAnonDebt;
 
     res.json({
       todayRevenue,
@@ -1569,12 +1648,19 @@ router.get("/dashboard/summary", requireAdmin, async (req, res) => {
 
 router.get("/dashboard/analytics", requireAdmin, async (req, res) => {
   try {
-    // 1. Fetch sales, expenses, and saleItems with product details
+    // 1. Fetch sales, expenses, returns, returnItems, and saleItems with product details
     const sales = await db.select().from(schema.sales).where(eq(schema.sales.tenantId, req.tenantId));
     const expenses = await db.select().from(schema.expenses).where(eq(schema.expenses.tenantId, req.tenantId));
+    const returns = await db.select().from(schema.returns).where(eq(schema.returns.tenantId, req.tenantId));
+    
     const saleItemsList = await db.query.saleItems.findMany({
       where: eq(schema.saleItems.tenantId, req.tenantId),
       with: { product: true }
+    });
+
+    const returnItemsList = await db.query.returnItems.findMany({
+      where: eq(schema.returnItems.tenantId, req.tenantId),
+      with: { product: true, return: true }
     });
 
     // --- A. Monthly Trend (Past 6 Months) ---
@@ -1598,6 +1684,23 @@ router.get("/dashboard/analytics", requireAdmin, async (req, res) => {
       if (monthlyData[key]) {
         monthlyData[key].revenue += sale.totalAmount;
         monthlyData[key].cost += sale.totalCost;
+      }
+    }
+
+    // Accumulate returns (reducing revenue and cost) per month
+    for (const ret of returns) {
+      const key = ret.returnDate.substring(0, 7); // YYYY-MM
+      if (monthlyData[key]) {
+        monthlyData[key].revenue -= ret.totalAmount;
+      }
+    }
+
+    for (const retItem of returnItemsList) {
+      if (retItem.status === "returned_to_stock" && retItem.return) {
+        const key = retItem.return.returnDate.substring(0, 7); // YYYY-MM
+        if (monthlyData[key]) {
+          monthlyData[key].cost -= retItem.quantity * retItem.purchasePrice;
+        }
       }
     }
 
@@ -1637,6 +1740,14 @@ router.get("/dashboard/analytics", requireAdmin, async (req, res) => {
       }
     }
 
+    for (const ret of returns) {
+      const dayIndex = new Date(ret.returnDate).getDay();
+      const dayName = weekdays[dayIndex];
+      if (weeklyData[dayName]) {
+        weeklyData[dayName].revenue -= ret.totalAmount;
+      }
+    }
+
     const weeklyDistribution = weekdays.map(day => ({
       day,
       sales: weeklyData[day].sales,
@@ -1654,21 +1765,41 @@ router.get("/dashboard/analytics", requireAdmin, async (req, res) => {
       categoryTotals[cat].revenue += item.quantity * item.salePrice;
     }
 
+    for (const item of returnItemsList) {
+      const cat = item.product?.category || "Kateqoriyasız";
+      if (categoryTotals[cat]) {
+        categoryTotals[cat].salesCount -= item.quantity;
+        categoryTotals[cat].revenue -= item.quantity * item.salePrice;
+      }
+    }
+
     const topCategories = Object.values(categoryTotals)
       .sort((a, b) => b.salesCount - a.salesCount)
       .slice(0, 5)
       .map(cat => ({
         category: cat.category,
-        salesCount: parseFloat(cat.salesCount.toFixed(2)),
-        revenue: parseFloat(cat.revenue.toFixed(2))
+        salesCount: parseFloat(Math.max(0, cat.salesCount).toFixed(2)),
+        revenue: parseFloat(Math.max(0, cat.revenue).toFixed(2))
       }));
 
     // --- D. COGS Margin Audit ---
-    const totalRevenue = sales.reduce((sum, sale) => sum + sale.totalAmount, 0);
-    const totalCost = sales.reduce((sum, sale) => sum + sale.totalCost, 0);
+    const rawTotalRevenue = sales.reduce((sum, sale) => sum + sale.totalAmount, 0);
+    const rawTotalCost = sales.reduce((sum, sale) => sum + sale.totalCost, 0);
+    
+    const totalRefunded = returns.reduce((sum, r) => sum + r.totalAmount, 0);
+    const totalRecoveredCost = returnItemsList.reduce((sum, ri) => {
+      if (ri.status === "returned_to_stock") {
+        return sum + ri.quantity * ri.purchasePrice;
+      }
+      return sum;
+    }, 0);
+
+    const totalRevenue = rawTotalRevenue - totalRefunded;
+    const totalCostVal = rawTotalCost - totalRecoveredCost;
+    const totalCost = Math.max(0, totalCostVal);
     const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
 
-    const grossProfit = totalRevenue - totalCost;
+    const grossProfit = totalRevenue - totalCostVal;
     const netProfit = grossProfit - totalExpenses;
 
     const grossMargin = totalRevenue > 0 ? parseFloat(((grossProfit / totalRevenue) * 100).toFixed(2)) : 0;
@@ -2884,27 +3015,32 @@ router.post("/payroll/:id/payments", requireAdmin, async (req, res) => {
       paymentStatus = "partial";
     }
 
-    // Insert payment log
-    const newPayment = await db
-      .insert(schema.salaryPayments)
-      .values({
-        tenantId: req.tenantId,
-        payrollId: id,
-        amount: payVal,
-        paymentDate: new Date().toISOString(),
-        paymentType,
-        notes: notes || null,
-      })
-      .returning();
+    // Execute database operations in a transaction
+    const paymentResult = await db.transaction(async (tx) => {
+      // Insert payment log
+      const newPayment = await tx
+        .insert(schema.salaryPayments)
+        .values({
+          tenantId: req.tenantId,
+          payrollId: id,
+          amount: payVal,
+          paymentDate: new Date().toISOString(),
+          paymentType,
+          notes: notes || null,
+        })
+        .returning();
 
-    // Update parent paidAmount
-    await db
-      .update(schema.payroll)
-      .set({
-        paidAmount: newPaidAmount,
-        paymentStatus,
-      })
-      .where(eq(schema.payroll.id, id));
+      // Update parent paidAmount
+      await tx
+        .update(schema.payroll)
+        .set({
+          paidAmount: newPaidAmount,
+          paymentStatus,
+        })
+        .where(eq(schema.payroll.id, id));
+
+      return newPayment[0];
+    });
 
     await logActivity(
       req,
@@ -2912,7 +3048,7 @@ router.post("/payroll/:id/payments", requireAdmin, async (req, res) => {
       `Əməkhaqqı ödənişi etdi: ${record.employee.name} (${amount} ₼, ${record.payrollMonth} ayı, Ödəniş: ${paymentType})`
     );
 
-    res.json(newPayment[0]);
+    res.json(paymentResult);
 
     // Send Telegram Notification in background
     sendTelegramNotification(req.tenantId, `👥 <b>Əməkhaqqı Ödənişi!</b>\n\n<b>Əməkdaş:</b> ${record.employee.name}\n<b>Vəzifə:</b> ${record.employee.position}\n<b>Ödənilən Məbləğ:</b> <code>${parseFloat(amount).toFixed(2)} ₼</code>\n<b>Hesablanma Ayı:</b> ${record.payrollMonth}\n<b>Kassa Ödəniş Üsulu:</b> ${paymentType}`).catch(err => console.error("Telegram notification failed:", err));

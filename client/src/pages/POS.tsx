@@ -494,6 +494,7 @@ export default function POS() {
       notes: notes.trim() || null,
       totalAmount,
       totalCost,
+      offlineId: `ONL-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       items: basket.map((item) => ({
         productId: item.productId,
         quantity: item.quantity,

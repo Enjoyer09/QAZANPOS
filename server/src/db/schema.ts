@@ -24,7 +24,9 @@ export const products = pgTable("products", {
   unit: text("unit").notNull().default("ədəd"),
   description: text("description"),
   barcode: text("barcode"),
-});
+}, (table) => ({
+  productsTenantBarcodeIdx: uniqueIndex("products_tenant_barcode_idx").on(table.tenantId, table.barcode)
+}));
 
 // 1b. Suppliers (Vendors Directory)
 export const vendors = pgTable("vendors", {
@@ -167,7 +169,10 @@ export const sales = pgTable("sales", {
   totalAmount: doublePrecision("total_amount").notNull(), // Satış cəmi
   totalCost: doublePrecision("total_cost").notNull(), // Satışın Maya dəyəri (calculating total COGS)
   paymentStatus: text("payment_status").notNull().default("paid"), // "paid" (tam ödənilib), "credit" (nisyə borc)
-});
+  offlineId: text("offline_id"),
+}, (table) => ({
+  salesTenantOfflineIdIdx: uniqueIndex("sales_tenant_offline_id_idx").on(table.tenantId, table.offlineId)
+}));
 
 // 5. Sale Items
 export const saleItems = pgTable("sale_items", {
