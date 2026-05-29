@@ -467,9 +467,34 @@ export default function SettingsPage() {
       if (res.ok) {
         toast({
           title: "Uğurlu Bağlantı! 🤖",
-          description: "Telegram botunuza test mesajı göndərildi. Zəhmət olmasa çatınızı yoxlayın.",
+          description: "Telegram botunuza test mesajı göndərildi. Ayarlar avtomatik yadda saxlanıldı və aktivləşdirildi.",
           variant: "success"
         });
+
+        // Automatically save the verified settings to the database and enable notifications
+        const payload = {
+          storeName: storeName.trim(),
+          phone: phone.trim() || null,
+          address: address.trim() || null,
+          invoiceFooter: invoiceFooter.trim() || null,
+          lowStockAlertCount: parseInt(lowStockAlertCount) || 5,
+          defaultCreditDays: parseInt(defaultCreditDays) || 30,
+          receiptWidth,
+          showBarcode,
+          showCustomerInfo,
+          receiptHeader: receiptHeader.trim() || null,
+          receiptFooter: receiptFooter.trim() || null,
+          showStorePhone,
+          showStoreAddress,
+          showReceiptHeader,
+          showReceiptFooter,
+          showPaymentDetails,
+          telegramBotToken: telegramBotToken.trim(),
+          telegramChatId: telegramChatId.trim(),
+          telegramNotificationsEnabled: 1, // Automatically enable
+        };
+        updateSettingsMutation.mutate(payload);
+        setTelegramNotificationsEnabled(1);
       } else {
         toast({
           title: "Telegram Xətası!",

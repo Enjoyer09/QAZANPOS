@@ -1790,6 +1790,7 @@ router.get("/settings", async (req, res) => {
 router.put("/settings", requireAdmin, async (req, res) => {
   try {
     const payload = req.body;
+    console.log("Settings PUT payload received:", payload);
     const list = await db.select().from(schema.settings).where(eq(schema.settings.tenantId, req.tenantId)).limit(1);
 
     let updated;
