@@ -20,6 +20,34 @@ import {
 export default function Landing() {
   const [activeScreenshot, setActiveScreenshot] = useState<"dashboard" | "debts" | "expenses">("dashboard");
   const [isAutoPlay, setIsAutoPlay] = useState(true);
+  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
+
+  const faqs = [
+    {
+      question: "🔐 İki-Mərhələli Təhlükəsizlik (2FA) nədir və necə aktivləşdirilir?",
+      answer: "Maliyyə və satış məlumatlarınızın təhlükəsizliyini təmin etmək üçün sistemimizdə Google Authenticator (və ya Microsoft Authenticator) TOTP inteqrasiyası quraşdırılmışdır. Aktivləşdirmək üçün Ayarlar (/ayarlar) səhifəsinə daxil olub 2FA bölməsində '2FA-nı Aktiv Et' düyməsinə klikləyərək sizə təqdim olunan QR kodu tətbiqlə skan etməlisiniz.\n\nHəmçinin 'Bu cihazı 30 gün yadda saxla' xanasını seçməklə həm IP ünvanı, həm də brauzer tokeni ilə ikili güvənlik yoxlanışından keçərək, 30 gün ərzində hər dəfə kod yazmadan sürətli giriş əldə edə bilərsiniz."
+    },
+    {
+      question: "📡 İnternet kəsildikdə POS satışları işləyirmi?",
+      answer: "Bəli! Progressive Client-Side Oflayn POS mühərriki sayəsində internet bağlantınız itsə belə sistem avtomatik olaraq 'Oflayn Rejim'ə keçir. Bu zaman məhsul siyahısı yerli keşdən (localStorage) oxunur və hər satışda qalıqlar yerli səviyyədə azaldılır. Edilən satışlar yerli oflayn növbədə saxlanılır. İnternet bərpa olunduğu an bütün oflayn satışlar arxa fonda bazaya sinxronlaşdırılır və mərkəzi anbar qalıqları yenilənir."
+    },
+    {
+      question: "🔄 Sürətli Qaytarış (Ad-hoc Return) rejimi necə işləyir?",
+      answer: "Hər hansı bir çek nömrəsi olmadan birbaşa müştəridən geri qaytarılan malları qeydə almaq üçün istifadə olunur. POS-da 'Sürətli Qaytarış' rejimini seçib məhsul daxil etdikdə, onun sonuncu pərakəndə satış qiyməti (lastSalePrice) avtomatik təyin edilərək geri ödəniləcək məbləğ kimi səbətə doldurulur.\n\nQaytarış zamanı məhsulun tipini 'Anbara Qayıdan' (qalıqları artırır) və ya zədəli olduğu halda 'Deffekt / Zay' (qalıqlara əlavə olunmadan itki kimi qeyd edilir) olaraq seçib əməliyyatı tamamlaya bilərsiniz."
+    },
+    {
+      question: "🧾 Səssiz Çek Çapı (QZ Tray WebSocket) necə quraşdırılır?",
+      answer: "Kassa satışlarında standart brauzer çap pəncərəsini açmadan sürətli çek çıxarmaq üçün QZ Tray WebSocket modulundan istifadə olunur. Bunun üçün kompüterinizə rəsmi QZ Tray proqramını yükləyib işə salmalısınız. Ayarlar səhifəsində 'QZ Tray Səssiz Çap Qoşulması' kartında 'Qoşuldu' statusu göründükdən sonra qoşulu termal printeri (58mm/80mm) seçib yadda saxlamalısınız. Hər satış bitdikdə çekiniz avtomatik olaraq birbaşa çap olunacaqdır."
+    },
+    {
+      question: "💸 Tədarükçülərlə borc uçotu və mədaxil necə idarə olunur?",
+      answer: "Tədarükçülər (/tedarukculer) bölməsindən reyestr əlavə etdikdən sonra, anbara mədaxil edərkən ödəniş növünü 'Nisyə' seçdikdə həmin məbləğ avtomatik olaraq tədarükçünün fərdi hesabında borc olaraq qeyd edilir. Sonradan borcları ödəmək üçün tədarükçü kartında 'Ödəniş et' düyməsi vasitəsilə Nəğd və ya Kart ilə ödənişlər edərək tədarükçü borclarınızı mütəmadi idarə edə bilərsiniz."
+    },
+    {
+      question: "👤 HR və aylıq əməkhaqqı (Payroll) uçotu necə aparılır?",
+      answer: "Kadrlar (/hr) səhifəsində əməkdaşlar reyestrinə işçiləri daxil etdikdən və onların aylıq maaşlarını yazdıqdan sonra hər ayın sonunda tək bir kliklə 'Aylıq Maaş Hesabatı' yarada bilərsiniz. İşçilərin maaşına bonus (+) və ya cərimə (-) tətbiq edib Nett Maaşı müəyyənləşdirə bilər və tam/qismən kassa ödənişləri ilə maaşların ödənilməsini başa çatdıra bilərsiniz."
+    }
+  ];
 
   const screens: Array<"dashboard" | "debts" | "expenses"> = ["dashboard", "debts", "expenses"];
   const activeIndex = screens.indexOf(activeScreenshot);
@@ -212,6 +240,9 @@ export default function Landing() {
             </a>
             <a href="#tarifler" className="hover:text-primary transition-colors cursor-pointer">
               Tariflər
+            </a>
+            <a href="#faq" className="hover:text-primary transition-colors cursor-pointer">
+              FAQ
             </a>
           </nav>
 
@@ -525,7 +556,61 @@ export default function Landing() {
           </div>
         </div>
 
-        {/* 7. Conversion Footer / Call to Action */}
+        {/* 7. FAQ Section */}
+        <div id="faq" className="w-full max-w-4xl space-y-8 pt-8 text-left">
+          <div className="text-center max-w-xl mx-auto space-y-2">
+            <h2 className="text-2xl font-black text-gray-900 tracking-tight">Tez-tez Verilən Suallar (FAQ)</h2>
+            <p className="text-xs text-gray-400 font-semibold leading-relaxed">
+              BirSaaS POS terminalı haqqında ən çox soruşulan suallar və istifadəçi təlimatından birbaşa cavablar.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            {faqs.map((faq, index) => {
+              const isOpen = openFaqIndex === index;
+              return (
+                <div
+                  key={index}
+                  className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-xs glass-card transition-all"
+                >
+                  <button
+                    onClick={() => setOpenFaqIndex(isOpen ? null : index)}
+                    className="w-full px-6 py-4.5 text-left font-extrabold text-xs sm:text-sm text-gray-900 flex items-center justify-between gap-4 cursor-pointer hover:bg-gray-50/50 transition-colors"
+                  >
+                    <span>{faq.question}</span>
+                    <span className={`transition-transform duration-300 ${isOpen ? "rotate-180" : ""}`}>
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="text-gray-400"
+                      >
+                        <path d="m6 9 6 6 6-6" />
+                      </svg>
+                    </span>
+                  </button>
+                  <div
+                    className={`transition-all duration-300 ease-in-out overflow-hidden ${
+                      isOpen ? "max-h-[500px] border-t border-gray-50" : "max-h-0"
+                    }`}
+                  >
+                    <div className="p-6 text-[10px] sm:text-xs text-gray-400 font-semibold leading-relaxed bg-gray-50/20 whitespace-pre-line">
+                      {faq.answer}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 8. Conversion Footer / Call to Action */}
         <div className="w-full max-w-4xl bg-gradient-to-r from-primary to-emerald-600 rounded-3xl p-8 sm:p-12 text-white text-center shadow-xl space-y-6 relative overflow-hidden">
           {/* Decorative shapes */}
           <div className="absolute top-0 left-0 size-full bg-white/5 pointer-events-none"></div>
