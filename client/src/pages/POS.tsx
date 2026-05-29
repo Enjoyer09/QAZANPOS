@@ -658,6 +658,7 @@ export default function POS() {
                     <tr className="border-b border-gray-100 text-xs font-bold text-gray-400 uppercase tracking-wider">
                       <th className="py-3 px-2">Məhsul</th>
                       <th className="py-3 px-2 text-right w-24">Miqdar</th>
+                      <th className="py-3 px-2 text-right w-24">Maya (₼)</th>
                       <th className="py-3 px-2 text-right w-28">
                         {posMode === "return" ? "Qaytarış Qiyməti (₼)" : "Satış Qiyməti (₼)"}
                       </th>
@@ -675,7 +676,7 @@ export default function POS() {
                           <td className="py-4 px-2">
                             <span className="font-bold block text-gray-900">{item.productName}</span>
                             <span className="text-[10px] text-gray-400 block mt-0.5">
-                              Alış Mayası: {item.minPrice.toFixed(2)} ₼ / {item.unit}
+                              Ölçü vahidi: {item.unit}
                             </span>
                           </td>
                           <td className="py-4 px-2 text-right">
@@ -687,6 +688,9 @@ export default function POS() {
                               onChange={(e) => handleUpdateBasketItem(item.productId, "quantity", e.target.value)}
                               className={`w-16 px-2 py-1 border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-1 ${posMode === "return" ? "focus:ring-amber-500" : "focus:ring-primary"}`}
                             />
+                          </td>
+                          <td className="py-4 px-2 text-right font-bold text-gray-500 font-mono">
+                            {item.minPrice.toFixed(2)} ₼
                           </td>
                           <td className="py-4 px-2 text-right">
                             <div className="flex flex-col items-end">
