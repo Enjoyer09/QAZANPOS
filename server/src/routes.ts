@@ -579,7 +579,7 @@ router.get("/stock/entries", async (req, res) => {
 // Create stock entry
 router.post("/stock/entries", requireAdmin, async (req, res) => {
   try {
-    const { productId, quantity, purchasePrice, supplier, notes, paymentType, creditDueDate } = req.body;
+    const { productId, quantity, purchasePrice, supplier, notes, paymentType, creditDueDate, vendorId } = req.body;
 
     if (!productId || !quantity || !purchasePrice || !paymentType) {
       return res.status(400).json({ message: "Məcburi sahələri doldurun" });
@@ -595,6 +595,7 @@ router.post("/stock/entries", requireAdmin, async (req, res) => {
       .values({
         tenantId: req.tenantId,
         productId,
+        vendorId: vendorId ? parseInt(vendorId) : null,
         quantity: parseFloat(quantity),
         purchasePrice: parseFloat(purchasePrice),
         supplier: supplier || null,
@@ -2332,6 +2333,185 @@ router.put("/super/profile", requireSuperAdmin, async (req, res) => {
   } catch (error) {
     console.error("Error updating super admin profile:", error);
     res.status(500).json({ message: "Profil məlumatlarını yeniləyərkən xəta baş verdi" });
+  }
+});
+
+// ----------------------------------------------------
+// 13. VENDOR / SUPPLIER ENDPOINTS
+// ----------------------------------------------------
+
+// List all vendors with aggregated balances
+router.get("/vendors", async (req, res) => {
+  try {
+    const allVendors = await db.select().from(schema.vendors).where(eq(schema.vendors.tenantId, req.tenantId));
+    const result = [];
+    
+    for (const vendor of allVendors) {
+      // Calculate total credit purchases (where paidStatus = 'credit' or paymentType = 'Nisyə')
+      const purchases = await db.select().from(schema.stockEntries).where(
+        and(
+          eq(schema.stockEntries.vendorId, vendor.id),
+          eq(schema.stockEntries.tenantId, req.tenantId)
+        )
+      );
+      
+      const totalPurchases = purchases.reduce((acc, p) => acc + (p.quantity * p.purchasePrice), 0);
+      
+      const creditPurchases = purchases.filter(p => p.paidStatus === "credit" || p.paymentType === "Nisyə");
+      const totalDebtCreated = creditPurchases.reduce((acc, p) => acc + (p.quantity * p.purchasePrice), 0);
+      
+      // Calculate total payments made to this vendor
+      const payments = await db.select().from(schema.vendorPayments).where(
+        and(
+          eq(schema.vendorPayments.vendorId, vendor.id),
+          eq(schema.vendorPayments.tenantId, req.tenantId)
+        )
+      );
+      const totalPayments = payments.reduce((acc, pay) => acc + pay.amount, 0);
+      
+      const balance = totalDebtCreated - totalPayments;
+      
+      result.push({
+        id: vendor.id,
+        name: vendor.name,
+        phone: vendor.phone,
+        email: vendor.email,
+        address: vendor.address,
+        notes: vendor.notes,
+        createdAt: vendor.createdAt,
+        totalPurchases,
+        totalPaid: totalPayments,
+        balance: Math.max(0, balance),
+      });
+    }
+    
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ message: "Tədarükçüləri gətirərkən xəta baş verdi" });
+  }
+});
+
+// Create vendor
+router.post("/vendors", requireAdmin, async (req, res) => {
+  try {
+    const { name, phone, email, address, notes } = req.body;
+    if (!name) {
+      return res.status(400).json({ message: "Tədarükçü adı məcburidir" });
+    }
+    
+    const newVendor = await db.insert(schema.vendors).values({
+      tenantId: req.tenantId,
+      name,
+      phone: phone || null,
+      email: email || null,
+      address: address || null,
+      notes: notes || null,
+      createdAt: new Date().toISOString(),
+    }).returning();
+    
+    await logActivity(req, "CREATE_VENDOR", `Yeni tədarükçü əlavə etdi: ${name}`);
+    res.json(newVendor[0]);
+  } catch (error) {
+    res.status(500).json({ message: "Tədarükçü yaradılarkən xəta baş verdi" });
+  }
+});
+
+// Update vendor
+router.put("/vendors/:id", requireAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { name, phone, email, address, notes } = req.body;
+    if (!name) {
+      return res.status(400).json({ message: "Tədarükçü adı məcburidir" });
+    }
+    
+    const updated = await db.update(schema.vendors).set({
+      name,
+      phone: phone || null,
+      email: email || null,
+      address: address || null,
+      notes: notes || null,
+    })
+    .where(and(eq(schema.vendors.id, id), eq(schema.vendors.tenantId, req.tenantId)))
+    .returning();
+    
+    if (updated.length === 0) {
+      return res.status(404).json({ message: "Tədarükçü tapılmadı" });
+    }
+    
+    await logActivity(req, "UPDATE_VENDOR", `Tədarükçü məlumatlarını yenilədi: ${name}`);
+    res.json(updated[0]);
+  } catch (error) {
+    res.status(500).json({ message: "Tədarükçü yenilənərkən xəta baş verdi" });
+  }
+});
+
+// Delete vendor
+router.delete("/vendors/:id", requireAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const deleted = await db.delete(schema.vendors)
+      .where(and(eq(schema.vendors.id, id), eq(schema.vendors.tenantId, req.tenantId)))
+      .returning();
+    
+    if (deleted.length === 0) {
+      return res.status(404).json({ message: "Tədarükçü tapılmadı" });
+    }
+    
+    await logActivity(req, "DELETE_VENDOR", `Tədarükçünü sildi: ${deleted[0].name}`);
+    res.json({ message: "Tədarükçü uğurla silindi" });
+  } catch (error) {
+    res.status(500).json({ message: "Tədarükçü silinərkən xəta baş verdi" });
+  }
+});
+
+// List payments for vendor
+router.get("/vendors/:id/payments", requireAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const payments = await db.select().from(schema.vendorPayments).where(
+      and(
+        eq(schema.vendorPayments.vendorId, id),
+        eq(schema.vendorPayments.tenantId, req.tenantId)
+      )
+    ).orderBy(desc(schema.vendorPayments.paymentDate));
+    
+    res.json(payments);
+  } catch (error) {
+    res.status(500).json({ message: "Tədarükçü ödənişlərini gətirərkən xəta baş verdi" });
+  }
+});
+
+// Create payment to vendor
+router.post("/vendors/:id/payments", requireAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { amount, paymentType, notes } = req.body;
+    if (!amount || parseFloat(amount) <= 0 || !paymentType) {
+      return res.status(400).json({ message: "Məbləğ və ödəniş növü məcburidir" });
+    }
+    
+    const vendor = await db.query.vendors.findFirst({
+      where: and(eq(schema.vendors.id, id), eq(schema.vendors.tenantId, req.tenantId))
+    });
+    
+    if (!vendor) {
+      return res.status(404).json({ message: "Tədarükçü tapılmadı" });
+    }
+    
+    const newPayment = await db.insert(schema.vendorPayments).values({
+      tenantId: req.tenantId,
+      vendorId: id,
+      amount: parseFloat(amount),
+      paymentType,
+      notes: notes || null,
+      paymentDate: new Date().toISOString(),
+    }).returning();
+    
+    await logActivity(req, "CREATE_VENDOR_PAYMENT", `Tədarükçüyə ödəniş etdi: ${vendor.name} (${amount} ₼, Ödəniş: ${paymentType})`);
+    res.json(newPayment[0]);
+  } catch (error) {
+    res.status(500).json({ message: "Tədarükçüyə ödəniş edilərkən xəta baş verdi" });
   }
 });
 

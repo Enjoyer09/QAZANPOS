@@ -26,6 +26,21 @@ export const products = pgTable("products", {
   barcode: text("barcode"),
 });
 
+// 1b. Suppliers (Vendors Directory)
+export const vendors = pgTable("vendors", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" })
+    .default(1),
+  name: text("name").notNull(),
+  phone: text("phone"),
+  email: text("email"),
+  address: text("address"),
+  notes: text("notes"),
+  createdAt: text("created_at").notNull(),
+});
+
 // 2. Stock Entries (Warehouse entry / restocking)
 export const stockEntries = pgTable("stock_entries", {
   id: serial("id").primaryKey(),
@@ -36,6 +51,8 @@ export const stockEntries = pgTable("stock_entries", {
   productId: integer("product_id")
     .notNull()
     .references(() => products.id, { onDelete: "cascade" }),
+  vendorId: integer("vendor_id")
+    .references(() => vendors.id, { onDelete: "set null" }),
   quantity: doublePrecision("quantity").notNull(),
   purchasePrice: doublePrecision("purchase_price").notNull(), // Alış qiyməti
   supplier: text("supplier"),
@@ -44,6 +61,22 @@ export const stockEntries = pgTable("stock_entries", {
   creditDueDate: text("credit_due_date"), // Borc son ödəniş tarixi
   entryDate: text("entry_date").notNull(), // ISO timestamp
   paidStatus: text("paid_status").notNull().default("paid"), // "paid" (ödənilib), "credit" (tədarükçüyə borc)
+});
+
+// 2b. Vendor Payments (Wholesale payment history ledger)
+export const vendorPayments = pgTable("vendor_payments", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" })
+    .default(1),
+  vendorId: integer("vendor_id")
+    .notNull()
+    .references(() => vendors.id, { onDelete: "cascade" }),
+  amount: doublePrecision("amount").notNull(),
+  paymentDate: text("payment_date").notNull(), // ISO timestamp
+  paymentType: text("payment_type").notNull(), // "Nəğd", "Kart", "Kart2Kart"
+  notes: text("notes"),
 });
 
 // 3. Customers Directory

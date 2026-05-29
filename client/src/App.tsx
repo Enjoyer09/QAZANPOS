@@ -20,6 +20,7 @@ import {
   Mail,
   RotateCw,
   Tag,
+  Truck,
 } from "lucide-react";
 
 // Reusable components
@@ -43,6 +44,7 @@ import Logs from "./pages/Logs.tsx";
 import SuperDashboard from "./pages/SuperDashboard.tsx";
 import Landing from "./pages/Landing.tsx";
 import Labels from "./pages/Labels.tsx";
+import Vendors from "./pages/Vendors.tsx";
 import LimitReachedModal from "./components/LimitReachedModal.tsx";
 
 // Global fetch interceptor to automatically attach x-user-role, x-user-username, and x-tenant-host headers
@@ -217,6 +219,7 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
         { href: "/pos", label: "POS ⚡", icon: Sparkles, isHighlight: true },
         { href: "/nisye", label: "Borclar", icon: AlertTriangle },
         { href: "/musteriler", label: "Müştərilər", icon: Users },
+        ...(isAdmin ? [{ href: "/tedarukculer", label: "Tədarükçülər", icon: Truck }] : []),
         { href: "/anbar", label: "Qalıqlar", icon: Boxes },
         ...(isAdmin ? [{ href: "/anbar/daxil", label: "Mədaxil", icon: PlusCircle }] : []),
         ...(isAdmin ? [{ href: "/mehsullar", label: "Kataloq", icon: FolderKanban }] : []),
@@ -626,7 +629,8 @@ function MainRoutes({ user, onLogout }: { user: any; onLogout: () => void }) {
           {isAdmin && <Route path="/" component={Dashboard} />}
           <Route path="/pos" component={POS} />
           <Route path="/nisye" component={Debts} />
-          <Route path="/musteriler" component={Customers} />
+           <Route path="/musteriler" component={Customers} />
+          {isAdmin && <Route path="/tedarukculer" component={Vendors} />}
           <Route path="/anbar" component={Stock} />
           {isAdmin && <Route path="/anbar/daxil" component={StockIn} />}
           {isAdmin && <Route path="/mehsullar" component={Products} />}
