@@ -27,6 +27,19 @@ export default function SettingsPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  const getUpgradePlanUrl = () => {
+    const currentHost = window.location.host; // e.g. "localhost:5173", "restoran1.qazanpos.az"
+    const hostParts = currentHost.split(".");
+    if (currentHost.includes("localhost") || currentHost.includes("127.0.0.1")) {
+      return `http://localhost:${window.location.port || "5173"}/#tarifler`;
+    }
+    if (hostParts.length > 2) {
+      const baseDomain = hostParts.slice(1).join(".");
+      return `${window.location.protocol}//${baseDomain}/#tarifler`;
+    }
+    return `${window.location.protocol}//${currentHost}/#tarifler`;
+  };
+
   // Shop Info State
   const [storeName, setStoreName] = useState("");
   const [phone, setPhone] = useState("");
@@ -696,7 +709,7 @@ export default function SettingsPage() {
               {settingsData.billingTier !== "enterprise" && (
                 <div className="mt-4 flex justify-end">
                   <a
-                    href="https://wa.me/994551234567?text=Salam,%20BirSaaS%20tarif%20planımı%20yüksəltmək%20istəyirəm."
+                    href={getUpgradePlanUrl()}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black text-[10px] rounded-lg shadow-sm tracking-wide uppercase cursor-pointer transition-all hover-elevate"
