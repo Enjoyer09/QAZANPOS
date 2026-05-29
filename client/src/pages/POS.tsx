@@ -1213,10 +1213,17 @@ export default function POS() {
                     <span>Məhsul mayası</span>
                     <span className="font-mono">{totalCost.toFixed(2)} ₼</span>
                   </div>
-                  <div className="flex justify-between items-center text-green-600 bg-green-50/50 p-2.5 rounded-xl border border-green-100/50 glass animate-in fade-in">
-                    <span className="font-semibold">Təxmini Mənfəət</span>
-                    <span className="font-black font-mono text-sm">+{profit.toFixed(2)} ₼</span>
-                  </div>
+                  {profit >= 0 ? (
+                    <div className="flex justify-between items-center text-green-600 bg-green-50/50 p-2.5 rounded-xl border border-green-100/50 glass animate-in fade-in">
+                      <span className="font-semibold">Təxmini Mənfəət</span>
+                      <span className="font-black font-mono text-sm">+{profit.toFixed(2)} ₼</span>
+                    </div>
+                  ) : (
+                    <div className="flex justify-between items-center text-red-600 bg-red-50/55 p-2.5 rounded-xl border border-red-100/50 glass animate-in fade-in font-bold">
+                      <span className="font-semibold">Təxmini Zərər (İtki) ⚠️</span>
+                      <span className="font-black font-mono text-sm">-{Math.abs(profit).toFixed(2)} ₼</span>
+                    </div>
+                  )}
                 </>
               )}
             </div>

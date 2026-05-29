@@ -2230,6 +2230,102 @@ router.post("/settings/test-telegram", requireAdmin, async (req, res) => {
   }
 });
 
+router.post("/settings/reset", requireAdmin, async (req, res) => {
+  try {
+    const { password } = req.body;
+    if (!password) {
+      return res.status(400).json({ message: "Sıfırlama üçün şifrə daxil edilməlidir" });
+    }
+
+    // Verify the admin user's password
+    const adminUser = await db.query.users.findFirst({
+      where: and(
+        eq(schema.users.tenantId, req.tenantId),
+        eq(schema.users.role, "Admin")
+      )
+    });
+
+    if (!adminUser || adminUser.password !== password.trim()) {
+      return res.status(401).json({ message: "Daxil etdiyiniz Admin şifrəsi yanlışdır" });
+    }
+
+    // Perform database transaction to delete all transactional data for this tenant
+    await db.transaction(async (tx) => {
+      // 1. Delete Return Items
+      await tx.delete(schema.returnItems).where(eq(schema.returnItems.tenantId, req.tenantId));
+      
+      // 2. Delete Returns
+      await tx.delete(schema.returns).where(eq(schema.returns.tenantId, req.tenantId));
+
+      // 3. Delete Sale Items
+      await tx.delete(schema.saleItems).where(eq(schema.saleItems.tenantId, req.tenantId));
+
+      // 4. Delete Sales
+      await tx.delete(schema.sales).where(eq(schema.sales.tenantId, req.tenantId));
+
+      // 5. Delete Serial Numbers
+      await tx.delete(schema.productSerials).where(eq(schema.productSerials.tenantId, req.tenantId));
+
+      // 6. Delete Credit Payments
+      await tx.delete(schema.creditPayments).where(eq(schema.creditPayments.tenantId, req.tenantId));
+
+      // 7. Delete Supplier Payments (Wholesale payouts)
+      await tx.delete(schema.vendorPayments).where(eq(schema.vendorPayments.tenantId, req.tenantId));
+
+      // 8. Delete Stock Entries
+      await tx.delete(schema.stockEntries).where(eq(schema.stockEntries.tenantId, req.tenantId));
+
+      // 9. Delete Expenses
+      await tx.delete(schema.expenses).where(eq(schema.expenses.tenantId, req.tenantId));
+
+      // 10. Delete Payroll log
+      await tx.delete(schema.payroll).where(eq(schema.payroll.tenantId, req.tenantId));
+
+      // 11. Delete Customers
+      await tx.delete(schema.customers).where(eq(schema.customers.tenantId, req.tenantId));
+
+      // 12. Delete Products
+      await tx.delete(schema.products).where(eq(schema.products.tenantId, req.tenantId));
+
+      // 13. Delete Activity Logs
+      await tx.delete(schema.activityLogs).where(eq(schema.activityLogs.tenantId, req.tenantId));
+      
+      // 14. Reset vendors
+      await tx.delete(schema.vendors).where(eq(schema.vendors.tenantId, req.tenantId));
+
+      // 15. Reset Store Settings to default brand name
+      await tx.update(schema.settings)
+        .set({
+          storeName: "Yeni Mağaza",
+          phone: null,
+          address: null,
+          invoiceFooter: null,
+          lowStockAlertCount: 5,
+          defaultCreditDays: 30,
+          telegramBotToken: null,
+          telegramChatId: null,
+          telegramNotificationsEnabled: 0,
+        })
+        .where(eq(schema.settings.tenantId, req.tenantId));
+
+      // Log the major wipe activity
+      await tx.insert(schema.activityLogs).values({
+        tenantId: req.tenantId,
+        username: adminUser.username,
+        action: "SYSTEM_RESET",
+        description: "İstifadəçi admin şifrəsi ilə bütün sistem verilənlərini tamamilə sıfırladı və təmizlədi.",
+        timestamp: new Date().toISOString(),
+        archived: 0,
+      });
+    });
+
+    res.json({ success: true, message: "Bütün sistem məlumatları tamamilə sıfırlandı!" });
+  } catch (error: any) {
+    console.error("System reset error:", error);
+    res.status(500).json({ message: "Sistemi sıfırlayarkən xəta baş verdi: " + error.message });
+  }
+});
+
 // ----------------------------------------------------
 // 9. ACTIVITY LOGS ENDPOINTS
 // ----------------------------------------------------

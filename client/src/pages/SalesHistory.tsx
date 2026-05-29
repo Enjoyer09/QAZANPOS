@@ -42,7 +42,7 @@ const paymentBadges: Record<string, string> = {
 };
 
 export default function SalesHistory() {
-  const [activeTab, setActiveTab] = useState<"sales" | "warranty">("sales");
+  const [activeTab, setActiveTab] = useState<"sales" | "warranty" | "lossSales">("sales");
 
   // Sales History Tab States
   const [fromDate, setFromDate] = useState("");
@@ -107,6 +107,41 @@ export default function SalesHistory() {
   const totalSalesCost = filteredSales ? filteredSales.reduce((sum, s) => sum + Number(s.totalCost || 0), 0) : 0;
   const totalSalesProfit = totalSalesRevenue - totalSalesCost;
 
+  // Extract individual sale items sold below cost price (loss-making items)
+  const lossItems = React.useMemo(() => {
+    const list: any[] = [];
+    if (sales) {
+      for (const sale of sales) {
+        if (sale.items) {
+          for (const item of sale.items) {
+            const salePrice = Number(item.salePrice || 0);
+            const costPrice = Number(item.purchasePrice || 0);
+            if (salePrice < costPrice) {
+              const lossPerUnit = costPrice - salePrice;
+              const totalLoss = lossPerUnit * Number(item.quantity || 0);
+              list.push({
+                saleId: sale.id,
+                customerName: sale.customerName || "Nəğd Satış",
+                customerPhone: sale.customerPhone,
+                saleDate: sale.saleDate,
+                paymentType: sale.paymentType,
+                productId: item.productId,
+                productName: item.product?.name || item.productName || "Naməlum Məhsul",
+                unit: item.product?.unit || "ədəd",
+                quantity: Number(item.quantity || 0),
+                costPrice,
+                salePrice,
+                lossPerUnit,
+                totalLoss,
+              });
+            }
+          }
+        }
+      }
+    }
+    return list;
+  }, [sales]);
+
   // Serial/IMEI Lookup Handler
   const handleLookup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -153,6 +188,17 @@ export default function SalesHistory() {
         >
           <History className="w-4 h-4" />
           Satış Tarixçəsi
+        </button>
+        <button
+          onClick={() => setActiveTab("lossSales")}
+          className={`flex items-center gap-2 px-5 py-3 border-b-2 text-sm font-bold transition-all cursor-pointer ${
+            activeTab === "lossSales"
+              ? "border-red-500 text-red-500 font-extrabold"
+              : "border-transparent text-gray-400 hover:text-red-400"
+          }`}
+        >
+          <AlertCircle className="w-4 h-4 text-red-500" />
+          Mayadan Ucuz Satışlar
         </button>
         <button
           onClick={() => setActiveTab("warranty")}
@@ -342,6 +388,110 @@ export default function SalesHistory() {
                         </tr>
                       );
                     })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mayadan Ucuz Satışlar Tab */}
+      {activeTab === "lossSales" && (
+        <div className="space-y-6 animate-in fade-in-0 duration-200">
+          {/* Overview Analytics for Loss Sales */}
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-3 p-4 bg-red-50/50 border border-red-100 rounded-2xl glass text-xs font-medium text-gray-500">
+            <div className="p-3 bg-white/70 border border-red-100/35 rounded-xl">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Cəmi Satış Məbləği (Ödəniş)</span>
+              <span className="text-xl font-bold text-red-600 font-mono block mt-1">
+                -{lossItems.reduce((sum: number, item: any) => sum + item.salePrice * item.quantity, 0).toFixed(2)} ₼
+              </span>
+            </div>
+            <div className="p-3 bg-white/70 border border-red-100/35 rounded-xl">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Malların Cəmi Mayası</span>
+              <span className="text-xl font-bold text-gray-900 font-mono block mt-1">
+                {lossItems.reduce((sum: number, item: any) => sum + item.costPrice * item.quantity, 0).toFixed(2)} ₼
+              </span>
+            </div>
+            <div className="p-3 bg-white/70 border border-red-100/35 rounded-xl text-red-600">
+              <span className="text-[10px] font-bold text-red-500 uppercase tracking-wider block">Yekun Güzəşt (Endirim Məbləği)</span>
+              <span className="text-xl font-bold font-mono block mt-1">
+                -{lossItems.reduce((sum: number, item: any) => sum + item.totalLoss, 0).toFixed(2)} ₼
+              </span>
+            </div>
+          </div>
+
+          {/* Loss Sales Table */}
+          <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-xs glass-card">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm border-collapse min-w-[800px]">
+                <thead>
+                  <tr className="border-b border-gray-100 bg-gray-50/50 text-xs font-bold text-gray-400 uppercase tracking-wider">
+                    <th className="p-4 pl-6 text-center w-16">Qaimə №</th>
+                    <th className="p-4">Məhsul</th>
+                    <th className="p-4">Müştəri / Tarix</th>
+                    <th className="p-4 text-right">Maya (Alış)</th>
+                    <th className="p-4 text-right">Satış (Ödəniş)</th>
+                    <th className="p-4 text-center">Miqdar</th>
+                    <th className="p-4 text-right">Endirim (Vahid)</th>
+                    <th className="p-4 text-right pr-6">Yekun İtki</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50 text-xs font-bold text-gray-600">
+                  {lossItems.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="p-16 text-center text-xs text-gray-400">
+                        Bu dövr ərzində maya dəyərindən ucuz satılmış mal tapılmadı.
+                      </td>
+                    </tr>
+                  ) : (
+                    lossItems.map((item: any, idx: number) => (
+                      <tr key={`${item.saleId}-${item.productId}-${idx}`} className="hover:bg-red-50/10 transition-all border-b border-gray-50">
+                        {/* Sale ID */}
+                        <td className="p-4 text-center font-mono text-gray-900 font-bold">
+                          #{item.saleId.toString().padStart(5, "0")}
+                        </td>
+
+                        {/* Product Name */}
+                        <td className="p-4">
+                          <span className="font-bold text-gray-900 block">{item.productName}</span>
+                          <span className="text-[10px] text-gray-400 block mt-0.5">Vahid: {item.unit}</span>
+                        </td>
+
+                        {/* Customer & Date */}
+                        <td className="p-4">
+                          <span className="font-bold text-gray-900 block">{item.customerName}</span>
+                          <span className="text-[10px] text-gray-400 block mt-0.5">
+                            {new Date(item.saleDate).toLocaleDateString("az-AZ")} | {new Date(item.saleDate).toLocaleTimeString("az-AZ", { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        </td>
+
+                        {/* Cost Price */}
+                        <td className="p-4 text-right font-mono text-gray-500">
+                          {item.costPrice.toFixed(2)} ₼
+                        </td>
+
+                        {/* Sale Price (Payment) -> In red with minus sign! */}
+                        <td className="p-4 text-right font-mono text-red-600 font-bold">
+                          -{item.salePrice.toFixed(2)} ₼
+                        </td>
+
+                        {/* Quantity */}
+                        <td className="p-4 text-center font-bold text-gray-700">
+                          {item.quantity}
+                        </td>
+
+                        {/* Loss/Discount Per Unit */}
+                        <td className="p-4 text-right font-mono text-gray-500">
+                          {item.lossPerUnit.toFixed(2)} ₼
+                        </td>
+
+                        {/* Total Loss (Yekun) -> In red with minus sign! */}
+                        <td className="p-4 text-right pr-6 font-mono text-red-600 font-black">
+                          -{item.totalLoss.toFixed(2)} ₼
+                        </td>
+                      </tr>
+                    ))
                   )}
                 </tbody>
               </table>

@@ -40,6 +40,11 @@ export default function SettingsPage() {
     return `${window.location.protocol}//${currentHost}/#tarifler`;
   };
 
+  const [settingsTab, setSettingsTab] = useState("general");
+  const [showResetConfirmModal, setShowResetConfirmModal] = useState(false);
+  const [resetPassword, setResetPassword] = useState("");
+  const [isResetting, setIsResetting] = useState(false);
+
   // Shop Info State
   const [storeName, setStoreName] = useState("");
   const [phone, setPhone] = useState("");
@@ -759,7 +764,63 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+      {/* Settings Tab Navigation */}
+      <div className="flex flex-wrap gap-2 border-b border-gray-100 pb-px">
+        <button
+          type="button"
+          onClick={() => setSettingsTab("general")}
+          className={`flex items-center gap-2 px-5 py-3 border-b-2 text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+            settingsTab === "general"
+              ? "border-primary text-primary"
+              : "border-transparent text-gray-400 hover:text-gray-600"
+          }`}
+        >
+          <Store className="w-4 h-4" />
+          Mağaza və Limitlər
+        </button>
+        <button
+          type="button"
+          onClick={() => setSettingsTab("printer")}
+          className={`flex items-center gap-2 px-5 py-3 border-b-2 text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+            settingsTab === "printer"
+              ? "border-primary text-primary"
+              : "border-transparent text-gray-400 hover:text-gray-600"
+          }`}
+        >
+          <Printer className="w-4 h-4" />
+          Çap və Çek Dizaynı
+        </button>
+        <button
+          type="button"
+          onClick={() => setSettingsTab("security")}
+          className={`flex items-center gap-2 px-5 py-3 border-b-2 text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+            settingsTab === "security"
+              ? "border-primary text-primary"
+              : "border-transparent text-gray-400 hover:text-gray-600"
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          İstifadəçilər və Təhlükəsizlik
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setShowResetConfirmModal(true);
+            setResetPassword("");
+          }}
+          className={`flex items-center gap-2 px-5 py-3 border-b-2 text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+            showResetConfirmModal
+              ? "border-red-500 text-red-500 font-extrabold"
+              : "border-transparent text-gray-400 hover:text-red-400"
+          }`}
+        >
+          <Trash2 className="w-4 h-4 text-red-500" />
+          Sistemi Sıfırla 🔴
+        </button>
+      </div>
+
+      {settingsTab !== "security" && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         {/* Left Forms column */}
         <form onSubmit={handleSave} className="lg:col-span-2 space-y-6">
           {/* Plan Status Card */}
@@ -819,8 +880,9 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* Card 1: Shop profile */}
-          <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card">
+          {settingsTab === "general" && (
+            /* Card 1: Shop profile */
+            <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card">
             <div className="flex items-center gap-2 mb-6 border-b border-gray-100/50 pb-3">
               <Store className="w-5 h-5 text-primary" />
               <h3 className="font-extrabold text-gray-900 text-sm">Biznes Məlumatları (Rəsmi Qaimədə)</h3>
@@ -886,9 +948,11 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
+          )}
 
-          {/* Card 2: QZ Tray silent printing configuration */}
-          <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card">
+          {settingsTab === "printer" && (
+            /* Card 2: QZ Tray silent printing configuration */
+            <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card">
             <div className="flex items-center gap-2 mb-6 border-b border-gray-100/50 pb-3">
               <Printer className="w-5 h-5 text-primary" />
               <h3 className="font-extrabold text-gray-900 text-sm">QZ Tray Səssiz Çap Qoşulması (WebSocket)</h3>
@@ -969,9 +1033,11 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
+          )}
 
-          {/* Card: Telegram Notification Bot (Instant Owner Notifications) */}
-          <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card">
+          {settingsTab === "printer" && (
+            /* Card: Telegram Notification Bot (Instant Owner Notifications) */
+            <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card">
             <div className="flex items-center gap-2 mb-6 border-b border-gray-100/50 pb-3">
               <Bell className="w-5 h-5 text-primary" />
               <h3 className="font-extrabold text-gray-900 text-sm">🤖 Telegram Bildiriş Botu (Instant Notifications)</h3>
@@ -1042,9 +1108,11 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
+          )}
 
-          {/* Card: Backup and Restore */}
-          <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card">
+          {settingsTab === "general" && (
+            /* Card: Backup and Restore */
+            <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card">
             <div className="flex items-center gap-2 mb-6 border-b border-gray-100/50 pb-3">
               <Database className="w-5 h-5 text-primary" />
               <h3 className="font-extrabold text-gray-900 text-sm">🗄️ Ehtiyat Nüsxə və Bərpa (Backup & Restore)</h3>
@@ -1121,9 +1189,11 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
+          )}
 
-          {/* Card 3: Receipt Designer */}
-          <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card">
+          {settingsTab === "printer" && (
+            /* Card 3: Receipt Designer */
+            <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card">
             <div className="flex items-center gap-2 mb-6 border-b border-gray-100/50 pb-3">
               <Sparkles className="w-5 h-5 text-primary" />
               <h3 className="font-extrabold text-gray-900 text-sm">Fərdiləşdirilmiş Çek Dizayneri</h3>
@@ -1244,9 +1314,11 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
+          )}
 
-          {/* Card 4: System limits */}
-          <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card">
+          {settingsTab === "general" && (
+            /* Card 4: System limits */
+            <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card">
             <div className="flex items-center gap-2 mb-6 border-b border-gray-100/50 pb-3">
               <Sliders className="w-5 h-5 text-primary" />
               <h3 className="font-extrabold text-gray-900 text-sm">Sistem Limitləri və Qaydaları</h3>
@@ -1276,23 +1348,27 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
+          )}
 
-          {/* Save Button */}
-          <div className="flex justify-end">
-            <button
-              type="submit"
-              disabled={updateSettingsMutation.isPending}
-              className="px-6 py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 cursor-pointer shadow-md shadow-primary/10 transition-all flex items-center gap-2"
-            >
-              <CheckCircle className="w-4 h-4" /> Bütün Ayarları Saxla
-            </button>
-          </div>
+          {(settingsTab === "general" || settingsTab === "printer") && (
+            /* Save Button */
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                disabled={updateSettingsMutation.isPending}
+                className="px-6 py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 cursor-pointer shadow-md shadow-primary/10 transition-all flex items-center gap-2"
+              >
+                <CheckCircle className="w-4 h-4" /> Bütün Ayarları Saxla
+              </button>
+            </div>
+          )}
         </form>
 
         {/* Right Preview Column: simulated 3D receipt roll */}
         <div className="space-y-6">
-          {/* Real-time 3D receipt roll preview container */}
-          <div className="space-y-3">
+          {settingsTab === "printer" && (
+            /* Real-time 3D receipt roll preview container */
+            <div className="space-y-3">
             <span className="text-[10px] text-gray-400 uppercase font-black tracking-wider block">Real-Time Çek Önizləmə</span>
             
             {/* Thermal Roll simulated container */}
@@ -1397,9 +1473,11 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
+          )}
 
-          {/* GDPR Database Backup Card */}
-          <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card">
+          {settingsTab === "general" && (
+            /* GDPR Database Backup Card */
+            <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card">
             <div className="flex items-center gap-2 mb-4 border-b border-gray-100/50 pb-3">
               <Database className="w-5 h-5 text-primary" />
               <h3 className="font-extrabold text-gray-900 text-sm">Məlumatların Yedəklənməsi</h3>
@@ -1427,7 +1505,14 @@ export default function SettingsPage() {
               ))}
             </div>
           </div>
+          )}
 
+        </div>
+      </div>
+      )}
+
+      {settingsTab === "security" && (
+        <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6 items-start animate-in fade-in-0 duration-300">
           {/* User Management Card */}
           <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card space-y-5">
             <div className="flex items-center gap-2 mb-2 border-b border-gray-100/50 pb-3">
@@ -1584,7 +1669,120 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {showResetConfirmModal && (
+        <div className="fixed inset-0 bg-black/55 backdrop-blur-xs z-100 flex items-center justify-center p-4 animate-in fade-in-0 duration-200">
+          <div className="bg-white rounded-3xl border border-red-100 p-8 shadow-2xl max-w-md w-full relative space-y-6 text-center animate-in zoom-in-95 duration-200">
+            <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-red-500 to-amber-500 rounded-t-3xl"></div>
+            
+            <div className="size-16 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center mx-auto mb-2 animate-bounce">
+              <Trash2 className="w-8 h-8" />
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-xl font-black text-gray-900 tracking-tight">Sistemi Tamamilə Sıfırla 🔴</h3>
+              <p className="text-xs text-gray-400 font-semibold leading-relaxed">
+                Bu əməliyyat rəsmi mağaza idarəçisi (Admin) tərəfindən bütün sistem verilənlərini təmizləmək üçün istifadə olunur.
+              </p>
+            </div>
+
+            <div className="bg-red-50/70 border border-red-100/80 rounded-2xl p-5 text-left text-xs text-red-800 space-y-2">
+              <h4 className="font-black flex items-center gap-1.5 uppercase tracking-wider text-[11px] text-red-800">
+                ⚠️ TƏHLÜKƏLİ ƏMƏLİYYAT!
+              </h4>
+              <p className="font-bold leading-relaxed">
+                Davam etsəniz, aşağıdakı bütün məlumatlar silinəcək:
+              </p>
+              <ul className="list-disc pl-5 space-y-1 font-bold text-[11px] text-red-600">
+                <li>Bütün satış tarixçəsi (qaimələr və müştəri borcları)</li>
+                <li>Məhsullar kataloqu və anbar qalıqları (məhsul siyahısı)</li>
+                <li>Tədarükçülər və anbar mədaxilləri (borclar, ödənişlər)</li>
+                <li>Xərclər jurnalı, arenda və əməkhaqqı logs</li>
+                <li>Sistem fəaliyyət tarixçəsi (activity logs)</li>
+              </ul>
+              <p className="font-extrabold text-[11px] mt-2 border-t border-red-200/50 pt-2 text-red-800 leading-normal">
+                TAMAMİLƏ VƏ DAİMİ olaraq silinəcək. Bu əməliyyatın geri dönüşü YOXDUR!
+              </p>
+            </div>
+
+            <div className="space-y-2.5 text-left">
+              <label className="text-gray-700 font-bold block text-xs">
+                Təsdiqləmək üçün Admin Şifrənizi daxil edin *
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-3.5 w-4 h-4 text-gray-400" />
+                <input
+                  type="password"
+                  placeholder="Admin hesabınızın şifrəsi..."
+                  value={resetPassword}
+                  onChange={(e) => setResetPassword(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border border-red-200 focus:border-red-500 rounded-xl focus:outline-none focus:ring-1 focus:ring-red-500 bg-red-50/20 font-mono text-sm text-gray-900 font-bold"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowResetConfirmModal(false);
+                  setResetPassword("");
+                }}
+                className="flex-1 py-3 border border-gray-200 hover:bg-gray-50 text-gray-600 rounded-xl font-bold text-xs uppercase tracking-wide transition-all cursor-pointer text-center font-extrabold"
+              >
+                Geri Qayıt
+              </button>
+              <button
+                type="button"
+                disabled={isResetting || !resetPassword.trim()}
+                onClick={async () => {
+                  if (!window.confirm("Bütün verilənləri daimi olaraq silmək istədiyinizə 100% əminsiniz? Sona qədər davam edirsiniz?")) {
+                    return;
+                  }
+                  setIsResetting(true);
+                  try {
+                    const res = await fetch("/api/settings/reset", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ password: resetPassword })
+                    });
+                    
+                    const data = await res.json();
+                    if (res.ok) {
+                      toast({
+                        title: "Sistem Sıfırlandı! 💥",
+                        description: "Bütün məlumatlar silindi. Sistem 2 saniyə sonra yenidən başlayacaq...",
+                        variant: "success",
+                      });
+                      setTimeout(() => {
+                        window.location.reload();
+                      }, 2000);
+                    } else {
+                      toast({
+                        title: "Sıfırlama xətası!",
+                        description: data.message || "Admin şifrəsi yanlışdır.",
+                        variant: "destructive",
+                      });
+                    }
+                  } catch (e) {
+                    toast({
+                      title: "Texniki xəta!",
+                      description: "Sıfırlama sorğusunu icra edərkən xəta yarandı.",
+                      variant: "destructive",
+                    });
+                  } finally {
+                    setIsResetting(false);
+                  }
+                }}
+                className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs uppercase tracking-wide transition-all cursor-pointer text-center shadow-lg shadow-red-500/10 disabled:opacity-50 disabled:cursor-not-allowed font-extrabold"
+              >
+                {isResetting ? "Sıfırlanır..." : "Bütün Sistemi Sıfırla 💥"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Change Password Modal Overlay */}
       {selectedUserToReset && (
