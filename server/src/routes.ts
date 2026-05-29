@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "./db/index.js";
 import * as schema from "./db/schema.js";
-import { eq, and, lte, gte, sql, desc, inArray } from "drizzle-orm";
+import { eq, and, lte, gte, sql, desc, asc, inArray } from "drizzle-orm";
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
@@ -858,6 +858,26 @@ router.patch("/stock/entries/:id/pay", requireAdmin, async (req, res) => {
     const productList = await db.select().from(schema.products).where(and(eq(schema.products.id, entry.productId), eq(schema.products.tenantId, req.tenantId))).limit(1);
     const productName = productList[0] ? productList[0].name : `ID: ${entry.productId}`;
     const debtAmount = entry.quantity * entry.purchasePrice;
+
+    // Link and automatically insert record in global vendorPayments
+    let vendorId = entry.vendorId;
+    if (!vendorId && entry.supplier) {
+      const v = await db.query.vendors.findFirst({
+        where: and(eq(schema.vendors.name, entry.supplier), eq(schema.vendors.tenantId, req.tenantId))
+      });
+      if (v) vendorId = v.id;
+    }
+
+    if (vendorId) {
+      await db.insert(schema.vendorPayments).values({
+        tenantId: req.tenantId,
+        vendorId,
+        amount: debtAmount,
+        paymentDate: new Date().toISOString(),
+        paymentType: paymentType || "Nəğd",
+        notes: notes || `Mədaxil №${entry.id} (${productName}) üzrə borc ödənişi (Mənbə: ${paymentFrom || "Əsas"})`,
+      });
+    }
 
     await logActivity(
       req,
@@ -2934,14 +2954,39 @@ router.post("/vendors/:id/payments", requireAdmin, async (req, res) => {
       return res.status(404).json({ message: "Tədarükçü tapılmadı" });
     }
     
+    const parsedAmount = parseFloat(amount);
+    
     const newPayment = await db.insert(schema.vendorPayments).values({
       tenantId: req.tenantId,
       vendorId: id,
-      amount: parseFloat(amount),
+      amount: parsedAmount,
       paymentType,
       notes: notes || null,
       paymentDate: paymentDate || new Date().toISOString(),
     }).returning();
+    
+    // Automatically allocate payment to the oldest unpaid credit stock entries of this vendor (FIFO)
+    const unpaidEntries = await db.query.stockEntries.findMany({
+      where: and(
+        eq(schema.stockEntries.vendorId, id),
+        eq(schema.stockEntries.paidStatus, "credit"),
+        eq(schema.stockEntries.tenantId, req.tenantId)
+      ),
+      orderBy: [asc(schema.stockEntries.entryDate)], // Oldest first
+    });
+    
+    let remainingPayment = parsedAmount;
+    for (const entry of unpaidEntries) {
+      const debtAmount = entry.quantity * entry.purchasePrice;
+      if (remainingPayment >= debtAmount) {
+        await db.update(schema.stockEntries)
+          .set({ paidStatus: "paid" })
+          .where(eq(schema.stockEntries.id, entry.id));
+        remainingPayment -= debtAmount;
+      } else {
+        break; // Cannot fully cover the next debt entry, stop allocation
+      }
+    }
     
     await logActivity(req, "CREATE_VENDOR_PAYMENT", `Tədarükçüyə ödəniş etdi: ${vendor.name} (${amount} ₼, Ödəniş: ${paymentType})`);
     res.json(newPayment[0]);

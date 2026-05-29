@@ -96,6 +96,7 @@ export default function Stock() {
               <tr className="border-b border-gray-100 bg-gray-50/50 text-xs font-bold text-gray-400 uppercase tracking-wider">
                 <th className="p-4 pl-6">Məhsul</th>
                 <th className="p-4">Kateqoriya</th>
+                <th className="p-4 text-center">Son Alış Tarixi</th>
                 <th className="p-4 text-right">Cari Miqdar</th>
                 <th className="p-4 text-right">Son Alış Qiyməti</th>
                 <th className="p-4 text-right">Ümumi Dəyər</th>
@@ -105,31 +106,20 @@ export default function Stock() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="p-10 text-center text-xs text-gray-400">
+                  <td colSpan={7} className="p-10 text-center text-xs text-gray-400">
                     Yüklənir...
                   </td>
                 </tr>
               ) : filteredList.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-16 text-center text-xs text-gray-400">
+                  <td colSpan={7} className="p-16 text-center text-xs text-gray-400">
                     {searchQuery ? "Axtarışa uyğun məhsul tapılmadı." : "Anbar boşdur. Anbara məhsul mədaxil edin."}
                   </td>
                 </tr>
               ) : (
                 filteredList.map((item) => (
                   <tr key={item.productId} className="border-b border-gray-50 hover:bg-gray-50/30 transition-all text-xs">
-                    <td className="p-4 pl-6">
-                      <span className="font-bold text-gray-900 block">{item.productName}</span>
-                      {item.lastPurchaseDate ? (
-                        <span className="text-[10px] text-gray-400 font-semibold block mt-0.5 uppercase tracking-wide">
-                          Son Mədaxil: {new Date(item.lastPurchaseDate).toLocaleDateString("az-AZ")}
-                        </span>
-                      ) : (
-                        <span className="text-[10px] text-gray-400 font-semibold block mt-0.5 uppercase tracking-wide">
-                          Mədaxil yoxdur
-                        </span>
-                      )}
-                    </td>
+                    <td className="p-4 pl-6 font-bold text-gray-900">{item.productName}</td>
                     <td className="p-4 font-medium text-gray-600">
                       {item.category ? (
                         <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md text-[10px] font-bold">
@@ -138,6 +128,9 @@ export default function Stock() {
                       ) : (
                         "—"
                       )}
+                    </td>
+                    <td className="p-4 text-center font-mono font-medium text-gray-500">
+                      {item.lastPurchaseDate ? new Date(item.lastPurchaseDate).toLocaleDateString("az-AZ") : "—"}
                     </td>
                     <td className="p-4 text-right font-bold text-gray-900 font-mono">
                       {item.currentQuantity} <span className="text-[10px] text-gray-400 font-sans font-medium ml-0.5">{item.unit}</span>
