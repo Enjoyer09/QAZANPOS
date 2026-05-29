@@ -45,11 +45,12 @@ export default function Vendors() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
+  const [activeTab, setActiveTab] = useState<"directory" | "ledger">("directory");
+  const [ledgerSearchTerm, setLedgerSearchTerm] = useState("");
   
   // Modals state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
-  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
 
   // Form states
@@ -87,6 +88,17 @@ export default function Vendors() {
       return res.json();
     },
     enabled: !!selectedVendor,
+  });
+
+  // Query all vendor payments globally (wholesale payouts ledger)
+  const { data: globalPayments = [], isLoading: isLedgerLoading } = useQuery<any[]>({
+    queryKey: ["/api/vendors/payments"],
+    queryFn: async () => {
+      const res = await fetch("/api/vendors/payments");
+      if (!res.ok) throw new Error("Ödəniş tarixçəsini yükləyərkən xəta baş verdi");
+      return res.json();
+    },
+    enabled: activeTab === "ledger",
   });
 
   // Mutation to create vendor
@@ -132,6 +144,7 @@ export default function Vendors() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vendors"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/vendors/payments"] });
       if (selectedVendor) {
         queryClient.invalidateQueries({ queryKey: [`/api/vendors/${selectedVendor.id}/payments`] });
       }
@@ -248,130 +261,253 @@ export default function Vendors() {
         </div>
       </div>
 
-      {/* Directory Content Workspace */}
-      <div className="bg-white border border-gray-100 rounded-3xl shadow-sm p-6 space-y-4">
-        {/* Search and Filters */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="relative max-w-sm w-full">
-            <Search className="w-4.5 h-4.5 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Tədarükçü adı və ya telefon..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-bold focus:outline-none focus:border-primary transition-all text-gray-700"
-            />
-          </div>
-        </div>
-
-        {/* Vendors Directory Table */}
-        {isLoading ? (
-          <div className="py-12 text-center text-xs font-bold text-gray-400 uppercase tracking-wider">Məlumatlar yüklənir...</div>
-        ) : filteredVendors.length === 0 ? (
-          <div className="py-12 text-center text-xs font-bold text-gray-400 uppercase tracking-wider">Tədarükçü tapılmadı.</div>
-        ) : (
-          <div className="overflow-x-auto rounded-2xl border border-gray-50">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-gray-50 text-[9px] font-black text-gray-400 uppercase tracking-wider border-b border-gray-100">
-                  <th className="py-3.5 px-4">Tədarükçü Firma</th>
-                  <th className="py-3.5 px-4">Əlaqə Məlumatları</th>
-                  <th className="py-3.5 px-4 text-right">Cəmi Alış Dövriyyəsi</th>
-                  <th className="py-3.5 px-4 text-right">Ödənilən Məbləğ</th>
-                  <th className="py-3.5 px-4 text-right">Mövcud Qalıq Borc</th>
-                  <th className="py-3.5 px-4 text-center">Əməliyyatlar</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50 text-xs font-bold text-gray-600">
-                {filteredVendors.map((vendor) => (
-                  <tr key={vendor.id} className="hover:bg-gray-50/50 transition-colors">
-                    {/* Brand Info */}
-                    <td className="py-4 px-4">
-                      <div className="flex items-center gap-3">
-                        <div className="size-8 rounded-lg bg-primary/5 text-primary flex items-center justify-center font-black">
-                          {vendor.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <span className="block font-black text-gray-900 leading-tight">{vendor.name}</span>
-                          <span className="block text-[9px] font-bold text-gray-400 mt-0.5 uppercase tracking-wide">
-                            Qeydiyyat: {new Date(vendor.createdAt).toLocaleDateString("az-AZ")}
-                          </span>
-                        </div>
-                      </div>
-                    </td>
-
-                    {/* Contacts info */}
-                    <td className="py-4 px-4">
-                      <div className="space-y-1 text-gray-500 font-medium">
-                        {vendor.phone && (
-                          <div className="flex items-center gap-1.5">
-                            <Phone className="w-3.5 h-3.5 text-gray-400" />
-                            <span>{vendor.phone}</span>
-                          </div>
-                        )}
-                        {vendor.email && (
-                          <div className="flex items-center gap-1.5">
-                            <Mail className="w-3.5 h-3.5 text-gray-400" />
-                            <span className="text-[10px] truncate max-w-[150px]">{vendor.email}</span>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Dövriyyə */}
-                    <td className="py-4 px-4 text-right text-gray-800 font-mono">
-                      {vendor.totalPurchases.toFixed(2)} ₼
-                    </td>
-
-                    {/* Ödənilən */}
-                    <td className="py-4 px-4 text-right text-emerald-600 font-mono">
-                      {vendor.totalPaid.toFixed(2)} ₼
-                    </td>
-
-                    {/* Qalıq Borc */}
-                    <td className="py-4 px-4 text-right">
-                      {vendor.balance > 0 ? (
-                        <div className="inline-flex items-center gap-1.5 font-mono text-red-600 font-black">
-                          <span className="size-1.5 rounded-full bg-red-500 animate-pulse"></span>
-                          <span>{vendor.balance.toFixed(2)} ₼</span>
-                        </div>
-                      ) : (
-                        <span className="text-gray-400 font-normal">Borc yoxdur</span>
-                      )}
-                    </td>
-
-                    {/* Action buttons */}
-                    <td className="py-4 px-4">
-                      <div className="flex items-center justify-center gap-2">
-                        <button
-                          onClick={() => {
-                            setSelectedVendor(vendor);
-                            setIsPayModalOpen(true);
-                          }}
-                          className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-black rounded-lg text-[9px] uppercase tracking-wider transition-all cursor-pointer"
-                        >
-                          Ödəniş et 💸
-                        </button>
-                        
-                        <button
-                          onClick={() => {
-                            setSelectedVendor(vendor);
-                            setIsHistoryModalOpen(true);
-                          }}
-                          className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 font-black rounded-lg text-[9px] uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1"
-                        >
-                          <History className="w-3 h-3" />
-                          <span>Tarixçə</span>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+      {/* Tabs Navigation */}
+      <div className="flex border-b border-gray-100">
+        <button
+          onClick={() => setActiveTab("directory")}
+          className={`flex items-center gap-2 px-5 py-3 border-b-2 text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+            activeTab === "directory"
+              ? "border-primary text-primary"
+              : "border-transparent text-gray-400 hover:text-gray-600"
+          }`}
+        >
+          <Truck className="w-4 h-4" />
+          Tədarükçü Siyahısı
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab("ledger");
+            setLedgerSearchTerm("");
+          }}
+          className={`flex items-center gap-2 px-5 py-3 border-b-2 text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+            activeTab === "ledger"
+              ? "border-primary text-primary"
+              : "border-transparent text-gray-400 hover:text-gray-600"
+          }`}
+        >
+          <History className="w-4 h-4" />
+          Ödəniş Tarixçəsi
+        </button>
       </div>
+
+      {activeTab === "directory" ? (
+        /* Directory Content Workspace */
+        <div className="bg-white border border-gray-100 rounded-3xl shadow-sm p-6 space-y-4">
+          {/* Search and Filters */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="relative max-w-sm w-full">
+              <Search className="w-4.5 h-4.5 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Tədarükçü adı və ya telefon..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-bold focus:outline-none focus:border-primary transition-all text-gray-700"
+              />
+            </div>
+          </div>
+
+          {/* Vendors Directory Table */}
+          {isLoading ? (
+            <div className="py-12 text-center text-xs font-bold text-gray-400 uppercase tracking-wider">Məlumatlar yüklənir...</div>
+          ) : filteredVendors.length === 0 ? (
+            <div className="py-12 text-center text-xs font-bold text-gray-400 uppercase tracking-wider">Tədarükçü tapılmadı.</div>
+          ) : (
+            <div className="overflow-x-auto rounded-2xl border border-gray-50">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-gray-50 text-[9px] font-black text-gray-400 uppercase tracking-wider border-b border-gray-100">
+                    <th className="py-3.5 px-4">Tədarükçü Firma</th>
+                    <th className="py-3.5 px-4">Əlaqə Məlumatları</th>
+                    <th className="py-3.5 px-4 text-right">Cəmi Alış Dövriyyəsi</th>
+                    <th className="py-3.5 px-4 text-right">Ödənilən Məbləğ</th>
+                    <th className="py-3.5 px-4 text-right">Mövcud Qalıq Borc</th>
+                    <th className="py-3.5 px-4 text-center">Əməliyyatlar</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50 text-xs font-bold text-gray-600">
+                  {filteredVendors.map((vendor) => (
+                    <tr key={vendor.id} className="hover:bg-gray-50/50 transition-colors">
+                      {/* Brand Info */}
+                      <td className="py-4 px-4">
+                        <div className="flex items-center gap-3">
+                          <div className="size-8 rounded-lg bg-primary/5 text-primary flex items-center justify-center font-black">
+                            {vendor.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <span className="block font-black text-gray-900 leading-tight">{vendor.name}</span>
+                            <span className="block text-[9px] font-bold text-gray-400 mt-0.5 uppercase tracking-wide">
+                              Qeydiyyat: {new Date(vendor.createdAt).toLocaleDateString("az-AZ")}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Contacts info */}
+                      <td className="py-4 px-4">
+                        <div className="space-y-1 text-gray-500 font-medium">
+                          {vendor.phone && (
+                            <div className="flex items-center gap-1.5">
+                              <Phone className="w-3.5 h-3.5 text-gray-400" />
+                              <span>{vendor.phone}</span>
+                            </div>
+                          )}
+                          {vendor.email && (
+                            <div className="flex items-center gap-1.5">
+                              <Mail className="w-3.5 h-3.5 text-gray-400" />
+                              <span className="text-[10px] truncate max-w-[150px]">{vendor.email}</span>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Dövriyyə */}
+                      <td className="py-4 px-4 text-right text-gray-800 font-mono">
+                        {vendor.totalPurchases.toFixed(2)} ₼
+                      </td>
+
+                      {/* Ödənilən */}
+                      <td className="py-4 px-4 text-right text-emerald-600 font-mono">
+                        {vendor.totalPaid.toFixed(2)} ₼
+                      </td>
+
+                      {/* Qalıq Borc */}
+                      <td className="py-4 px-4 text-right">
+                        {vendor.balance > 0 ? (
+                          <div className="inline-flex items-center gap-1.5 font-mono text-red-600 font-black">
+                            <span className="size-1.5 rounded-full bg-red-500 animate-pulse"></span>
+                            <span>{vendor.balance.toFixed(2)} ₼</span>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 font-normal">Borc yoxdur</span>
+                        )}
+                      </td>
+
+                      {/* Action buttons */}
+                      <td className="py-4 px-4">
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            onClick={() => {
+                              setSelectedVendor(vendor);
+                              setIsPayModalOpen(true);
+                            }}
+                            className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-black rounded-lg text-[9px] uppercase tracking-wider transition-all cursor-pointer"
+                          >
+                            Ödəniş et 💸
+                          </button>
+                          
+                          <button
+                            onClick={() => {
+                              setLedgerSearchTerm(vendor.name);
+                              setActiveTab("ledger");
+                            }}
+                            className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 font-black rounded-lg text-[9px] uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1"
+                          >
+                            <History className="w-3 h-3" />
+                            <span>Tarixçə</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Global Payments Ledger Workspace */
+        <div className="bg-white border border-gray-100 rounded-3xl shadow-sm p-6 space-y-4">
+          {/* Search and Filters */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="relative max-w-sm w-full">
+              <Search className="w-4.5 h-4.5 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Firma adı, ödəniş növü və ya qeyd üzrə axtarış..."
+                value={ledgerSearchTerm}
+                onChange={(e) => setLedgerSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-bold focus:outline-none focus:border-primary transition-all text-gray-700"
+              />
+            </div>
+            {ledgerSearchTerm && (
+              <button
+                onClick={() => setLedgerSearchTerm("")}
+                className="text-xs text-gray-400 hover:text-gray-600 font-bold underline"
+              >
+                Süzgəci sıfırla 🧹
+              </button>
+            )}
+          </div>
+
+          {/* Ledger Table */}
+          {isLedgerLoading ? (
+            <div className="py-12 text-center text-xs font-bold text-gray-400 uppercase tracking-wider">Məlumatlar yüklənir...</div>
+          ) : globalPayments.length === 0 ? (
+            <div className="py-12 text-center text-xs font-bold text-gray-400 uppercase tracking-wider">Heç bir ödəniş tapılmadı.</div>
+          ) : (
+            <div className="overflow-x-auto rounded-2xl border border-gray-50">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-gray-50 text-[9px] font-black text-gray-400 uppercase tracking-wider border-b border-gray-100">
+                    <th className="py-3.5 px-4">Tədarükçü Firma</th>
+                    <th className="py-3.5 px-4">Ödəniş Tarixi</th>
+                    <th className="py-3.5 px-4">Ödəniş Üsulu</th>
+                    <th className="py-3.5 px-4">Ödəniş Qeydi</th>
+                    <th className="py-3.5 px-4 text-right">Borcdan Silinən Məbləğ</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50 text-xs font-bold text-gray-600">
+                  {globalPayments
+                    .filter((p: any) =>
+                      p.vendorName.toLowerCase().includes(ledgerSearchTerm.toLowerCase()) ||
+                      (p.notes && p.notes.toLowerCase().includes(ledgerSearchTerm.toLowerCase())) ||
+                      p.paymentType.toLowerCase().includes(ledgerSearchTerm.toLowerCase())
+                    )
+                    .map((payment: any) => (
+                      <tr key={payment.id} className="hover:bg-gray-50/50 transition-colors">
+                        <td className="py-4 px-4">
+                          <div className="flex items-center gap-3">
+                            <div className="size-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-black">
+                              {payment.vendorName.charAt(0).toUpperCase()}
+                            </div>
+                            <span className="font-black text-gray-900 leading-tight">{payment.vendorName}</span>
+                          </div>
+                        </td>
+                        <td className="py-4 px-4 text-gray-500 font-mono">
+                          {new Date(payment.paymentDate).toLocaleDateString("az-AZ")} | {new Date(payment.paymentDate).toLocaleTimeString("az-AZ", { hour: "2-digit", minute: "2-digit" })}
+                        </td>
+                        <td className="py-4 px-4 text-gray-600">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 text-gray-700 rounded-lg text-[10px] font-bold">
+                            <CreditCard className="w-3.5 h-3.5 text-gray-500" />
+                            {payment.paymentType}
+                          </span>
+                        </td>
+                        <td className="py-4 px-4 text-gray-500 italic max-w-xs truncate">
+                          {payment.notes ? `"${payment.notes}"` : "-"}
+                        </td>
+                        <td className="py-4 px-4 text-right font-mono text-emerald-600 font-black">
+                          -{payment.amount.toFixed(2)} ₼
+                        </td>
+                      </tr>
+                    ))}
+                  {globalPayments.filter((p: any) =>
+                    p.vendorName.toLowerCase().includes(ledgerSearchTerm.toLowerCase()) ||
+                    (p.notes && p.notes.toLowerCase().includes(ledgerSearchTerm.toLowerCase())) ||
+                    p.paymentType.toLowerCase().includes(ledgerSearchTerm.toLowerCase())
+                  ).length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="py-12 text-center text-xs font-bold text-gray-400 uppercase tracking-wider">
+                        Axtarışa uyğun ödəniş tapılmadı.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* MODAL 1: YENİ TƏDARÜKÇÜ */}
       {isAddModalOpen && (
@@ -554,56 +690,6 @@ export default function Vendors() {
         </div>
       )}
 
-      {/* MODAL 3: ÖDƏNİŞ TARİXÇƏSİ */}
-      {isHistoryModalOpen && selectedVendor && (
-        <div className="fixed inset-0 z-100 bg-black/60 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-white border border-gray-200 rounded-3xl w-full max-w-md shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-200 text-left">
-            <h3 className="text-lg font-black text-gray-900 tracking-tight flex items-center gap-2 border-b border-gray-100 pb-3">
-              <History className="w-5 h-5 text-gray-700" />
-              <span>{selectedVendor.name} - Ödəniş Tarixçəsi</span>
-            </h3>
-
-            <div className="max-h-[350px] overflow-y-auto space-y-2 mt-4 pr-1">
-              {activePayments.length === 0 ? (
-                <div className="py-12 text-center text-xs font-bold text-gray-400 uppercase tracking-wider">Heç bir ödəniş edilməyib.</div>
-              ) : (
-                activePayments.map((p) => (
-                  <div key={p.id} className="p-4 bg-gray-50 border border-gray-100 rounded-2xl flex items-center justify-between text-xs font-semibold">
-                    <div className="space-y-1 text-left">
-                      <div className="flex items-center gap-1.5 text-gray-950 font-black">
-                        <CreditCard className="w-3.5 h-3.5 text-primary shrink-0" />
-                        <span>Növ: {p.paymentType}</span>
-                      </div>
-                      {p.notes && (
-                        <div className="text-[11px] text-gray-600 bg-gray-100/50 p-2 rounded-lg mt-1 font-medium italic">
-                          Qeyd: "{p.notes}"
-                        </div>
-                      )}
-                      <span className="block text-[10px] text-gray-500 font-semibold font-mono block mt-1.5">
-                        Tarix: {new Date(p.paymentDate).toLocaleDateString("az-AZ")} | {new Date(p.paymentDate).toLocaleTimeString("az-AZ", { hour: "2-digit", minute: "2-digit" })}
-                      </span>
-                    </div>
-
-                    <div className="text-right shrink-0">
-                      <span className="text-emerald-700 font-black font-mono text-sm">-{p.amount.toFixed(2)} ₼</span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <div className="pt-4 border-t border-gray-100 mt-4">
-              <button
-                type="button"
-                onClick={() => setIsHistoryModalOpen(false)}
-                className="w-full py-3 bg-gray-950 hover:bg-gray-800 text-white font-black rounded-xl text-[10px] uppercase tracking-wider transition-all cursor-pointer text-center"
-              >
-                Bağla
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

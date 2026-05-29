@@ -2736,6 +2736,30 @@ router.put("/super/profile", requireSuperAdmin, async (req, res) => {
 // 13. VENDOR / SUPPLIER ENDPOINTS
 // ----------------------------------------------------
 
+// List all vendor payments globally (wholesale payouts ledger)
+router.get("/vendors/payments", requireAdmin, async (req, res) => {
+  try {
+    const payments = await db
+      .select({
+        id: schema.vendorPayments.id,
+        amount: schema.vendorPayments.amount,
+        paymentDate: schema.vendorPayments.paymentDate,
+        paymentType: schema.vendorPayments.paymentType,
+        notes: schema.vendorPayments.notes,
+        vendorName: schema.vendors.name,
+      })
+      .from(schema.vendorPayments)
+      .innerJoin(schema.vendors, eq(schema.vendorPayments.vendorId, schema.vendors.id))
+      .where(eq(schema.vendorPayments.tenantId, req.tenantId))
+      .orderBy(desc(schema.vendorPayments.paymentDate));
+
+    res.json(payments);
+  } catch (error: any) {
+    console.error("Global vendor payments error:", error);
+    res.status(500).json({ message: "Bütün tədarükçü ödənişlərini gətirərkən xəta baş verdi: " + error.message });
+  }
+});
+
 // List all vendors with aggregated balances
 router.get("/vendors", async (req, res) => {
   try {
