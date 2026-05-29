@@ -79,6 +79,61 @@ export const vendorPayments = pgTable("vendor_payments", {
   notes: text("notes"),
 });
 
+// 2c. Employees (HR Directory)
+export const employees = pgTable("employees", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" })
+    .default(1),
+  name: text("name").notNull(),
+  phone: text("phone"),
+  email: text("email"),
+  position: text("position").notNull(), // "Kassir", "Menecer", etc.
+  baseSalary: doublePrecision("base_salary").notNull(),
+  hireDate: text("hire_date").notNull(), // ISO YYYY-MM-DD
+  status: text("status").notNull().default("active"), // "active", "inactive"
+  notes: text("notes"),
+  createdAt: text("created_at").notNull(),
+});
+
+// 2d. Payroll Records (Monthly salary log)
+export const payroll = pgTable("payroll", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" })
+    .default(1),
+  employeeId: integer("employee_id")
+    .notNull()
+    .references(() => employees.id, { onDelete: "cascade" }),
+  payrollMonth: text("payroll_month").notNull(), // "YYYY-MM"
+  baseSalary: doublePrecision("base_salary").notNull(),
+  bonuses: doublePrecision("bonuses").notNull().default(0.0),
+  deductions: doublePrecision("deductions").notNull().default(0.0),
+  netSalary: doublePrecision("net_salary").notNull(), // baseSalary + bonuses - deductions
+  paidAmount: doublePrecision("paid_amount").notNull().default(0.0),
+  paymentStatus: text("payment_status").notNull().default("unpaid"), // "unpaid", "partial", "paid"
+  notes: text("notes"),
+  createdAt: text("created_at").notNull(),
+});
+
+// 2e. Salary Payments
+export const salaryPayments = pgTable("salary_payments", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" })
+    .default(1),
+  payrollId: integer("payroll_id")
+    .notNull()
+    .references(() => payroll.id, { onDelete: "cascade" }),
+  amount: doublePrecision("amount").notNull(),
+  paymentDate: text("payment_date").notNull(), // ISO timestamp
+  paymentType: text("payment_type").notNull(), // "Nəğd", "Kart", "Kart2Kart"
+  notes: text("notes"),
+});
+
 // 3. Customers Directory
 export const customers = pgTable("customers", {
   id: serial("id").primaryKey(),
@@ -381,6 +436,37 @@ export const returnItemsRelations = relations(returnItems, ({ one }) => ({
   product: one(products, {
     fields: [returnItems.productId],
     references: [products.id],
+  }),
+}));
+
+export const employeesRelations = relations(employees, ({ one, many }) => ({
+  tenant: one(tenants, {
+    fields: [employees.tenantId],
+    references: [tenants.id],
+  }),
+  payrolls: many(payroll),
+}));
+
+export const payrollRelations = relations(payroll, ({ one, many }) => ({
+  tenant: one(tenants, {
+    fields: [payroll.tenantId],
+    references: [tenants.id],
+  }),
+  employee: one(employees, {
+    fields: [payroll.employeeId],
+    references: [employees.id],
+  }),
+  payments: many(salaryPayments),
+}));
+
+export const salaryPaymentsRelations = relations(salaryPayments, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [salaryPayments.tenantId],
+    references: [tenants.id],
+  }),
+  payroll: one(payroll, {
+    fields: [salaryPayments.payrollId],
+    references: [payroll.id],
   }),
 }));
 

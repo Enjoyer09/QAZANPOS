@@ -12,6 +12,7 @@ const emptyEntry = {
   notes: "",
   paymentType: "Nəğd",
   creditDueDate: "",
+  vendorId: "",
 };
 
 const paymentTypes = ["Nəğd", "Kart", "Kart2Kart", "Nisyə"];
@@ -36,6 +37,15 @@ export default function StockIn() {
     queryKey: ["/api/products"],
     queryFn: async () => {
       const res = await fetch("/api/products");
+      if (!res.ok) throw new Error();
+      return res.json();
+    },
+  });
+
+  const { data: vendors } = useQuery<any[]>({
+    queryKey: ["/api/vendors"],
+    queryFn: async () => {
+      const res = await fetch("/api/vendors");
       if (!res.ok) throw new Error();
       return res.json();
     },
@@ -120,6 +130,7 @@ export default function StockIn() {
       notes: formData.notes || null,
       paymentType: formData.paymentType,
       creditDueDate: isCredit ? formData.creditDueDate : null,
+      vendorId: formData.vendorId ? parseInt(formData.vendorId) : null,
     };
 
     createMutation.mutate(payload);
@@ -233,14 +244,39 @@ export default function StockIn() {
                   required={isCredit}
                 />
                 <p className="text-[10px] text-amber-600/80 leading-normal font-medium mt-1.5">
-                  Bu mal nisyəyə alınır — tədarükçüyə borc olaraq qeydə alınacaq.
+                  Bu mal nisyəyə alınır — {!formData.vendorId && "DİQQƏT: Borcun topdansatış kartına işlənməsi üçün aşağıdan qeydiyyatlı tədarükçü seçməyiniz tövsiyə olunur."}
                 </p>
               </div>
             )}
 
-            {/* Supplier */}
+            {/* Supplier / Vendor Selector */}
             <div className="space-y-1.5">
-              <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Tədarükçü</label>
+              <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Qeydiyyatlı Tədarükçü (Ledger)</label>
+              <select
+                value={formData.vendorId || ""}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const found = vendors?.find((v) => String(v.id) === val);
+                  setFormData((prev) => ({
+                    ...prev,
+                    vendorId: val,
+                    supplier: found ? found.name : "",
+                  }));
+                }}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 cursor-pointer"
+              >
+                <option value="">Sərbəst / Yoxdur</option>
+                {vendors?.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name} ({v.phone || "Telefon yoxdur"})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Custom Supplier Text Input if free-form or to show the selected name */}
+            <div className="space-y-1.5">
+              <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Tədarükçü Adı (Sərbəst Yazı)</label>
               <input
                 type="text"
                 placeholder="Şirkət / şəxs adı (ixtiyari)"

@@ -21,6 +21,7 @@ import {
   RotateCw,
   Tag,
   Truck,
+  UserCheck,
 } from "lucide-react";
 
 // Reusable components
@@ -45,6 +46,7 @@ import SuperDashboard from "./pages/SuperDashboard.tsx";
 import Landing from "./pages/Landing.tsx";
 import Labels from "./pages/Labels.tsx";
 import Vendors from "./pages/Vendors.tsx";
+import Payroll from "./pages/Payroll.tsx";
 import LimitReachedModal from "./components/LimitReachedModal.tsx";
 
 // Global fetch interceptor to automatically attach x-user-role, x-user-username, and x-tenant-host headers
@@ -220,6 +222,7 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
         { href: "/nisye", label: "Borclar", icon: AlertTriangle },
         { href: "/musteriler", label: "Müştərilər", icon: Users },
         ...(isAdmin ? [{ href: "/tedarukculer", label: "Tədarükçülər", icon: Truck }] : []),
+        ...(isAdmin ? [{ href: "/hr", label: "HR & Əməkhaqqı", icon: UserCheck }] : []),
         { href: "/anbar", label: "Qalıqlar", icon: Boxes },
         ...(isAdmin ? [{ href: "/anbar/daxil", label: "Mədaxil", icon: PlusCircle }] : []),
         ...(isAdmin ? [{ href: "/mehsullar", label: "Kataloq", icon: FolderKanban }] : []),
@@ -630,8 +633,9 @@ function MainRoutes({ user, onLogout }: { user: any; onLogout: () => void }) {
           <Route path="/pos" component={POS} />
           <Route path="/nisye" component={Debts} />
            <Route path="/musteriler" component={Customers} />
-          {isAdmin && <Route path="/tedarukculer" component={Vendors} />}
-          <Route path="/anbar" component={Stock} />
+           {isAdmin && <Route path="/tedarukculer" component={Vendors} />}
+           {isAdmin && <Route path="/hr" component={Payroll} />}
+           <Route path="/anbar" component={Stock} />
           {isAdmin && <Route path="/anbar/daxil" component={StockIn} />}
           {isAdmin && <Route path="/mehsullar" component={Products} />}
           {isAdmin && <Route path="/etiketler" component={Labels} />}

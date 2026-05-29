@@ -560,6 +560,7 @@ router.get("/stock/entries", async (req, res) => {
       id: entry.id,
       productId: entry.productId,
       productName: entry.product.name,
+      vendorId: entry.vendorId,
       quantity: entry.quantity,
       purchasePrice: entry.purchasePrice,
       supplier: entry.supplier,
@@ -2512,6 +2513,336 @@ router.post("/vendors/:id/payments", requireAdmin, async (req, res) => {
     res.json(newPayment[0]);
   } catch (error) {
     res.status(500).json({ message: "Tədarükçüyə ödəniş edilərkən xəta baş verdi" });
+  }
+});
+
+// ----------------------------------------------------
+// 14. EMPLOYEES / HR ENDPOINTS
+// ----------------------------------------------------
+
+// List all employees
+router.get("/employees", async (req, res) => {
+  try {
+    const allEmployees = await db
+      .select()
+      .from(schema.employees)
+      .where(eq(schema.employees.tenantId, req.tenantId))
+      .orderBy(desc(schema.employees.createdAt));
+    res.json(allEmployees);
+  } catch (error) {
+    res.status(500).json({ message: "Əməkdaşları gətirərkən xəta baş verdi" });
+  }
+});
+
+// Create employee
+router.post("/employees", requireAdmin, async (req, res) => {
+  try {
+    const { name, phone, email, position, baseSalary, hireDate, status, notes } = req.body;
+    if (!name || !position || baseSalary === undefined || !hireDate) {
+      return res.status(400).json({ message: "Məcburi sahələri doldurun" });
+    }
+
+    const newEmployee = await db
+      .insert(schema.employees)
+      .values({
+        tenantId: req.tenantId,
+        name,
+        phone: phone || null,
+        email: email || null,
+        position,
+        baseSalary: parseFloat(baseSalary),
+        hireDate,
+        status: status || "active",
+        notes: notes || null,
+        createdAt: new Date().toISOString(),
+      })
+      .returning();
+
+    await logActivity(req, "CREATE_EMPLOYEE", `Yeni əməkdaş əlavə etdi: ${name} (${position}, Maaş: ${baseSalary} ₼)`);
+    res.json(newEmployee[0]);
+  } catch (error) {
+    res.status(500).json({ message: "Əməkdaş əlavə edilərkən xəta baş verdi" });
+  }
+});
+
+// Update employee
+router.put("/employees/:id", requireAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { name, phone, email, position, baseSalary, hireDate, status, notes } = req.body;
+
+    if (!name || !position || baseSalary === undefined || !hireDate) {
+      return res.status(400).json({ message: "Məcburi sahələri doldurun" });
+    }
+
+    const updated = await db
+      .update(schema.employees)
+      .set({
+        name,
+        phone: phone || null,
+        email: email || null,
+        position,
+        baseSalary: parseFloat(baseSalary),
+        hireDate,
+        status,
+        notes: notes || null,
+      })
+      .where(and(eq(schema.employees.id, id), eq(schema.employees.tenantId, req.tenantId)))
+      .returning();
+
+    if (updated.length === 0) {
+      return res.status(404).json({ message: "Əməkdaş tapılmadı" });
+    }
+
+    await logActivity(req, "UPDATE_EMPLOYEE", `Əməkdaş məlumatlarını yenilədi: ${name} (${position})`);
+    res.json(updated[0]);
+  } catch (error) {
+    res.status(500).json({ message: "Əməkdaş məlumatları yenilənərkən xəta baş verdi" });
+  }
+});
+
+// Delete employee
+router.delete("/employees/:id", requireAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const deleted = await db
+      .delete(schema.employees)
+      .where(and(eq(schema.employees.id, id), eq(schema.employees.tenantId, req.tenantId)))
+      .returning();
+
+    if (deleted.length === 0) {
+      return res.status(404).json({ message: "Əməkdaş tapılmadı" });
+    }
+
+    await logActivity(req, "DELETE_EMPLOYEE", `Əməkdaşı sildi: ${deleted[0].name}`);
+    res.json({ message: "Əməkdaş uğurla silindi" });
+  } catch (error) {
+    res.status(500).json({ message: "Əməkdaş silinərkən xəta baş verdi" });
+  }
+});
+
+// ----------------------------------------------------
+// 15. PAYROLL ENDPOINTS
+// ----------------------------------------------------
+
+// List monthly payroll sheets
+router.get("/payroll", async (req, res) => {
+  try {
+    const month = req.query.month as string;
+    if (!month) {
+      return res.status(400).json({ message: "Ay məlumatı (payroll_month) daxil edilməlidir" });
+    }
+
+    // Join payroll with employee details
+    const payrollSheets = await db.query.payroll.findMany({
+      where: and(eq(schema.payroll.tenantId, req.tenantId), eq(schema.payroll.payrollMonth, month)),
+      with: { employee: true },
+      orderBy: [desc(schema.payroll.createdAt)],
+    });
+
+    res.json(payrollSheets);
+  } catch (error) {
+    res.status(500).json({ message: "Maaş cədvəlini gətirərkən xəta baş verdi" });
+  }
+});
+
+// Generate/Refresh monthly payroll for active employees
+router.post("/payroll/calculate", requireAdmin, async (req, res) => {
+  try {
+    const { month } = req.body; // e.g. "2026-05"
+    if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ message: "Düzgün ay daxil edin (YYYY-MM)" });
+    }
+
+    // 1. Fetch active employees
+    const activeEmployees = await db
+      .select()
+      .from(schema.employees)
+      .where(and(eq(schema.employees.tenantId, req.tenantId), eq(schema.employees.status, "active")));
+
+    let addedCount = 0;
+
+    for (const emp of activeEmployees) {
+      // Check if already exists for this employee and month
+      const existing = await db
+        .select()
+        .from(schema.payroll)
+        .where(
+          and(
+            eq(schema.payroll.tenantId, req.tenantId),
+            eq(schema.payroll.employeeId, emp.id),
+            eq(schema.payroll.payrollMonth, month)
+          )
+        )
+        .limit(1);
+
+      if (existing.length === 0) {
+        // Create payroll row
+        await db.insert(schema.payroll).values({
+          tenantId: req.tenantId,
+          employeeId: emp.id,
+          payrollMonth: month,
+          baseSalary: emp.baseSalary,
+          bonuses: 0,
+          deductions: 0,
+          netSalary: emp.baseSalary,
+          paidAmount: 0,
+          paymentStatus: "unpaid",
+          createdAt: new Date().toISOString(),
+        });
+        addedCount++;
+      }
+    }
+
+    await logActivity(req, "CALCULATE_PAYROLL", `${month} ayı üçün ${addedCount} əməkdaşın maaşını hesabladı.`);
+    res.json({ message: "Maaşlar uğurla hesablandı", calculated: addedCount });
+  } catch (error) {
+    res.status(500).json({ message: "Maaş cədvəli hesablanarkən xəta baş verdi" });
+  }
+});
+
+// Adjust payroll (bonuses, deductions, notes)
+router.put("/payroll/:id", requireAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { bonuses, deductions, notes } = req.body;
+
+    if (bonuses === undefined || deductions === undefined) {
+      return res.status(400).json({ message: "Bonus və tutulmalar məcburidir" });
+    }
+
+    // 1. Fetch current payroll row
+    const record = await db.query.payroll.findFirst({
+      where: and(eq(schema.payroll.id, id), eq(schema.payroll.tenantId, req.tenantId)),
+      with: { employee: true },
+    });
+
+    if (!record) {
+      return res.status(404).json({ message: "Maaş hesabatı tapılmadı" });
+    }
+
+    const netSalary = record.baseSalary + parseFloat(bonuses) - parseFloat(deductions);
+    const paidAmount = record.paidAmount;
+    
+    // Evaluate status
+    let paymentStatus = "unpaid";
+    if (paidAmount >= netSalary) {
+      paymentStatus = "paid";
+    } else if (paidAmount > 0) {
+      paymentStatus = "partial";
+    }
+
+    const updated = await db
+      .update(schema.payroll)
+      .set({
+        bonuses: parseFloat(bonuses),
+        deductions: parseFloat(deductions),
+        netSalary,
+        paymentStatus,
+        notes: notes || null,
+      })
+      .where(eq(schema.payroll.id, id))
+      .returning();
+
+    await logActivity(
+      req,
+      "ADJUST_PAYROLL",
+      `${record.employee.name} üçün ${record.payrollMonth} maaş tənzimlənməsi: Bonus +${bonuses} ₼, Tutulma -${deductions} ₼`
+    );
+
+    res.json(updated[0]);
+  } catch (error) {
+    res.status(500).json({ message: "Maaş hesabatı düzəldilərkən xəta baş verdi" });
+  }
+});
+
+// ----------------------------------------------------
+// 16. SALARY PAYMENT ENDPOINTS
+// ----------------------------------------------------
+
+// List payments for a payroll entry
+router.get("/payroll/:id/payments", requireAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const payments = await db
+      .select()
+      .from(schema.salaryPayments)
+      .where(
+        and(
+          eq(schema.salaryPayments.payrollId, id),
+          eq(schema.salaryPayments.tenantId, req.tenantId)
+        )
+      )
+      .orderBy(desc(schema.salaryPayments.paymentDate));
+
+    res.json(payments);
+  } catch (error) {
+    res.status(500).json({ message: "Maaş ödənişlərini gətirərkən xəta baş verdi" });
+  }
+});
+
+// Register salary payment
+router.post("/payroll/:id/payments", requireAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { amount, paymentType, notes } = req.body;
+
+    if (!amount || parseFloat(amount) <= 0 || !paymentType) {
+      return res.status(400).json({ message: "Məbləğ və ödəniş növü məcburidir" });
+    }
+
+    // 1. Fetch parent payroll record
+    const record = await db.query.payroll.findFirst({
+      where: and(eq(schema.payroll.id, id), eq(schema.payroll.tenantId, req.tenantId)),
+      with: { employee: true },
+    });
+
+    if (!record) {
+      return res.status(404).json({ message: "Maaş hesabatı tapılmadı" });
+    }
+
+    const payVal = parseFloat(amount);
+    const newPaidAmount = record.paidAmount + payVal;
+    
+    // Evaluate status
+    let paymentStatus = "unpaid";
+    if (newPaidAmount >= record.netSalary) {
+      paymentStatus = "paid";
+    } else if (newPaidAmount > 0) {
+      paymentStatus = "partial";
+    }
+
+    // Insert payment log
+    const newPayment = await db
+      .insert(schema.salaryPayments)
+      .values({
+        tenantId: req.tenantId,
+        payrollId: id,
+        amount: payVal,
+        paymentDate: new Date().toISOString(),
+        paymentType,
+        notes: notes || null,
+      })
+      .returning();
+
+    // Update parent paidAmount
+    await db
+      .update(schema.payroll)
+      .set({
+        paidAmount: newPaidAmount,
+        paymentStatus,
+      })
+      .where(eq(schema.payroll.id, id));
+
+    await logActivity(
+      req,
+      "DISBURSE_SALARY",
+      `Əməkhaqqı ödənişi etdi: ${record.employee.name} (${amount} ₼, ${record.payrollMonth} ayı, Ödəniş: ${paymentType})`
+    );
+
+    res.json(newPayment[0]);
+  } catch (error) {
+    res.status(500).json({ message: "Əməkhaqqı ödənişi edilərkən xəta baş verdi" });
   }
 });
 
