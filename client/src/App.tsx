@@ -334,7 +334,7 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
         </Link>
 
         {/* Dynamic Horizontal Navigation Menu */}
-        <nav className="hidden lg:flex items-center gap-1 xl:gap-2 max-w-[62vw] xl:max-w-[75vw] overflow-x-auto scrollbar-none flex-nowrap py-1 pr-2">
+        <nav className="hidden lg:flex items-center gap-1 xl:gap-3 py-1 pr-2">
           {navGroups.map((group) => {
             const hasActiveChild = group.items.some(
               (item) =>
