@@ -70,11 +70,21 @@ export default function Vendors() {
   // Query vendors
   const { data: vendors = [], isLoading } = useQuery<Vendor[]>({
     queryKey: ["/api/vendors"],
+    queryFn: async () => {
+      const res = await fetch("/api/vendors");
+      if (!res.ok) throw new Error("Tədarükçüləri yükləyərkən xəta baş verdi");
+      return res.json();
+    }
   });
 
   // Query payments for selected vendor
   const { data: activePayments = [] } = useQuery<VendorPayment[]>({
     queryKey: [`/api/vendors/${selectedVendor?.id}/payments`],
+    queryFn: async () => {
+      const res = await fetch(`/api/vendors/${selectedVendor?.id}/payments`);
+      if (!res.ok) throw new Error("Ödəniş tarixçəsini yükləyərkən xəta baş verdi");
+      return res.json();
+    },
     enabled: !!selectedVendor,
   });
 
