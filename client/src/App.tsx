@@ -427,7 +427,7 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
                 {/* Dropdown Card overlay */}
                 {isOpen && (
                   <div 
-                    className="absolute left-0 top-full pt-1.5 w-52 z-50 animate-in fade-in slide-in-from-top-2 duration-150"
+                    className="absolute left-0 top-full pt-1.5 w-60 z-50 animate-in fade-in slide-in-from-top-2 duration-150"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <div className="bg-white/95 backdrop-blur-md border border-gray-100 rounded-2xl p-2.5 shadow-2xl flex flex-col gap-1">
@@ -460,7 +460,7 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
                             }}
                           >
                             <div
-                              className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-[11px] font-bold cursor-pointer transition-all ${
+                              className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs xl:text-[13px] font-bold cursor-pointer transition-all ${
                                 isItemDisabled
                                   ? "text-gray-300 opacity-40 cursor-not-allowed"
                                   : isActive
@@ -468,7 +468,7 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
                                   : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
                               }`}
                             >
-                              <Icon className={`w-3.5 h-3.5 shrink-0 ${isItemDisabled ? "text-gray-300" : isActive ? "text-white" : "text-gray-400"}`} />
+                              <Icon className={`w-4 h-4 shrink-0 ${isItemDisabled ? "text-gray-300" : isActive ? "text-white" : "text-gray-400"}`} />
                               <span>{item.label}</span>
                               {isItemDisabled && <span className="text-[9px] ml-auto">🔒</span>}
                             </div>
