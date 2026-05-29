@@ -127,7 +127,7 @@ async function ensureDefaultTenantsAndUsers() {
 
     // 6. Ensure User exists for Tenant 2
     const superAdminUser = await db.query.users.findFirst({
-      where: (u, { eq, and }) => and(eq(u.tenantId, 2), eq(u.username, "superadmin"))
+      where: (u, { eq }) => eq(u.tenantId, 2)
     });
     if (!superAdminUser) {
       console.log("Creating superadmin user...");

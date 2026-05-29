@@ -16,7 +16,8 @@ import {
   Eye,
   EyeOff,
   Trash2,
-  Activity
+  Activity,
+  Settings as SettingsIcon
 } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
 
@@ -39,6 +40,58 @@ export default function SuperDashboard() {
   const [selectedTenantForDelete, setSelectedTenantForDelete] = useState<any | null>(null);
   const [superAdminPasswordConfirm, setSuperAdminPasswordConfirm] = useState("");
   const [showSuperAdminPassword, setShowSuperAdminPassword] = useState(false);
+
+  // Super Admin profile updates state
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [superUsername, setSuperUsername] = useState(() => {
+    try {
+      const userStr = localStorage.getItem("qazanpos_user");
+      return userStr ? JSON.parse(userStr).username : "superadmin";
+    } catch (e) {
+      return "superadmin";
+    }
+  });
+  const [superPassword, setSuperPassword] = useState("");
+  const [showSuperPassword, setShowSuperPassword] = useState(false);
+
+  const updateProfileMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      const res = await fetch("/api/super/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Profil yenilənə bilmədi!");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Uğurlu Yenilənmə!",
+        description: "Super Admin giriş məlumatları uğurla yeniləndi. Çıxış edib yeni hesab ilə daxil olun.",
+        variant: "success"
+      });
+      setIsProfileOpen(false);
+      setSuperPassword("");
+      setShowSuperPassword(false);
+      
+      // Auto-logout after 2 seconds to force fresh login with new username/password
+      setTimeout(() => {
+        localStorage.removeItem("qazanpos_user");
+        sessionStorage.clear();
+        window.location.reload();
+      }, 2000);
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Xəta!",
+        description: err.message || "Yeniləmə zamanı xəta baş verdi.",
+        variant: "destructive"
+      });
+    }
+  });
 
   const handleViewUsers = async (tenant: any) => {
     setSelectedTenantForUsers(tenant);
@@ -259,13 +312,23 @@ export default function SuperDashboard() {
             Çox-biznesli platforma idarəçiliyi, subdomenlərin idarə olunması və tədricən yenilənmə axınları
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setIsCreateOpen(true)}
-          className="px-4 py-2.5 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 cursor-pointer shadow-md shadow-primary/10 transition-all text-xs flex items-center justify-center gap-2"
-        >
-          <Plus className="w-4 h-4" /> Yeni Biznes Yarat (Provision)
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setIsProfileOpen(true)}
+            className="px-4 py-2.5 bg-white text-gray-700 border border-gray-200 hover:text-primary hover:border-primary/50 cursor-pointer shadow-xs transition-all text-xs flex items-center justify-center gap-2 rounded-xl font-bold"
+          >
+            <SettingsIcon className="w-4 h-4 text-gray-400 shrink-0" /> Profil Ayarları
+          </button>
+          
+          <button
+            type="button"
+            onClick={() => setIsCreateOpen(true)}
+            className="px-4 py-2.5 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 cursor-pointer shadow-md shadow-primary/10 transition-all text-xs flex items-center justify-center gap-2 animate-pulse-subtle"
+          >
+            <Plus className="w-4 h-4" /> Yeni Biznes Yarat (Provision)
+          </button>
+        </div>
       </div>
 
       {/* Analytics Cards Grid */}
@@ -733,6 +796,104 @@ export default function SuperDashboard() {
                 </div>
               </form>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. Profile Settings Modal */}
+      {isProfileOpen && (
+        <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in-0">
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-2xl max-w-sm w-full relative">
+            <div className="flex items-center gap-3 text-primary mb-4 border-b border-gray-100 pb-3 text-left">
+              <div className="size-9 rounded-xl bg-primary/10 flex items-center justify-center">
+                <SettingsIcon className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-gray-900 text-sm leading-tight">Profil Ayarları</h3>
+                <span className="text-[10px] text-gray-400 font-bold mt-0.5 block">Platforma Admin giriş məlumatları</span>
+              </div>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!superUsername.trim()) {
+                  toast({ title: "Xəta!", description: "İstifadəçi adı boş ola bilməz!", variant: "destructive" });
+                  return;
+                }
+                if (!superPassword.trim()) {
+                  toast({ title: "Xəta!", description: "Yeni şifrə daxil edilməlidir!", variant: "destructive" });
+                  return;
+                }
+                if (superPassword.trim().length < 4) {
+                  toast({ title: "Xəta!", description: "Şifrə ən azı 4 simvoldan ibarət olmalıdır!", variant: "destructive" });
+                  return;
+                }
+                updateProfileMutation.mutate({
+                  username: superUsername.trim(),
+                  password: superPassword.trim()
+                });
+              }}
+              className="space-y-4 text-xs font-semibold"
+            >
+              <div className="space-y-1 text-left">
+                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">İstifadəçi Adı *</label>
+                <div className="relative">
+                  <Lock className="absolute left-3.5 top-3.5 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    value={superUsername}
+                    onChange={(e) => setSuperUsername(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 text-gray-900 font-bold"
+                    placeholder="Məs. superadmin"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1 text-left">
+                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Yeni Şifrə *</label>
+                <div className="relative">
+                  <Lock className="absolute left-3.5 top-3.5 w-4 h-4 text-gray-400" />
+                  <input
+                    type={showSuperPassword ? "text" : "password"}
+                    value={superPassword}
+                    onChange={(e) => setSuperPassword(e.target.value)}
+                    className="w-full pl-10 pr-10 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 font-mono text-gray-900 font-bold"
+                    placeholder="Yeni şifrənizi daxil edin"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowSuperPassword(!showSuperPassword)}
+                    className="absolute right-3.5 top-3.5 text-gray-400 hover:text-primary transition-colors flex items-center justify-center cursor-pointer"
+                  >
+                    {showSuperPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex gap-2.5 justify-end text-xs font-bold pt-4 border-t border-gray-100/50 mt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsProfileOpen(false);
+                    setSuperPassword("");
+                    setShowSuperPassword(false);
+                  }}
+                  className="px-4 py-2.5 border border-gray-200 text-gray-500 rounded-xl hover:bg-gray-50 cursor-pointer transition-all"
+                >
+                  Ləğv Et
+                </button>
+                <button
+                  type="submit"
+                  disabled={updateProfileMutation.isPending}
+                  className="px-6 py-2.5 bg-primary text-white rounded-xl hover:bg-primary/90 cursor-pointer shadow-md shadow-primary/10 transition-all flex items-center justify-center gap-1.5"
+                >
+                  {updateProfileMutation.isPending ? "Yenilənir..." : "Yenilə ⚡"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

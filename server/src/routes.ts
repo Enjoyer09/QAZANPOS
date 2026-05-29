@@ -2098,4 +2098,42 @@ router.put("/super/tenants/:id/billing-tier", requireSuperAdmin, async (req, res
   }
 });
 
+// Update Super Admin profile credentials (username & password)
+router.put("/super/profile", requireSuperAdmin, async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    if (!username || !password) {
+      return res.status(400).json({ message: "İstifadəçi adı və şifrə boş ola bilməz!" });
+    }
+
+    // Find the active super admin user (tenantId = 2, role = Admin)
+    const superUser = await db.query.users.findFirst({
+      where: and(
+        eq(schema.users.tenantId, 2),
+        eq(schema.users.role, "Admin")
+      )
+    });
+
+    if (!superUser) {
+      return res.status(404).json({ message: "Super Admin hesabı tapılmadı!" });
+    }
+
+    // Update in database
+    await db.update(schema.users)
+      .set({
+        username: username.trim().toLowerCase(),
+        password: password.trim()
+      })
+      .where(eq(schema.users.id, superUser.id));
+
+    await logActivity(req, "UPDATE_SUPER_PROFILE", `Super Admin profil məlumatlarını yenilədi: '${username}'`);
+
+    res.json({ success: true, message: "Super Admin profil məlumatları uğurla yeniləndi!" });
+  } catch (error) {
+    console.error("Error updating super admin profile:", error);
+    res.status(500).json({ message: "Profil məlumatlarını yeniləyərkən xəta baş verdi" });
+  }
+});
+
 export default router;
+
