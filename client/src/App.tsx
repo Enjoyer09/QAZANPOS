@@ -217,18 +217,18 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
         { href: "/loqlar", label: "Audit Loqları", icon: Activity },
       ]
     : [
-        ...(isAdmin ? [{ href: "/", label: "Panel", icon: LayoutDashboard }] : []),
         { href: "/pos", label: "POS ⚡", icon: Sparkles, isHighlight: true },
-        { href: "/nisye", label: "Borclar", icon: AlertTriangle },
-        { href: "/musteriler", label: "Müştərilər", icon: Users },
-        ...(isAdmin ? [{ href: "/tedarukculer", label: "Tədarükçülər", icon: Truck }] : []),
-        ...(isAdmin ? [{ href: "/hr", label: "HR & Əməkhaqqı", icon: UserCheck }] : []),
+        { href: "/satislar", label: "Tarixçə", icon: History },
         { href: "/anbar", label: "Qalıqlar", icon: Boxes },
         ...(isAdmin ? [{ href: "/anbar/daxil", label: "Mədaxil", icon: PlusCircle }] : []),
         ...(isAdmin ? [{ href: "/mehsullar", label: "Kataloq", icon: FolderKanban }] : []),
-        ...(isAdmin ? [{ href: "/etiketler", label: "Etiketlər", icon: Tag }] : []),
-        { href: "/satislar", label: "Tarixçə", icon: History },
+        { href: "/nisye", label: "Borclar", icon: AlertTriangle },
+        ...(isAdmin ? [{ href: "/tedarukculer", label: "Tədarükçülər", icon: Truck }] : []),
         ...(isAdmin ? [{ href: "/xercler", label: "Xərclər", icon: TrendingDown }] : []),
+        { href: "/musteriler", label: "Müştərilər", icon: Users },
+        ...(isAdmin ? [{ href: "/hr", label: "HR & Əməkhaqqı", icon: UserCheck }] : []),
+        ...(isAdmin ? [{ href: "/", label: "Panel", icon: LayoutDashboard }] : []),
+        ...(isAdmin ? [{ href: "/etiketler", label: "Etiketlər", icon: Tag }] : []),
         ...(isAdmin ? [{ href: "/loqlar", label: "Loqlar", icon: Activity }] : []),
         { href: "/ayarlar", label: "Ayarlar", icon: SettingsIcon },
       ];
@@ -277,7 +277,7 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
         </Link>
 
         {/* Dynamic Horizontal Navigation Menu */}
-        <nav className="hidden lg:flex items-center gap-1">
+        <nav className="hidden lg:flex items-center gap-0.5 xl:gap-1 max-w-[62vw] xl:max-w-[75vw] overflow-x-auto scrollbar-none flex-nowrap py-1 pr-2">
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive =
@@ -302,7 +302,7 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
                   }
                 }}>
                   <div
-                    className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-xs cursor-pointer shadow-md transition-all hover-elevate ${
+                    className={`flex items-center gap-1 xl:gap-1.5 px-2 xl:px-4 py-1.5 rounded-xl font-extrabold text-[11px] xl:text-xs cursor-pointer shadow-md transition-all hover-elevate ${
                       isItemDisabled
                         ? "bg-gray-200 text-gray-400 opacity-50 cursor-not-allowed"
                         : isActive
@@ -329,7 +329,7 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
                 }
               }}>
                 <div
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-xs cursor-pointer transition-all ${
+                  className={`flex items-center gap-1 xl:gap-1.5 px-2 xl:px-3 py-1.5 rounded-xl font-extrabold text-[11px] xl:text-xs cursor-pointer transition-all ${
                     isItemDisabled
                       ? "text-gray-300 opacity-50 cursor-not-allowed"
                       : isActive
