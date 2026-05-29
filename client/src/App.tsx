@@ -158,6 +158,14 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   useEffect(() => {
+    const handleOutsideClick = () => {
+      setActiveDropdown(null);
+    };
+    window.addEventListener("click", handleOutsideClick);
+    return () => window.removeEventListener("click", handleOutsideClick);
+  }, []);
+
+  useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
       syncOfflineSalesToServer((count) => {
@@ -397,6 +405,10 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
               >
                 {/* Trigger Button */}
                 <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveDropdown(isOpen ? null : group.label);
+                  }}
                   className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-extrabold text-[11px] xl:text-xs transition-all cursor-pointer select-none border border-transparent ${
                     hasActiveChild
                       ? "bg-primary/10 text-primary border-primary/20"
