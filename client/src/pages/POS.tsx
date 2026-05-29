@@ -666,11 +666,10 @@ export default function POS() {
 
     if (isSellingAtLoss) {
       toast({
-        title: "Xəta!",
-        description: "Satış qiyməti maya qiymətindən (alış) aşağı ola bilməz!",
-        variant: "destructive",
+        title: "Maya dəyərindən ucuz satış ⚠️",
+        description: "Bəzi məhsullar maya dəyərindən aşağı qiymətə satılır.",
+        variant: "default",
       });
-      return;
     }
 
     if (isCredit) {
@@ -1290,7 +1289,7 @@ export default function POS() {
               {/* Checkout Button */}
               <button
                 onClick={handleCheckout}
-                disabled={basket.length === 0 || createSaleMutation.isPending || createReturnMutation.isPending || (posMode === "sale" && isSellingAtLoss)}
+                disabled={basket.length === 0 || createSaleMutation.isPending || createReturnMutation.isPending}
                 className={`w-full py-3 text-white font-bold rounded-xl cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 text-sm shadow-md transition-all ${
                   posMode === "return"
                     ? "bg-amber-600 hover:bg-amber-700 shadow-amber-500/10 shadow-lg shadow-amber-600/20 animate-pulse"
