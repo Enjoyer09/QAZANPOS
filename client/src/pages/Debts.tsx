@@ -94,6 +94,24 @@ export default function Debts() {
 
   const totalMyDebt = myDebts?.reduce((sum, item) => sum + item.totalAmount, 0) || 0;
 
+  const todayDate = new Date();
+  todayDate.setHours(0, 0, 0, 0);
+
+  const overdueMyDebt = myDebts?.reduce((sum, item) => {
+    if (!item.creditDueDate) return sum;
+    const due = new Date(item.creditDueDate);
+    due.setHours(0, 0, 0, 0);
+    return due.getTime() < todayDate.getTime() ? sum + item.totalAmount : sum;
+  }, 0) || 0;
+
+  const approachingMyDebt = myDebts?.reduce((sum, item) => {
+    if (!item.creditDueDate) return sum;
+    const due = new Date(item.creditDueDate);
+    due.setHours(0, 0, 0, 0);
+    const diffDays = Math.ceil((due.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
+    return (diffDays >= 0 && diffDays <= 3) ? sum + item.totalAmount : sum;
+  }, 0) || 0;
+
   // Filter Helper
   const filterList = (list: any[], isMyDebts: boolean) => {
     if (!list) return [];
@@ -438,8 +456,45 @@ export default function Debts() {
 
       {/* TAB 2: MY DEBTS (TO SUPPLIERS) */}
       {currentTab === "my-debts" && (
-        <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-xs glass-card">
-          <div className="flex items-center justify-between mb-4">
+        <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-xs glass-card space-y-6">
+          
+          {/* Sub-KPI cards for My Debts */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-gray-50/50 border border-gray-100 rounded-2xl p-4 flex items-center gap-3">
+              <div className="size-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                <Clock className="w-5 h-5" />
+              </div>
+              <div className="text-left">
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">Cəmi Borcumuz</span>
+                <span className="text-base font-black text-gray-900 block mt-0.5">{totalMyDebt.toFixed(2)} ₼</span>
+              </div>
+            </div>
+
+            <div className="bg-gray-50/50 border border-gray-100 rounded-2xl p-4 flex items-center gap-3 relative overflow-hidden">
+              <div className="size-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="text-left">
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">Gecikmiş Ödənişlər</span>
+                <span className={`text-base font-black block mt-0.5 ${overdueMyDebt > 0 ? "text-red-600" : "text-gray-900"}`}>{overdueMyDebt.toFixed(2)} ₼</span>
+              </div>
+              {overdueMyDebt > 0 && (
+                <span className="absolute top-3 right-3 size-2 rounded-full bg-red-500 animate-pulse"></span>
+              )}
+            </div>
+
+            <div className="bg-gray-50/50 border border-gray-100 rounded-2xl p-4 flex items-center gap-3">
+              <div className="size-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                <Clock className="w-5 h-5" />
+              </div>
+              <div className="text-left">
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">Yaxınlaşan (3 gün)</span>
+                <span className="text-base font-black text-amber-600 block mt-0.5">{approachingMyDebt.toFixed(2)} ₼</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between mb-4 border-t border-gray-50 pt-4">
             <h3 className="font-extrabold text-sm text-gray-900">Tədarükçülərə Olan Anbar Borclarımız</h3>
             <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full font-bold border border-emerald-100">
               Toplam {filteredMyDebts.length} ədəd
@@ -451,9 +506,9 @@ export default function Debts() {
               <thead>
                 <tr className="border-b border-gray-100 text-xs font-bold text-gray-400 uppercase tracking-wider">
                   <th className="py-2.5 px-2">Tədarükçü</th>
-                  <th className="py-2.5 px-2">Məhsul (Miqdar)</th>
+                  <th className="py-2.5 px-2">Məhsul Detalları</th>
                   <th className="py-2.5 px-2">Alış Tarixi</th>
-                  <th className="py-2.5 px-2">Son Tarix</th>
+                  <th className="py-2.5 px-2">Son Ödəniş Tarixi</th>
                   <th className="py-2.5 px-2 text-right">Borc Məbləği</th>
                   <th className="py-2.5 px-2 text-right pr-4 w-32"></th>
                 </tr>
@@ -474,19 +529,89 @@ export default function Debts() {
                 ) : (
                   paginatedMyDebts.map((item) => (
                     <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/30 transition-all text-xs">
-                      <td className="py-4 px-2 font-bold text-gray-900">{item.supplier || "Bilinməyən Tədarükçü"}</td>
-                      <td className="py-4 px-2 text-gray-500 font-medium">
-                        {item.productName} ({item.quantity} {item.unit || "ədəd"})
+                      {/* Supplier with mini brand circle */}
+                      <td className="py-4 px-2">
+                        <div className="flex items-center gap-2.5">
+                          <div className="size-7 rounded-lg bg-gray-100 text-gray-700 flex items-center justify-center font-bold text-[10px]">
+                            {item.supplier ? item.supplier.charAt(0).toUpperCase() : "T"}
+                          </div>
+                          <span className="font-extrabold text-gray-900">{item.supplier || "Bilinməyən Tədarükçü"}</span>
+                        </div>
                       </td>
-                      <td className="py-4 px-2 text-gray-400 font-medium">
+
+                      {/* Product details & Price breakdown */}
+                      <td className="py-4 px-2">
+                        <span className="font-bold text-gray-900 block">{item.productName}</span>
+                        <span className="text-[10px] text-gray-400 font-semibold block mt-0.5">
+                          {item.quantity} {item.unit || "ədəd"} × {item.purchasePrice.toFixed(2)} ₼
+                        </span>
+                      </td>
+
+                      {/* Purchase Date */}
+                      <td className="py-4 px-2 text-gray-500 font-mono font-medium">
                         {new Date(item.entryDate).toLocaleDateString("az-AZ")}
                       </td>
-                      <td className="py-4 px-2 font-bold text-amber-600">
-                        {item.creditDueDate ? new Date(item.creditDueDate).toLocaleDateString("az-AZ") : "Təyin edilməyib"}
+
+                      {/* Due Date with dynamic countdown badging */}
+                      <td className="py-4 px-2 font-bold">
+                        {(() => {
+                          if (!item.creditDueDate) return <span className="text-gray-400 font-medium">Təyin edilməyib</span>;
+                          const today = new Date();
+                          today.setHours(0,0,0,0);
+                          const due = new Date(item.creditDueDate);
+                          due.setHours(0,0,0,0);
+                          const diffTime = due.getTime() - today.getTime();
+                          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                          
+                          if (diffDays < 0) {
+                            return (
+                              <div className="flex flex-col text-left">
+                                <span className="text-red-600 font-bold font-mono">{due.toLocaleDateString("az-AZ")}</span>
+                                <span className="inline-flex items-center gap-1 text-[9px] font-black text-red-500 bg-red-50 border border-red-100 px-1.5 py-0.5 rounded mt-1 uppercase tracking-wide w-fit">
+                                  <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
+                                  {Math.abs(diffDays)} gün gecikir
+                                </span>
+                              </div>
+                            );
+                          } else if (diffDays === 0) {
+                            return (
+                              <div className="flex flex-col text-left">
+                                <span className="text-amber-600 font-bold font-mono">{due.toLocaleDateString("az-AZ")}</span>
+                                <span className="inline-flex items-center gap-1 text-[9px] font-black text-amber-500 bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded mt-1 uppercase tracking-wide w-fit animate-pulse">
+                                  <Clock className="w-2.5 h-2.5 shrink-0" />
+                                  BU GÜN
+                                </span>
+                              </div>
+                            );
+                          } else if (diffDays <= 3) {
+                            return (
+                              <div className="flex flex-col text-left">
+                                <span className="text-amber-600 font-bold font-mono">{due.toLocaleDateString("az-AZ")}</span>
+                                <span className="inline-flex items-center gap-1 text-[9px] font-black text-amber-500 bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded mt-1 uppercase tracking-wide w-fit">
+                                  <Clock className="w-2.5 h-2.5 shrink-0" />
+                                  {diffDays} gün qalıb
+                                </span>
+                              </div>
+                            );
+                          } else {
+                            return (
+                              <div className="flex flex-col text-left">
+                                <span className="text-emerald-600 font-bold font-mono">{due.toLocaleDateString("az-AZ")}</span>
+                                <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded mt-1 uppercase tracking-wide w-fit">
+                                  {diffDays} gün qalıb
+                                </span>
+                              </div>
+                            );
+                          }
+                        })()}
                       </td>
-                      <td className="py-4 px-2 text-right font-black text-gray-950 font-mono">
+
+                      {/* Total Debt Amount */}
+                      <td className="py-4 px-2 text-right font-black text-gray-950 font-mono text-sm">
                         {item.totalAmount.toFixed(2)} ₼
                       </td>
+
+                      {/* Pay Debt Button */}
                       <td className="py-4 px-2 text-right pr-4">
                         <button
                           onClick={() => {
