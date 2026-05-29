@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   Sparkles, 
   ArrowRight, 
@@ -19,6 +19,7 @@ import {
 
 export default function Landing() {
   const [activeScreenshot, setActiveScreenshot] = useState<"dashboard" | "debts" | "expenses">("dashboard");
+  const [isAutoPlay, setIsAutoPlay] = useState(true);
 
   // Construct dynamic sandbox redirect link based on current environment
   const currentHost = window.location.host;
@@ -39,6 +40,20 @@ export default function Landing() {
       demoUrl = `https://sinaq.birsaas.shop/`; // fallback
     }
   }
+
+  // Automatic slideshow timer
+  useEffect(() => {
+    if (!isAutoPlay) return;
+    const screens: Array<"dashboard" | "debts" | "expenses"> = ["dashboard", "debts", "expenses"];
+    const interval = setInterval(() => {
+      setActiveScreenshot((prev) => {
+        const currentIndex = screens.indexOf(prev);
+        const nextIndex = (currentIndex + 1) % screens.length;
+        return screens[nextIndex];
+      });
+    }, 4000); // rotates every 4 seconds
+    return () => clearInterval(interval);
+  }, [isAutoPlay]);
 
   const screenshotPaths = {
     dashboard: "/assets/dashboard.png",
@@ -146,6 +161,22 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen w-screen flex flex-col justify-between relative overflow-x-hidden select-none bg-gray-50/70">
+      
+      {/* Premium custom animations styles */}
+      <style>{`
+        @keyframes float {
+          0% { transform: translateY(0px); }
+          50% { transform: translateY(-8px); }
+          100% { transform: translateY(0px); }
+        }
+        .animate-float {
+          animation: float 6s ease-in-out infinite;
+        }
+        html {
+          scroll-behavior: smooth;
+        }
+      `}</style>
+
       {/* Dynamic Background Blobs */}
       <div className="absolute inset-0 z-0 pointer-events-none">
         <div className="absolute top-[-10%] left-[10%] size-[50vw] bg-emerald-500/5 rounded-full blur-3xl animate-pulse"></div>
@@ -165,12 +196,28 @@ export default function Landing() {
           </div>
         </div>
 
-        <a
-          href={demoUrl}
-          className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary/10 border border-primary/20 text-primary hover:bg-primary hover:text-white transition-all rounded-xl font-bold text-[10px] uppercase tracking-wider cursor-pointer shadow-xs"
-        >
-          <span>Sınaq Sessiyası 🚀</span>
-        </a>
+        {/* Header Right menu with Quick Access & Sinaq CTA */}
+        <div className="flex items-center gap-4 sm:gap-8">
+          {/* Quick access links (visible on larger screens) */}
+          <nav className="hidden md:flex items-center gap-6 text-[10px] font-black uppercase tracking-wider text-gray-500">
+            <a href="#ozellikler" className="hover:text-primary transition-colors cursor-pointer">
+              Özəlliklər
+            </a>
+            <a href="#tehlukesizlik" className="hover:text-primary transition-colors cursor-pointer">
+              Təhlükəsizlik
+            </a>
+            <a href="#tarifler" className="hover:text-primary transition-colors cursor-pointer">
+              Tariflər
+            </a>
+          </nav>
+
+          <a
+            href={demoUrl}
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary/10 border border-primary/20 text-primary hover:bg-primary hover:text-white transition-all rounded-xl font-bold text-[10px] uppercase tracking-wider cursor-pointer shadow-xs"
+          >
+            <span>Sınaq Sessiyası 🚀</span>
+          </a>
+        </div>
       </header>
 
       {/* 2. Hero Section */}
@@ -213,13 +260,16 @@ export default function Landing() {
           </div>
         </div>
 
-        {/* 3. Interactive Laptop Showcase */}
+        {/* 3. Interactive Floating Laptop Showcase */}
         <div className="w-full max-w-5xl space-y-8 pt-4">
           
           {/* Screenshot controller tabs */}
           <div className="flex flex-wrap items-center justify-center gap-2 p-1.5 bg-gray-200/50 backdrop-blur-md rounded-2xl max-w-xl mx-auto border border-gray-200/20">
             <button
-              onClick={() => setActiveScreenshot("dashboard")}
+              onClick={() => {
+                setActiveScreenshot("dashboard");
+                setIsAutoPlay(false); // Stop autoplay when clicked
+              }}
               className={`flex-1 py-2.5 px-4 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 ${
                 activeScreenshot === "dashboard"
                   ? "bg-white text-gray-900 shadow-sm"
@@ -230,7 +280,10 @@ export default function Landing() {
               <span>İdarəetmə Paneli</span>
             </button>
             <button
-              onClick={() => setActiveScreenshot("debts")}
+              onClick={() => {
+                setActiveScreenshot("debts");
+                setIsAutoPlay(false); // Stop autoplay when clicked
+              }}
               className={`flex-1 py-2.5 px-4 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 ${
                 activeScreenshot === "debts"
                   ? "bg-white text-gray-900 shadow-sm"
@@ -241,7 +294,10 @@ export default function Landing() {
               <span>Nisyə & Borclar</span>
             </button>
             <button
-              onClick={() => setActiveScreenshot("expenses")}
+              onClick={() => {
+                setActiveScreenshot("expenses");
+                setIsAutoPlay(false); // Stop autoplay when clicked
+              }}
               className={`flex-1 py-2.5 px-4 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 ${
                 activeScreenshot === "expenses"
                   ? "bg-white text-gray-900 shadow-sm"
@@ -253,8 +309,8 @@ export default function Landing() {
             </button>
           </div>
 
-          {/* Premium Laptop Mockup Frame */}
-          <div className="laptop-mockup animate-in fade-in zoom-in-95 duration-500">
+          {/* Premium Laptop Mockup Frame (Floats dynamically without button clicks!) */}
+          <div className="laptop-mockup animate-float animate-in fade-in zoom-in-95 duration-500">
             {/* Screen border */}
             <div className="bg-slate-900 p-2 sm:p-3 rounded-t-3xl border-4 border-slate-800 shadow-2xl relative">
               {/* Web-camera eye */}
@@ -265,7 +321,8 @@ export default function Landing() {
                 <img
                   src={screenshotPaths[activeScreenshot]}
                   alt="BirSaaS Screenshot Preview"
-                  className="w-full h-full object-cover select-none"
+                  className="w-full h-full object-cover select-none transition-opacity duration-500 ease-in-out opacity-100"
+                  key={activeScreenshot} // Force React remount for clean fade animation on transition
                 />
                 {/* Glossy overlay */}
                 <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 pointer-events-none"></div>
@@ -293,7 +350,7 @@ export default function Landing() {
         </div>
 
         {/* 4. Two-Factor Authentication (2FA) Feature Block */}
-        <div className="w-full max-w-4xl bg-white border border-gray-100 rounded-3xl p-8 shadow-xl glass-card grid grid-cols-1 md:grid-cols-2 gap-8 items-center relative overflow-hidden">
+        <div id="tehlukesizlik" className="w-full max-w-4xl bg-white border border-gray-100 rounded-3xl p-8 shadow-xl glass-card grid grid-cols-1 md:grid-cols-2 gap-8 items-center relative overflow-hidden">
           <div className="absolute right-0 top-0 w-48 h-48 bg-primary/5 rounded-full blur-3xl pointer-events-none"></div>
           
           {/* Security Features List */}
@@ -361,7 +418,7 @@ export default function Landing() {
         </div>
 
         {/* 5. Core Platform Features List */}
-        <div className="w-full space-y-8">
+        <div id="ozellikler" className="w-full space-y-8">
           <div className="text-center max-w-xl mx-auto space-y-2">
             <h2 className="text-2xl font-black text-gray-900 tracking-tight">Əsas İnfrastruktur Üstünlükləri</h2>
             <p className="text-xs text-gray-400 font-semibold leading-relaxed">
@@ -405,7 +462,7 @@ export default function Landing() {
         </div>
 
         {/* 6. Pricing & Subscription Plans */}
-        <div className="w-full pt-8 space-y-10">
+        <div id="tarifler" className="w-full pt-8 space-y-10">
           <div className="text-center max-w-xl mx-auto space-y-2">
             <h2 className="text-2xl font-black text-gray-900 tracking-tight">Tarif Planları və Limitsiz Müdafiə</h2>
             <p className="text-xs text-gray-400 font-semibold leading-relaxed">
