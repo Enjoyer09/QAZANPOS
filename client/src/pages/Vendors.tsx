@@ -44,9 +44,15 @@ interface VendorPayment {
 export default function Vendors() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState<"directory" | "ledger">("directory");
+  const [searchTerm, setSearchTerm] = useState("");
   const [ledgerSearchTerm, setLedgerSearchTerm] = useState("");
+  
+  // Ledger Pagination & Filter States
+  const [ledgerStartDate, setLedgerStartDate] = useState("");
+  const [ledgerEndDate, setLedgerEndDate] = useState("");
+  const [ledgerPageSize, setLedgerPageSize] = useState(10);
+  const [ledgerPage, setLedgerPage] = useState(1);
   
   // Modals state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -196,6 +202,54 @@ export default function Vendors() {
     v.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (v.phone && v.phone.includes(searchTerm))
   );
+
+  // Filter global payments by search term and date range
+  const filteredGlobalPayments = globalPayments.filter((p: any) => {
+    // 1. Search term filter
+    const matchesSearch = 
+      !ledgerSearchTerm ||
+      p.vendorName.toLowerCase().includes(ledgerSearchTerm.toLowerCase()) ||
+      (p.notes && p.notes.toLowerCase().includes(ledgerSearchTerm.toLowerCase())) ||
+      p.paymentType.toLowerCase().includes(ledgerSearchTerm.toLowerCase());
+
+    // 2. Start date filter
+    let matchesStartDate = true;
+    if (ledgerStartDate) {
+      const pDate = new Date(p.paymentDate);
+      const sDate = new Date(ledgerStartDate + "T00:00:00");
+      matchesStartDate = pDate >= sDate;
+    }
+
+    // 3. End date filter
+    let matchesEndDate = true;
+    if (ledgerEndDate) {
+      const pDate = new Date(p.paymentDate);
+      const eDate = new Date(ledgerEndDate + "T23:59:59");
+      matchesEndDate = pDate <= eDate;
+    }
+
+    return matchesSearch && matchesStartDate && matchesEndDate;
+  });
+
+  // Paginated global payments
+  const totalFilteredLedger = filteredGlobalPayments.length;
+  const totalLedgerPages = Math.ceil(totalFilteredLedger / ledgerPageSize) || 1;
+  
+  // Adjust current page if it exceeds total pages due to filtering
+  const currentLedgerPage = Math.min(ledgerPage, totalLedgerPages);
+  
+  const paginatedGlobalPayments = filteredGlobalPayments.slice(
+    (currentLedgerPage - 1) * ledgerPageSize,
+    currentLedgerPage * ledgerPageSize
+  );
+
+  const handleResetLedgerFilters = () => {
+    setLedgerSearchTerm("");
+    setLedgerStartDate("");
+    setLedgerEndDate("");
+    setLedgerPageSize(10);
+    setLedgerPage(1);
+  };
 
   // Computed aggregate metrics
   const totalVendors = vendors.length;
@@ -418,53 +472,112 @@ export default function Vendors() {
       ) : (
         /* Global Payments Ledger Workspace */
         <div className="bg-white border border-gray-100 rounded-3xl shadow-sm p-6 space-y-4">
-          {/* Search and Filters */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="relative max-w-sm w-full">
-              <Search className="w-4.5 h-4.5 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Firma adı, ödəniş növü və ya qeyd üzrə axtarış..."
-                value={ledgerSearchTerm}
-                onChange={(e) => setLedgerSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-bold focus:outline-none focus:border-primary transition-all text-gray-700"
-              />
+          {/* Advanced Premium Filter Panel */}
+          <div className="bg-gray-50/50 border border-gray-100 rounded-2xl p-4 grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            {/* Search Input */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">Axtarış</label>
+              <div className="relative">
+                <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Firma, qeyd və s..."
+                  value={ledgerSearchTerm}
+                  onChange={(e) => {
+                    setLedgerSearchTerm(e.target.value);
+                    setLedgerPage(1);
+                  }}
+                  className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-primary transition-all text-gray-700 font-bold"
+                />
+              </div>
             </div>
-            {ledgerSearchTerm && (
-              <button
-                onClick={() => setLedgerSearchTerm("")}
-                className="text-xs text-gray-400 hover:text-gray-600 font-bold underline"
-              >
-                Süzgəci sıfırla 🧹
-              </button>
-            )}
+
+            {/* Start Date */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">Başlanğıc Tarix</label>
+              <div className="relative">
+                <Calendar className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="date"
+                  value={ledgerStartDate}
+                  onChange={(e) => {
+                    setLedgerStartDate(e.target.value);
+                    setLedgerPage(1);
+                  }}
+                  className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-primary transition-all text-gray-700 font-mono font-bold"
+                />
+              </div>
+            </div>
+
+            {/* End Date */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">Son Tarix</label>
+              <div className="relative">
+                <Calendar className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="date"
+                  value={ledgerEndDate}
+                  onChange={(e) => {
+                    setLedgerEndDate(e.target.value);
+                    setLedgerPage(1);
+                  }}
+                  className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-primary transition-all text-gray-700 font-mono font-bold"
+                />
+              </div>
+            </div>
+
+            {/* Page Size & Reset */}
+            <div className="flex items-center gap-2">
+              <div className="flex-1 space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">Səhifədə Say</label>
+                <select
+                  value={ledgerPageSize}
+                  onChange={(e) => {
+                    setLedgerPageSize(Number(e.target.value));
+                    setLedgerPage(1);
+                  }}
+                  className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-primary transition-all text-gray-700 cursor-pointer font-bold"
+                >
+                  <option value={10}>10 sətir</option>
+                  <option value={20}>20 sətir</option>
+                  <option value={50}>50 sətir</option>
+                  <option value={100}>100 sətir</option>
+                </select>
+              </div>
+
+              {(ledgerSearchTerm || ledgerStartDate || ledgerEndDate || ledgerPageSize !== 10) && (
+                <button
+                  type="button"
+                  onClick={handleResetLedgerFilters}
+                  className="p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl transition-all cursor-pointer self-end border border-red-100"
+                  title="Süzgəcləri Təmizlə"
+                >
+                  <Trash2 className="w-4.5 h-4.5" />
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Ledger Table */}
           {isLedgerLoading ? (
             <div className="py-12 text-center text-xs font-bold text-gray-400 uppercase tracking-wider">Məlumatlar yüklənir...</div>
-          ) : globalPayments.length === 0 ? (
+          ) : paginatedGlobalPayments.length === 0 ? (
             <div className="py-12 text-center text-xs font-bold text-gray-400 uppercase tracking-wider">Heç bir ödəniş tapılmadı.</div>
           ) : (
-            <div className="overflow-x-auto rounded-2xl border border-gray-50">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-gray-50 text-[9px] font-black text-gray-400 uppercase tracking-wider border-b border-gray-100">
-                    <th className="py-3.5 px-4">Tədarükçü Firma</th>
-                    <th className="py-3.5 px-4">Ödəniş Tarixi</th>
-                    <th className="py-3.5 px-4">Ödəniş Üsulu</th>
-                    <th className="py-3.5 px-4">Ödəniş Qeydi</th>
-                    <th className="py-3.5 px-4 text-right">Borcdan Silinən Məbləğ</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50 text-xs font-bold text-gray-600">
-                  {globalPayments
-                    .filter((p: any) =>
-                      p.vendorName.toLowerCase().includes(ledgerSearchTerm.toLowerCase()) ||
-                      (p.notes && p.notes.toLowerCase().includes(ledgerSearchTerm.toLowerCase())) ||
-                      p.paymentType.toLowerCase().includes(ledgerSearchTerm.toLowerCase())
-                    )
-                    .map((payment: any) => (
+            <div className="space-y-4">
+              <div className="overflow-x-auto rounded-2xl border border-gray-50">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-gray-50 text-[9px] font-black text-gray-400 uppercase tracking-wider border-b border-gray-100">
+                      <th className="py-3.5 px-4">Tədarükçü Firma</th>
+                      <th className="py-3.5 px-4">Ödəniş Tarixi</th>
+                      <th className="py-3.5 px-4">Ödəniş Üsulu</th>
+                      <th className="py-3.5 px-4">Ödəniş Qeydi</th>
+                      <th className="py-3.5 px-4 text-right">Borcdan Silinən Məbləğ</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50 text-xs font-bold text-gray-600">
+                    {paginatedGlobalPayments.map((payment: any) => (
                       <tr key={payment.id} className="hover:bg-gray-50/50 transition-colors">
                         <td className="py-4 px-4">
                           <div className="flex items-center gap-3">
@@ -491,19 +604,60 @@ export default function Vendors() {
                         </td>
                       </tr>
                     ))}
-                  {globalPayments.filter((p: any) =>
-                    p.vendorName.toLowerCase().includes(ledgerSearchTerm.toLowerCase()) ||
-                    (p.notes && p.notes.toLowerCase().includes(ledgerSearchTerm.toLowerCase())) ||
-                    p.paymentType.toLowerCase().includes(ledgerSearchTerm.toLowerCase())
-                  ).length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="py-12 text-center text-xs font-bold text-gray-400 uppercase tracking-wider">
-                        Axtarışa uyğun ödəniş tapılmadı.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination Controls */}
+              {totalFilteredLedger > 0 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-gray-100">
+                  <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">
+                    Göstərilir: <span className="text-gray-900 font-black">{Math.min((currentLedgerPage - 1) * ledgerPageSize + 1, totalFilteredLedger)}</span> - <span className="text-gray-900 font-black">{Math.min(currentLedgerPage * ledgerPageSize, totalFilteredLedger)}</span> / <span className="text-gray-900 font-black">{totalFilteredLedger}</span> ödəniş
+                  </span>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setLedgerPage(prev => Math.max(prev - 1, 1))}
+                      disabled={currentLedgerPage === 1}
+                      className="px-3.5 py-2 bg-gray-50 hover:bg-gray-100 text-gray-600 font-bold border border-gray-200/60 rounded-xl text-[10px] uppercase tracking-wider transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                      ◀ Əvvəlki
+                    </button>
+                    
+                    {Array.from({ length: totalLedgerPages }, (_, i) => i + 1)
+                      .filter(p => p === 1 || p === totalLedgerPages || Math.abs(p - currentLedgerPage) <= 1)
+                      .map((p, idx, arr) => {
+                        const showEllipsis = idx > 0 && p - arr[idx - 1] > 1;
+                        return (
+                          <React.Fragment key={p}>
+                            {showEllipsis && <span className="text-gray-400 px-1 font-bold">...</span>}
+                            <button
+                              type="button"
+                              onClick={() => setLedgerPage(p)}
+                              className={`size-9 flex items-center justify-center font-black rounded-xl text-[10px] tracking-wider transition-all cursor-pointer ${
+                                currentLedgerPage === p
+                                  ? "bg-primary text-white shadow-md shadow-primary/10"
+                                  : "bg-white hover:bg-gray-50 text-gray-600 border border-gray-100"
+                              }`}
+                            >
+                              {p}
+                            </button>
+                          </React.Fragment>
+                        );
+                      })}
+
+                    <button
+                      type="button"
+                      onClick={() => setLedgerPage(prev => Math.min(prev + 1, totalLedgerPages))}
+                      disabled={currentLedgerPage === totalLedgerPages}
+                      className="px-3.5 py-2 bg-gray-50 hover:bg-gray-100 text-gray-600 font-bold border border-gray-200/60 rounded-xl text-[10px] uppercase tracking-wider transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                      Növbəti ▶
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
