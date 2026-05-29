@@ -386,8 +386,8 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
                         ? "text-gray-300 opacity-50 cursor-not-allowed"
                         : (item as any).isHighlight
                         ? isActive
-                          ? "bg-primary text-white font-extrabold shadow-md shadow-primary/20 hover-elevate"
-                          : "bg-primary/10 text-primary font-extrabold border border-primary/20 hover:bg-primary/20 shadow-xs hover-elevate"
+                          ? "bg-blue-600 text-white font-extrabold shadow-lg shadow-blue-600/20 hover:bg-blue-700 hover-elevate"
+                          : "bg-blue-50 text-blue-600 font-extrabold border border-blue-100 hover:bg-blue-100/60 shadow-xs hover-elevate"
                         : isActive
                         ? "bg-primary/10 text-primary font-extrabold border border-primary/20 shadow-xs"
                         : "text-gray-500 hover:text-gray-900 hover:bg-gray-50/50"
@@ -599,8 +599,8 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
                               ? "text-gray-300 opacity-40 cursor-not-allowed"
                               : (item as any).isHighlight
                               ? isActive
-                                ? "bg-primary text-white font-extrabold shadow-md shadow-primary/20"
-                                : "bg-primary/10 text-primary font-extrabold border border-primary/20"
+                                ? "bg-blue-600 text-white font-extrabold shadow-md shadow-blue-500/20"
+                                : "bg-blue-50 text-blue-600 font-extrabold border border-blue-100"
                               : isActive
                               ? "bg-primary/10 text-primary font-extrabold"
                               : "text-gray-600 hover:text-gray-900 hover:bg-gray-50/50"
