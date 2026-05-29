@@ -125,7 +125,7 @@ export default function Labels() {
     queryKey: ["/api/settings"],
   });
 
-  const shopName = settings?.shopName || "BirSaaS Mağaza";
+  const shopName = settings?.storeName || settings?.tenantName || "BirSaaS Mağaza";
 
   // Elements initial design layout (Price Tag default premium layout)
   const [elements, setElements] = useState<LabelElement[]>([

@@ -135,6 +135,23 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { toast } = useToast();
 
+  const host = window.location.hostname;
+  const parts = host.split(".");
+  const isSuperTenant = parts.length > 1 && parts[0].toLowerCase() === "super";
+
+  const { data: settings } = useQuery<any>({
+    queryKey: ["/api/settings", host],
+    queryFn: async () => {
+      const isSinaq = parts.length > 0 && (parts[0].toLowerCase() === "sinaq" || parts[0].toLowerCase() === "demo");
+      if (isSuperTenant || isSinaq || parts.length <= 1 || parts[0] === "localhost" || parts[0] === "www" || parts[0] === "qazanpos-production" || parts[0].includes("127.0.0.1")) {
+        return { storeName: "BirSaaS" };
+      }
+      const res = await fetch("/api/settings");
+      if (!res.ok) return { storeName: "BirSaaS" };
+      return res.json();
+    },
+  });
+
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   useEffect(() => {
@@ -205,11 +222,6 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
 
   const isAdmin = user?.role === "Admin";
 
-  // Dynamic Subdomain Resolution
-  const host = window.location.hostname;
-  const parts = host.split(".");
-  const isSuperTenant = parts.length > 1 && parts[0].toLowerCase() === "super";
-
   // Navigation links - optimized and compact
   const menuItems = isSuperTenant
     ? [
@@ -267,10 +279,10 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
             </div>
             <div>
               <h1 className="font-extrabold text-gray-900 tracking-tight text-sm leading-none transition-colors group-hover:text-primary">
-                {isSuperTenant ? "BirSaaS Platform" : "BirSaaS"}
+                {isSuperTenant ? "BirSaaS Platform" : (settings?.storeName || "BirSaaS")}
               </h1>
-              <span className="text-[10px] font-bold text-gray-400 mt-1 block tracking-wide">
-                {isSuperTenant ? "PLATFORMA PANELİ" : "ANBAR & SATIŞ"}
+              <span className="text-[10px] font-bold text-gray-400 mt-1 block tracking-wide uppercase">
+                {isSuperTenant ? "PLATFORMA PANELİ" : (settings?.storeName ? "MAĞAZA PORTALI" : "ANBAR & SATIŞ")}
               </span>
             </div>
           </div>
@@ -405,10 +417,10 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
                 </div>
                 <div>
                   <h1 className="font-extrabold text-gray-900 text-sm leading-none">
-                    {isSuperTenant ? "BirSaaS Platform" : "BirSaaS"}
+                    {isSuperTenant ? "BirSaaS Platform" : (settings?.storeName || "BirSaaS")}
                   </h1>
-                  <span className="text-[10px] font-bold text-gray-400 mt-1 block">
-                    {isSuperTenant ? "PLATFORMA PANELİ" : "ANBAR & SATIŞ"}
+                  <span className="text-[10px] font-bold text-gray-400 mt-1 block uppercase">
+                    {isSuperTenant ? "PLATFORMA PANELİ" : (settings?.storeName ? "MAĞAZA PORTALI" : "ANBAR & SATIŞ")}
                   </span>
                 </div>
               </div>
