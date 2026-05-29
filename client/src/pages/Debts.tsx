@@ -89,8 +89,8 @@ export default function Debts() {
   });
 
   const totalCustomerDebt =
-    (overdueList?.reduce((sum, item) => sum + item.totalAmount, 0) || 0) +
-    (pendingList?.reduce((sum, item) => sum + item.totalAmount, 0) || 0);
+    (overdueList?.reduce((sum, item) => sum + (Number(item.remainingDebt) || 0), 0) || 0) +
+    (pendingList?.reduce((sum, item) => sum + (Number(item.remainingDebt) || 0), 0) || 0);
 
   const totalMyDebt = myDebts?.reduce((sum, item) => sum + item.totalAmount, 0) || 0;
 
@@ -300,7 +300,7 @@ export default function Debts() {
                           {new Date(item.creditDueDate).toLocaleDateString("az-AZ")}
                         </td>
                         <td className="py-4 px-2 text-right font-black text-red-600 font-mono text-base">
-                          {item.totalAmount.toFixed(2)} ₼
+                          {(Number(item.remainingDebt) || 0).toFixed(2)} ₼
                         </td>
                         <td className="py-4 px-2 text-right pr-4">
                           <Link href={`/satislar/${item.id}`}>
@@ -392,7 +392,7 @@ export default function Debts() {
                           {new Date(item.creditDueDate).toLocaleDateString("az-AZ")}
                         </td>
                         <td className="py-4 px-2 text-right font-bold text-gray-950 font-mono">
-                          {item.totalAmount.toFixed(2)} ₼
+                          {(Number(item.remainingDebt) || 0).toFixed(2)} ₼
                         </td>
                         <td className="py-4 px-2 text-right pr-4">
                           <Link href={`/satislar/${item.id}`}>

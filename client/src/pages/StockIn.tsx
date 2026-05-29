@@ -31,6 +31,7 @@ export default function StockIn() {
   const [formData, setFormData] = useState(emptyEntry);
   const [isSuccess, setIsSuccess] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [serialNumbersText, setSerialNumbersText] = useState("");
 
   // Queries
   const { data: products } = useQuery<any[]>({
@@ -96,6 +97,7 @@ export default function StockIn() {
       });
       setIsSuccess(true);
       setFormData(emptyEntry);
+      setSerialNumbersText("");
       setTimeout(() => setIsSuccess(false), 3000);
     },
     onError: (error: any) => {
@@ -110,6 +112,14 @@ export default function StockIn() {
   const isCredit = formData.paymentType === "Nisyə";
   const calculatedTotal = parseFloat(formData.quantity || "0") * parseFloat(formData.purchasePrice || "0");
 
+  const selectedProduct = products?.find((p) => String(p.id) === formData.productId);
+  const isSerialized = selectedProduct?.trackingType === "serialized";
+
+  const parsedSerials = serialNumbersText
+    .split(/[\n,]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.productId || !formData.quantity || !formData.purchasePrice) {
@@ -122,6 +132,23 @@ export default function StockIn() {
       return;
     }
 
+    if (isSerialized) {
+      if (parsedSerials.length !== parseInt(formData.quantity || "0")) {
+        toast({
+          title: "Xəta!",
+          description: `Məhsul serial nömrəlidir. Daxil edilən serial sayı (${parsedSerials.length}) məhsul miqdarı (${formData.quantity}) ilə bərabər olmalıdır.`,
+          variant: "destructive"
+        });
+        return;
+      }
+      // Check for local duplicates in user input
+      const uniqueSerialsInput = new Set(parsedSerials.map(s => s.toUpperCase()));
+      if (uniqueSerialsInput.size !== parsedSerials.length) {
+        toast({ title: "Xəta!", description: "Daxil etdiyiniz serial nömrələrində təkrarlanma (dublikat) var.", variant: "destructive" });
+        return;
+      }
+    }
+
     const payload = {
       productId: parseInt(formData.productId),
       quantity: parseFloat(formData.quantity),
@@ -131,6 +158,7 @@ export default function StockIn() {
       paymentType: formData.paymentType,
       creditDueDate: isCredit ? formData.creditDueDate : null,
       vendorId: formData.vendorId ? parseInt(formData.vendorId) : null,
+      serialNumbers: isSerialized ? parsedSerials : null,
     };
 
     createMutation.mutate(payload);
@@ -209,6 +237,28 @@ export default function StockIn() {
               <div className="p-3.5 bg-primary/5 border border-primary/10 rounded-xl flex items-center justify-between">
                 <span className="text-gray-400 text-[11px] font-bold uppercase tracking-wider">Ümumi Dəyəri:</span>
                 <span className="font-bold text-primary font-mono text-base">{calculatedTotal.toFixed(2)} ₼</span>
+              </div>
+            )}
+
+            {/* Serial Numbers (Only if product is serialized) */}
+            {isSerialized && (
+              <div className="space-y-1.5 border border-amber-200 bg-amber-50/15 p-3.5 rounded-xl animate-in slide-in-from-top-1.5">
+                <label className="text-amber-800 uppercase tracking-wider block text-[10px] font-bold">
+                  Serial Nömrələr / IMEI-lər *
+                </label>
+                <textarea
+                  placeholder="Hər sətirdə bir IMEI / Serial kodu yazın və ya skan edin..."
+                  value={serialNumbersText}
+                  onChange={(e) => setSerialNumbersText(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 bg-white font-mono text-xs h-24 resize-none"
+                  required={isSerialized}
+                />
+                <div className="flex justify-between items-center text-[10px] font-bold text-gray-500 mt-1">
+                  <span>Tələb olunan: {parseInt(formData.quantity || "0")} ədəd</span>
+                  <span className={parsedSerials.length === parseInt(formData.quantity || "0") ? "text-green-600" : "text-red-500"}>
+                    Daxil edilən: {parsedSerials.length} ədəd
+                  </span>
+                </div>
               </div>
             )}
 

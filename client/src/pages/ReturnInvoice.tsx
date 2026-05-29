@@ -47,11 +47,13 @@ export default function ReturnInvoice({ params }: ReturnInvoiceProps) {
         notes: returnData.reason,
         totalAmount: returnData.totalAmount,
         items: returnData.items.map((item: any) => ({
+          productId: item.productId,
           productName: item.product?.name || item.productName || "Məhsul",
           unit: item.product?.unit || item.unit || "ədəd",
           quantity: item.quantity,
           salePrice: item.salePrice
-        }))
+        })),
+        serials: returnData.serials
       };
 
       const success = await printReceipt(returnReceiptObj, settings);
@@ -215,24 +217,32 @@ export default function ReturnInvoice({ params }: ReturnInvoiceProps) {
                 </tr>
               </thead>
               <tbody>
-                {returnData.items.map((item: any) => (
-                  <tr key={item.id} className="border-b border-gray-50 text-xs">
-                    <td className="py-4 font-bold text-gray-900">
-                      <div>{item.product?.name || item.productName || "Məhsul"}</div>
-                      <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-[9px] font-bold ${
-                        item.status === "returned_to_stock" ? "bg-green-50 text-green-700 border border-green-100" : "bg-red-50 text-red-700 border border-red-100"
-                      }`}>
-                        {item.status === "returned_to_stock" ? "Anbara Qayıdıb" : "Deffekt / Silinib"}
-                      </span>
-                    </td>
-                    <td className="py-4 text-right text-gray-500 font-medium">{item.product?.unit || item.unit || "ədəd"}</td>
-                    <td className="py-4 text-right font-semibold text-gray-800 font-mono">{item.quantity}</td>
-                    <td className="py-4 text-right text-gray-600 font-mono">{Number(item.salePrice || 0).toFixed(2)} ₼</td>
-                    <td className="py-4 text-right font-bold text-amber-700 font-mono pr-2">
-                      -{Number((item.quantity * item.salePrice) || 0).toFixed(2)} ₼
-                    </td>
-                  </tr>
-                ))}
+                {returnData.items.map((item: any) => {
+                  const itemSerials = (returnData.serials || []).filter((s: any) => s.productId === item.productId);
+                  return (
+                    <tr key={item.id} className="border-b border-gray-50 text-xs">
+                      <td className="py-4 font-bold text-gray-900">
+                        <div>{item.product?.name || item.productName || "Məhsul"}</div>
+                        {itemSerials.length > 0 && (
+                          <div className="text-[10px] text-amber-700 font-semibold font-mono flex flex-wrap gap-1.5 mt-0.5">
+                            S/N: {itemSerials.map((s: any) => s.serialNumber).join(", ")}
+                          </div>
+                        )}
+                        <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                          item.status === "returned_to_stock" ? "bg-green-50 text-green-700 border border-green-100" : "bg-red-50 text-red-700 border border-red-100"
+                        }`}>
+                          {item.status === "returned_to_stock" ? "Anbara Qayıdıb" : "Deffekt / Silinib"}
+                        </span>
+                      </td>
+                      <td className="py-4 text-right text-gray-500 font-medium">{item.product?.unit || item.unit || "ədəd"}</td>
+                      <td className="py-4 text-right font-semibold text-gray-800 font-mono">{item.quantity}</td>
+                      <td className="py-4 text-right text-gray-600 font-mono">{Number(item.salePrice || 0).toFixed(2)} ₼</td>
+                      <td className="py-4 text-right font-bold text-amber-700 font-mono pr-2">
+                        -{Number((item.quantity * item.salePrice) || 0).toFixed(2)} ₼
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

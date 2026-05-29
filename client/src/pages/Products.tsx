@@ -12,6 +12,7 @@ interface Product {
   unit: string;
   description: string | null;
   barcode: string | null;
+  trackingType?: string;
 }
 
 const emptyProduct = {
@@ -20,6 +21,7 @@ const emptyProduct = {
   unit: "ədəd",
   description: "",
   barcode: "",
+  trackingType: "none",
 };
 
 export default function Products() {
@@ -136,6 +138,7 @@ export default function Products() {
       unit: product.unit,
       description: product.description || "",
       barcode: product.barcode || "",
+      trackingType: product.trackingType || "none",
     });
     setIsOpen(true);
   };
@@ -312,6 +315,18 @@ export default function Products() {
                     Yarat ⚡
                   </button>
                 </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">İzləmə Növü *</label>
+                <select
+                  value={formData.trackingType}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, trackingType: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 cursor-pointer font-bold"
+                >
+                  <option value="none">Standard (Barkod ilə)</option>
+                  <option value="serialized">Serial Nömrə (IMEI ilə izlənilən)</option>
+                </select>
               </div>
 
               <div className="space-y-1.5">

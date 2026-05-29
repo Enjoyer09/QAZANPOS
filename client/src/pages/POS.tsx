@@ -11,6 +11,7 @@ import {
   Barcode,
   Receipt,
   UserPlus,
+  AlertTriangle,
 } from "lucide-react";
 import { 
   cacheProducts, 
@@ -32,6 +33,7 @@ interface BasketItem {
   quantity: number;
   salePrice: number;
   minPrice: number; // Snapshot of lastPurchasePrice
+  serialNumbers?: string[];
 }
 
 export default function POS() {
@@ -167,6 +169,120 @@ export default function POS() {
     ? (activeStockLevels?.filter((p) => parseFloat(p.currentQuantity) > 0) || [])
     : (activeStockLevels || []);
 
+  // Scanning State & Helpers
+  const [scanInput, setScanInput] = useState("");
+
+  const addProductToBasket = (prod: any, serialNum?: string | null) => {
+    const qty = 1;
+    
+    // Check if adding exceeds stock (only in sale mode)
+    const existingInBasket = basket.find((item) => item.productId === prod.productId);
+    const currentBasketQty = existingInBasket ? existingInBasket.quantity : 0;
+    
+    if (posMode === "sale" && currentBasketQty + qty > prod.currentQuantity) {
+      toast({
+        title: "Xəta!",
+        description: `Anbarda kifayət qədər yoxdur. Maksimum: ${prod.currentQuantity} ${prod.unit}`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check if this specific serial number is already in the basket
+    if (serialNum) {
+      const serialAlreadyInBasket = basket.some((item) => 
+        item.serialNumbers && item.serialNumbers.includes(serialNum)
+      );
+      if (serialAlreadyInBasket) {
+        toast({ title: "Diqqət!", description: "Bu serial nömrəsi artıq səbətdə var.", variant: "destructive" });
+        return;
+      }
+    }
+
+    if (existingInBasket) {
+      setBasket((prev) =>
+        prev.map((item) => {
+          if (item.productId === prod.productId) {
+            const updatedSerials = item.serialNumbers ? [...item.serialNumbers] : [];
+            if (serialNum) updatedSerials.push(serialNum);
+            return {
+              ...item,
+              quantity: item.quantity + qty,
+              serialNumbers: updatedSerials,
+            };
+          }
+          return item;
+        })
+      );
+    } else {
+      setBasket((prev) => [
+        ...prev,
+        {
+          productId: prod.productId,
+          productName: prod.productName,
+          unit: prod.unit,
+          quantity: qty,
+          salePrice: prod.lastSalePrice || prod.lastPurchasePrice || 0,
+          minPrice: prod.lastPurchasePrice,
+          serialNumbers: serialNum ? [serialNum] : [],
+        },
+      ]);
+    }
+  };
+
+  const handleScanInput = (val: string) => {
+    setScanInput(val);
+    const cleaned = val.trim().toUpperCase();
+    if (!cleaned) return;
+
+    // 1. Check if the scanned value matches an active serial number (IMEI)
+    let foundProduct = null;
+    let foundSerial = null;
+
+    for (const p of sellableProducts) {
+      if (p.activeSerials && p.activeSerials.map((s: string) => s.toUpperCase()).includes(cleaned)) {
+        foundProduct = p;
+        foundSerial = cleaned;
+        break;
+      }
+    }
+
+    // 2. If not found as a serial number, check if it matches a standard barcode
+    if (!foundProduct) {
+      foundProduct = sellableProducts.find((p) => p.barcode === val.trim());
+    }
+
+    if (foundProduct) {
+      addProductToBasket(foundProduct, foundSerial);
+      setScanInput(""); // Clear scan input!
+      toast({
+        title: "Skan edildi!",
+        description: `Məhsul səbətə əlavə olundu: ${foundProduct.productName}${foundSerial ? ` (IMEI: ${foundSerial})` : ""}`,
+        variant: "success"
+      });
+    }
+  };
+
+  const handleRemoveSerialFromBasket = (productId: number, serialNum: string) => {
+    setBasket((prev) =>
+      prev
+        .map((item) => {
+          if (item.productId === productId) {
+            const updatedSerials = item.serialNumbers
+              ? item.serialNumbers.filter((s: string) => s !== serialNum)
+              : [];
+            return {
+              ...item,
+              quantity: Math.max(0, item.quantity - 1),
+              serialNumbers: updatedSerials,
+            };
+          }
+          return item;
+        })
+        .filter((item) => item.quantity > 0)
+    );
+  };
+
   // Add item to basket
   const handleAddToBasket = () => {
     if (!selectedProductId) {
@@ -176,6 +292,15 @@ export default function POS() {
 
     const prod = sellableProducts.find((p) => p.productId === parseInt(selectedProductId));
     if (!prod) return;
+
+    if (prod.trackingType === "serialized") {
+      toast({
+        title: "Serial Məhsul Daxiletməsi",
+        description: "Serial nömrəli məhsulları lütfən yuxarıdakı Sürətli Skaner bölməsindən birbaşa IMEI/Serial nömrəsini skan edərək əlavə edin.",
+        variant: "destructive"
+      });
+      return;
+    }
 
     const qty = parseFloat(selectedQuantity) || 1;
     if (qty <= 0) {
@@ -299,7 +424,8 @@ export default function POS() {
           productName: item.productName,
           unit: item.unit,
           quantity: item.quantity,
-          salePrice: item.salePrice
+          salePrice: item.salePrice,
+          serialNumbers: item.serialNumbers || [],
         }))
       };
 
@@ -500,6 +626,7 @@ export default function POS() {
         quantity: item.quantity,
         salePrice: item.salePrice,
         purchasePrice: item.minPrice,
+        serialNumbers: item.serialNumbers || [],
       })),
     };
 
@@ -592,6 +719,38 @@ export default function POS() {
             <h3 className="font-extrabold text-gray-900 text-sm mb-4">
               {posMode === "return" ? "Geri Qaytarılacaq Məhsul Seçin" : "Səbətə Məhsul Əlavə Et"}
             </h3>
+
+            {posMode === "return" && (
+              <div className="mb-4 p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-[11px] font-semibold flex items-start gap-2.5 animate-in slide-in-from-top-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-extrabold block mb-0.5 text-amber-900">Nisyə (Kredit) Satışların Qaytarılması:</span>
+                  Nisyə satılmış malların geri qaytarılması üçün <strong className="text-amber-950 font-bold">"Satış Tarixçəsi"</strong> bölməsindən müvafiq qaiməni tapıb qaytarış edin. Sürətli qaytarış zamanı birbaşa nağd geri ödəniş hesablanır.
+                </div>
+              </div>
+            )}
+
+            {/* Quick Scan Input */}
+            <div className="mb-4 space-y-1.5 animate-in slide-in-from-top-1">
+              <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Sürətli Skan / Barkod və ya IMEI (Serial №)</label>
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Barkod və ya IMEI skan edin..."
+                  value={scanInput}
+                  onChange={(e) => handleScanInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleScanInput(scanInput);
+                    }
+                  }}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 font-mono text-xs font-bold"
+                />
+                <Barcode className="absolute left-3.5 top-3.5 w-4 h-4 text-gray-400" />
+              </div>
+            </div>
+
             <div className="flex flex-col sm:flex-row gap-3 text-xs font-semibold">
               <div className="flex-1 w-full">
                 <select
@@ -679,6 +838,23 @@ export default function POS() {
                             <span className="text-[10px] text-gray-400 block mt-0.5">
                               Ölçü vahidi: {item.unit}
                             </span>
+                            {item.serialNumbers && item.serialNumbers.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1.5 max-w-xs">
+                                {item.serialNumbers.map((s: string) => (
+                                  <span key={s} className="bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold flex items-center gap-1">
+                                    {s}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveSerialFromBasket(item.productId, s)}
+                                      className="text-red-500 hover:text-red-700 font-bold font-sans cursor-pointer text-[10px]"
+                                      title="Serialı sil"
+                                    >
+                                      ✕
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </td>
                           <td className="py-4 px-2 text-right">
                             <input
@@ -687,7 +863,9 @@ export default function POS() {
                               step="0.01"
                               value={item.quantity}
                               onChange={(e) => handleUpdateBasketItem(item.productId, "quantity", e.target.value)}
-                              className={`w-16 px-2 py-1 border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-1 ${posMode === "return" ? "focus:ring-amber-500" : "focus:ring-primary"}`}
+                              className={`w-16 px-2 py-1 border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-1 ${posMode === "return" ? "focus:ring-amber-500" : "focus:ring-primary"} ${item.serialNumbers && item.serialNumbers.length > 0 ? "bg-gray-100 cursor-not-allowed opacity-80" : ""}`}
+                              readOnly={item.serialNumbers && item.serialNumbers.length > 0}
+                              title={item.serialNumbers && item.serialNumbers.length > 0 ? "Serial nömrəli məhsulun miqdarı skan edilmiş IMEIlərin sayı ilə təyin edilir" : ""}
                             />
                           </td>
                           <td className="py-4 px-2 text-right font-bold text-gray-500 font-mono">

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "./db/index.js";
 import * as schema from "./db/schema.js";
-import { eq, and, lte, gte, sql, desc } from "drizzle-orm";
+import { eq, and, lte, gte, sql, desc, inArray } from "drizzle-orm";
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
@@ -605,7 +605,7 @@ router.get("/stock/entries", async (req, res) => {
 // Create stock entry
 router.post("/stock/entries", requireAdmin, async (req, res) => {
   try {
-    const { productId, quantity, purchasePrice, supplier, notes, paymentType, creditDueDate, vendorId } = req.body;
+    const { productId, quantity, purchasePrice, supplier, notes, paymentType, creditDueDate, vendorId, serialNumbers } = req.body;
 
     if (!productId || !quantity || !purchasePrice || !paymentType) {
       return res.status(400).json({ message: "Məcburi sahələri doldurun" });
@@ -616,38 +616,104 @@ router.post("/stock/entries", requireAdmin, async (req, res) => {
       return res.status(400).json({ message: "Nisyə üçün son tarix daxil edilməlidir" });
     }
 
-    const newEntry = await db
-      .insert(schema.stockEntries)
-      .values({
-        tenantId: req.tenantId,
-        productId,
-        vendorId: vendorId ? parseInt(vendorId) : null,
-        quantity: parseFloat(quantity),
-        purchasePrice: parseFloat(purchasePrice),
-        supplier: supplier || null,
-        notes: notes || null,
-        paymentType,
-        creditDueDate: isCredit ? creditDueDate : null,
-        entryDate: new Date().toISOString(),
-        paidStatus: isCredit ? "credit" : "paid",
-      })
-      .returning();
+    // 1. Fetch product to check trackingType
+    const productList = await db
+      .select()
+      .from(schema.products)
+      .where(and(eq(schema.products.id, productId), eq(schema.products.tenantId, req.tenantId)))
+      .limit(1);
 
-    const productList = await db.select().from(schema.products).where(and(eq(schema.products.id, productId), eq(schema.products.tenantId, req.tenantId))).limit(1);
-    const productName = productList[0] ? productList[0].name : `ID: ${productId}`;
-    const unit = productList[0] ? productList[0].unit : "ədəd";
+    if (productList.length === 0) {
+      return res.status(404).json({ message: "Məhsul tapılmadı" });
+    }
+
+    const product = productList[0];
+    const isSerialized = product.trackingType === "serialized";
+
+    if (isSerialized) {
+      if (!serialNumbers || !Array.isArray(serialNumbers) || serialNumbers.length !== parseInt(quantity)) {
+        return res.status(400).json({ 
+          message: `Serial nömrəli məhsul üçün dəqiq ${parseInt(quantity)} ədəd serial nömrəsi daxil edilməlidir` 
+        });
+      }
+
+      // Check for duplicates in the current input
+      const uniqueSerialsInput = new Set(serialNumbers.map(s => s.trim().toUpperCase()));
+      if (uniqueSerialsInput.size !== serialNumbers.length) {
+        return res.status(400).json({ message: "Daxil edilən serial nömrələrində təkrarlanma var" });
+      }
+
+      // Check for duplicates in the database for this tenant
+      for (const sNum of serialNumbers) {
+        const cleaned = sNum.trim().toUpperCase();
+        const existing = await db.query.productSerials.findFirst({
+          where: and(
+            eq(schema.productSerials.serialNumber, cleaned),
+            eq(schema.productSerials.tenantId, req.tenantId),
+            inArray(schema.productSerials.status, ["in_stock", "sold"])
+          ),
+        });
+        if (existing) {
+          return res.status(400).json({ 
+            message: `Serial nömrə (${cleaned}) artıq bazada mövcuddur (Status: ${existing.status})` 
+          });
+        }
+      }
+    }
+
+    const newEntry = await db.transaction(async (tx) => {
+      // 2. Insert stock entry
+      const entry = await tx
+        .insert(schema.stockEntries)
+        .values({
+          tenantId: req.tenantId,
+          productId,
+          vendorId: vendorId ? parseInt(vendorId) : null,
+          quantity: parseFloat(quantity),
+          purchasePrice: parseFloat(purchasePrice),
+          supplier: supplier || null,
+          notes: notes || null,
+          paymentType,
+          creditDueDate: isCredit ? creditDueDate : null,
+          entryDate: new Date().toISOString(),
+          paidStatus: isCredit ? "credit" : "paid",
+        })
+        .returning();
+
+      const entryId = entry[0].id;
+
+      // 3. Insert serial numbers if serialized
+      if (isSerialized && serialNumbers) {
+        for (const sNum of serialNumbers) {
+          await tx.insert(schema.productSerials).values({
+            tenantId: req.tenantId,
+            productId,
+            stockEntryId: entryId,
+            serialNumber: sNum.trim().toUpperCase(),
+            status: "in_stock",
+            createdAt: new Date().toISOString(),
+          });
+        }
+      }
+
+      return entry[0];
+    });
+
+    const productName = product.name;
+    const unit = product.unit;
     await logActivity(
       req,
       "CREATE_STOCK_ENTRY",
       `Anbara mədaxil etdi: ${quantity} ${unit} '${productName}' (Alış qiyməti: ${purchasePrice} ₼, Tədarükçü: ${supplier || "Yoxdur"}, Ödəniş: ${paymentType})`
     );
 
-    res.json(newEntry[0]);
+    res.json(newEntry);
 
     // Send Telegram Notification in fire-and-forget background thread
     sendTelegramNotification(req.tenantId, `📦 <b>Yeni Mal Mədaxili!</b>\n\n<b>Məhsul:</b> ${productName}\n<b>Miqdar:</b> ${quantity} ${unit}\n<b>Alış Qiyməti:</b> <code>${purchasePrice} ₼</code>\n<b>Tədarükçü:</b> ${supplier || "Yoxdur"}\n<b>Ödəniş Üsulu:</b> ${paymentType}`).catch(err => console.error("Telegram notification failed:", err));
-  } catch (error) {
-    res.status(500).json({ message: "Mədaxil edilərkən xəta baş verdi" });
+  } catch (error: any) {
+    console.error("Stock entry error:", error);
+    res.status(500).json({ message: "Mədaxil edilərkən xəta baş verdi: " + error.message });
   }
 });
 
@@ -705,6 +771,19 @@ router.get("/stock/levels", async (req, res) => {
         .limit(1);
       const lastSalePrice = latestSaleItem[0]?.price || lastPurchasePrice;
 
+      // 5.5. Fetch active serial numbers if tracked
+      const activeSerialsList = await db
+        .select({ serialNumber: schema.productSerials.serialNumber })
+        .from(schema.productSerials)
+        .where(
+          and(
+            eq(schema.productSerials.productId, product.id),
+            eq(schema.productSerials.tenantId, req.tenantId),
+            eq(schema.productSerials.status, "in_stock")
+          )
+        );
+      const activeSerials = activeSerialsList.map(s => s.serialNumber);
+
       stockLevels.push({
         productId: product.id,
         productName: product.name,
@@ -714,6 +793,8 @@ router.get("/stock/levels", async (req, res) => {
         lastPurchasePrice,
         lastSalePrice,
         totalValue: currentQuantity * lastPurchasePrice,
+        trackingType: product.trackingType,
+        activeSerials,
       });
     }
 
@@ -997,6 +1078,27 @@ router.post("/sales", async (req, res) => {
           salePrice: parseFloat(item.salePrice),
           purchasePrice: parseFloat(item.purchasePrice || "0"),
         });
+
+        // Link serial numbers if provided
+        if (item.serialNumbers && Array.isArray(item.serialNumbers) && item.serialNumbers.length > 0) {
+          for (const sNum of item.serialNumbers) {
+            const cleaned = sNum.trim().toUpperCase();
+            await tx
+              .update(schema.productSerials)
+              .set({
+                status: "sold",
+                saleId,
+                soldAt: new Date().toISOString(),
+              })
+              .where(
+                and(
+                  eq(schema.productSerials.serialNumber, cleaned),
+                  eq(schema.productSerials.tenantId, req.tenantId),
+                  eq(schema.productSerials.status, "in_stock")
+                )
+              );
+          }
+        }
       }
 
       // If partial initial payment was made on credit
@@ -1036,7 +1138,8 @@ router.get("/sales/:id", async (req, res) => {
       with: { 
         items: { with: { product: true } }, 
         payments: true,
-        returns: { with: { items: { with: { product: true } } } }
+        returns: { with: { items: { with: { product: true } } } },
+        serials: true,
       },
     });
 
@@ -1053,14 +1156,15 @@ router.patch("/sales/:id/pay-credit", async (req, res) => {
     const id = parseInt(req.params.id);
     const sale = await db.query.sales.findFirst({
       where: and(eq(schema.sales.id, id), eq(schema.sales.tenantId, req.tenantId)),
-      with: { payments: true },
+      with: { payments: true, returns: true },
     });
 
     if (!sale) return res.status(404).json({ message: "Satış tapılmadı" });
 
     // Calculate total already paid
     const alreadyPaid = sale.payments.reduce((acc, p) => acc + p.amount, 0);
-    const remaining = sale.totalAmount - alreadyPaid;
+    const returned = sale.returns ? sale.returns.reduce((acc, r) => acc + r.totalAmount, 0) : 0;
+    const remaining = Math.max(0, sale.totalAmount - alreadyPaid - returned);
 
     if (remaining > 0) {
       await db.insert(schema.creditPayments).values({
@@ -1101,7 +1205,7 @@ router.patch("/sales/:id/add-payment", async (req, res) => {
 
     const sale = await db.query.sales.findFirst({
       where: and(eq(schema.sales.id, id), eq(schema.sales.tenantId, req.tenantId)),
-      with: { payments: true },
+      with: { payments: true, returns: true },
     });
 
     if (!sale) return res.status(404).json({ message: "Satış tapılmadı" });
@@ -1119,8 +1223,9 @@ router.patch("/sales/:id/add-payment", async (req, res) => {
       where: and(eq(schema.creditPayments.saleId, id), eq(schema.creditPayments.tenantId, req.tenantId))
     });
     const totalPaid = updatedPayments.reduce((acc, p) => acc + p.amount, 0);
+    const returned = sale.returns ? sale.returns.reduce((acc, r) => acc + r.totalAmount, 0) : 0;
 
-    if (totalPaid >= sale.totalAmount) {
+    if (totalPaid >= (sale.totalAmount - returned)) {
       await db
         .update(schema.sales)
         .set({ paymentStatus: "paid" })
@@ -1169,7 +1274,8 @@ router.get("/returns/:id", async (req, res) => {
             product: true
           }
         },
-        sale: true
+        sale: true,
+        serials: true,
       },
     });
 
@@ -1267,6 +1373,26 @@ router.post("/returns", async (req, res) => {
           purchasePrice: parseFloat(item.purchasePrice || "0"),
           status: item.status, // "returned_to_stock" or "defective"
         });
+
+        // Link and update returned serial numbers
+        if (item.serialNumbers && Array.isArray(item.serialNumbers) && item.serialNumbers.length > 0) {
+          for (const sNum of item.serialNumbers) {
+            const cleaned = sNum.trim().toUpperCase();
+            await tx
+              .update(schema.productSerials)
+              .set({
+                status: item.status === "returned_to_stock" ? "in_stock" : "defective",
+                returnId,
+              })
+              .where(
+                and(
+                  eq(schema.productSerials.serialNumber, cleaned),
+                  eq(schema.productSerials.tenantId, req.tenantId),
+                  eq(schema.productSerials.productId, item.productId)
+                )
+              );
+          }
+        }
       }
 
       return newReturn[0];
@@ -1287,6 +1413,39 @@ router.post("/returns", async (req, res) => {
   }
 });
 
+// Lookup serial number details (Warranty & IMEI lookup)
+router.get("/serials/lookup", async (req, res) => {
+  try {
+    const { serialNumber } = req.query;
+    if (!serialNumber) {
+      return res.status(400).json({ message: "Serial nömrəsi daxil edilməlidir" });
+    }
+
+    const sNum = (serialNumber as string).trim().toUpperCase();
+    const record = await db.query.productSerials.findFirst({
+      where: and(
+        eq(schema.productSerials.serialNumber, sNum),
+        eq(schema.productSerials.tenantId, req.tenantId)
+      ),
+      with: {
+        product: true,
+        stockEntry: true,
+        sale: true,
+        return: true,
+      },
+    });
+
+    if (!record) {
+      return res.status(404).json({ message: "Bu serial nömrəsi ilə məhsul tapılmadı" });
+    }
+
+    res.json(record);
+  } catch (error: any) {
+    console.error("Serial lookup error:", error);
+    res.status(500).json({ message: "Zəmanət axtarışı zamanı xəta baş verdi: " + error.message });
+  }
+});
+
 // ----------------------------------------------------
 // 5. CREDIT MONITORING ENDPOINTS
 // ----------------------------------------------------
@@ -1301,19 +1460,20 @@ router.get("/credits/overdue", async (req, res) => {
         lte(schema.sales.creditDueDate, today),
         eq(schema.sales.tenantId, req.tenantId)
       ),
-      with: { payments: true },
+      with: { payments: true, returns: true },
       orderBy: [desc(schema.sales.creditDueDate)],
     });
 
     const result = overdueSales.map((sale) => {
       const paid = sale.payments.reduce((sum, p) => sum + p.amount, 0);
+      const returned = sale.returns ? sale.returns.reduce((sum, r) => sum + r.totalAmount, 0) : 0;
       return {
         id: sale.id,
         customerId: sale.customerId,
         customerName: sale.customerName,
         customerPhone: sale.customerPhone,
         totalAmount: sale.totalAmount,
-        remainingDebt: sale.totalAmount - paid,
+        remainingDebt: Math.max(0, sale.totalAmount - paid - returned),
         creditDueDate: sale.creditDueDate,
         saleDate: sale.saleDate,
       };
@@ -1335,19 +1495,20 @@ router.get("/credits/pending", async (req, res) => {
         gte(schema.sales.creditDueDate, today),
         eq(schema.sales.tenantId, req.tenantId)
       ),
-      with: { payments: true },
+      with: { payments: true, returns: true },
       orderBy: [desc(schema.sales.creditDueDate)],
     });
 
     const result = pendingSales.map((sale) => {
       const paid = sale.payments.reduce((sum, p) => sum + p.amount, 0);
+      const returned = sale.returns ? sale.returns.reduce((sum, r) => sum + r.totalAmount, 0) : 0;
       return {
         id: sale.id,
         customerId: sale.customerId,
         customerName: sale.customerName,
         customerPhone: sale.customerPhone,
         totalAmount: sale.totalAmount,
-        remainingDebt: sale.totalAmount - paid,
+        remainingDebt: Math.max(0, sale.totalAmount - paid - returned),
         creditDueDate: sale.creditDueDate,
         saleDate: sale.saleDate,
       };
@@ -1603,12 +1764,13 @@ router.get("/dashboard/summary", requireAdmin, async (req, res) => {
     // 4. Calculate Customer Credit Debts
     const activeCredits = await db.query.sales.findMany({
       where: and(eq(schema.sales.paymentStatus, "credit"), eq(schema.sales.tenantId, req.tenantId)),
-      with: { payments: true }
+      with: { payments: true, returns: true }
     });
 
     const totalCreditDebt = activeCredits.reduce((sum, sale) => {
       const paid = sale.payments.reduce((pSum, p) => pSum + p.amount, 0);
-      return sum + (sale.totalAmount - paid);
+      const returned = sale.returns ? sale.returns.reduce((rSum, r) => rSum + r.totalAmount, 0) : 0;
+      return sum + Math.max(0, sale.totalAmount - paid - returned);
     }, 0);
 
     const overdueCreditsCount = activeCredits.filter(sale => {

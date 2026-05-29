@@ -24,6 +24,7 @@ export const products = pgTable("products", {
   unit: text("unit").notNull().default("ədəd"),
   description: text("description"),
   barcode: text("barcode"),
+  trackingType: text("tracking_type").notNull().default("none"),
 }, (table) => ({
   productsTenantBarcodeIdx: uniqueIndex("products_tenant_barcode_idx").on(table.tenantId, table.barcode)
 }));
@@ -314,6 +315,30 @@ export const returnItems = pgTable("return_items", {
   status: text("status").notNull(), // "returned_to_stock" or "defective"
 });
 
+// 13. Product Serial Numbers Table
+export const productSerials = pgTable("product_serials", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" })
+    .default(1),
+  productId: integer("product_id")
+    .notNull()
+    .references(() => products.id, { onDelete: "cascade" }),
+  stockEntryId: integer("stock_entry_id")
+    .references(() => stockEntries.id, { onDelete: "set null" }),
+  saleId: integer("sale_id")
+    .references(() => sales.id, { onDelete: "set null" }),
+  returnId: integer("return_id")
+    .references(() => returns.id, { onDelete: "set null" }),
+  serialNumber: text("serial_number").notNull(),
+  status: text("status").notNull().default("in_stock"), // "in_stock", "sold", "defective", "written_off"
+  createdAt: text("created_at").notNull(),
+  soldAt: text("sold_at"),
+}, (table) => ({
+  productSerialsTenantSerialIdx: uniqueIndex("product_serials_tenant_serial_idx").on(table.tenantId, table.serialNumber)
+}));
+
 // Relations Definitions for Drizzle ORM queries
 export const tenantsRelations = relations(tenants, ({ many }) => ({
   products: many(products),
@@ -323,6 +348,7 @@ export const tenantsRelations = relations(tenants, ({ many }) => ({
   expenses: many(expenses),
   users: many(users),
   returns: many(returns),
+  productSerials: many(productSerials),
 }));
 
 export const productsRelations = relations(products, ({ one, many }) => ({
@@ -333,9 +359,10 @@ export const productsRelations = relations(products, ({ one, many }) => ({
   stockEntries: many(stockEntries),
   saleItems: many(saleItems),
   returnItems: many(returnItems),
+  serials: many(productSerials),
 }));
 
-export const stockEntriesRelations = relations(stockEntries, ({ one }) => ({
+export const stockEntriesRelations = relations(stockEntries, ({ one, many }) => ({
   tenant: one(tenants, {
     fields: [stockEntries.tenantId],
     references: [tenants.id],
@@ -344,6 +371,7 @@ export const stockEntriesRelations = relations(stockEntries, ({ one }) => ({
     fields: [stockEntries.productId],
     references: [products.id],
   }),
+  serials: many(productSerials),
 }));
 
 export const customersRelations = relations(customers, ({ one, many }) => ({
@@ -366,6 +394,7 @@ export const salesRelations = relations(sales, ({ one, many }) => ({
   items: many(saleItems),
   payments: many(creditPayments),
   returns: many(returns),
+  serials: many(productSerials),
 }));
 
 export const saleItemsRelations = relations(saleItems, ({ one }) => ({
@@ -432,6 +461,7 @@ export const returnsRelations = relations(returns, ({ one, many }) => ({
     references: [sales.id],
   }),
   items: many(returnItems),
+  serials: many(productSerials),
 }));
 
 export const returnItemsRelations = relations(returnItems, ({ one }) => ({
@@ -477,6 +507,29 @@ export const salaryPaymentsRelations = relations(salaryPayments, ({ one }) => ({
   payroll: one(payroll, {
     fields: [salaryPayments.payrollId],
     references: [payroll.id],
+  }),
+}));
+
+export const productSerialsRelations = relations(productSerials, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [productSerials.tenantId],
+    references: [tenants.id],
+  }),
+  product: one(products, {
+    fields: [productSerials.productId],
+    references: [products.id],
+  }),
+  stockEntry: one(stockEntries, {
+    fields: [productSerials.stockEntryId],
+    references: [stockEntries.id],
+  }),
+  sale: one(sales, {
+    fields: [productSerials.saleId],
+    references: [sales.id],
+  }),
+  return: one(returns, {
+    fields: [productSerials.returnId],
+    references: [returns.id],
   }),
 }));
 

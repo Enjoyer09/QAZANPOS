@@ -49,9 +49,16 @@ export function generateReceiptHtml(sale: any, settings: any): string {
       const name = item.productName || item.product?.name || "Məhsul";
       const unit = item.unit || item.product?.unit || "ədəd";
       const total = (qty * price).toFixed(2);
+      
+      const itemSerials = (sale.serials || []).filter((s: any) => s.productId === item.productId);
+      const serialsHtml = itemSerials.length > 0
+        ? `<div style="font-size: 7.5pt; font-family: monospace; color: #444444; margin-top: 1px; font-weight: bold;">S/N: ${itemSerials.map((s: any) => s.serialNumber).join(", ")}</div>`
+        : "";
+
       itemsHtml += `
         <div class="item-row">
           <div class="item-name">${name}</div>
+          ${serialsHtml}
           <table class="receipt-table" style="font-size: 8.5pt;">
             <tr>
               <td style="width: 65%; text-align: left; font-size: 8.5pt; padding: 1px 0;">${qty} ${unit} x ${price.toFixed(2)} ₼</td>

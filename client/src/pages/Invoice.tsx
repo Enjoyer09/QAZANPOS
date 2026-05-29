@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { ArrowLeft, Printer, CreditCard, Check, CheckCircle2, RotateCw, Trash2 } from "lucide-react";
+import { ArrowLeft, Printer, CreditCard, Check, CheckCircle2, RotateCw, Trash2, AlertTriangle } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
 import { printReceipt } from "../components/ReceiptPrint.tsx";
 
@@ -192,9 +192,13 @@ export default function Invoice({ params }: InvoiceProps) {
   const totalPaid = invoice.paymentStatus === "paid"
     ? totalAmount
     : (invoice.payments || []).reduce((acc: number, p: any) => acc + (parseFloat(p.amount) || 0), 0);
+  const returnedAmount = (invoice.returns || []).reduce(
+    (sum: number, r: any) => sum + (parseFloat(r.totalAmount) || 0),
+    0
+  );
   const remainingDebt = invoice.paymentStatus === "paid"
     ? 0
-    : Math.max(0, totalAmount - totalPaid);
+    : Math.max(0, totalAmount - totalPaid - returnedAmount);
 
   // Helper to calculate returned quantity for a specific product in this invoice
   const getReturnedQty = (productId: number) => {
@@ -348,14 +352,24 @@ export default function Invoice({ params }: InvoiceProps) {
               <tbody>
                 {invoice.items.map((item: any) => {
                   const returnedQty = getReturnedQty(item.productId);
+                  const itemSerials = (invoice.serials || []).filter(
+                    (s: any) => s.productId === item.productId
+                  );
                   return (
                     <tr key={item.id} className="border-b border-gray-50 text-xs">
-                      <td className="py-4 font-bold text-gray-900 flex items-center flex-wrap gap-2">
-                        <span>{item.product?.name || item.productName || "Məhsul"}</span>
-                        {returnedQty > 0 && (
-                          <span className="bg-amber-50 text-amber-700 border border-amber-100 px-2 py-0.5 rounded-full text-[9px] font-bold">
-                            Qaytarılıb: {returnedQty} {item.product?.unit || item.unit || "ədəd"}
-                          </span>
+                      <td className="py-4 font-bold text-gray-900 flex flex-col gap-1">
+                        <div className="flex items-center flex-wrap gap-2">
+                          <span>{item.product?.name || item.productName || "Məhsul"}</span>
+                          {returnedQty > 0 && (
+                            <span className="bg-amber-50 text-amber-700 border border-amber-100 px-2 py-0.5 rounded-full text-[9px] font-bold">
+                              Qaytarılıb: {returnedQty} {item.product?.unit || item.unit || "ədəd"}
+                            </span>
+                          )}
+                        </div>
+                        {itemSerials.length > 0 && (
+                          <div className="text-[10px] text-amber-700 font-semibold font-mono flex flex-wrap gap-1.5 mt-0.5">
+                            S/N: {itemSerials.map((s: any) => s.serialNumber).join(", ")}
+                          </div>
                         )}
                       </td>
                       <td className="py-4 text-right text-gray-500 font-medium">{item.product?.unit || item.unit || "ədəd"}</td>
@@ -538,6 +552,16 @@ export default function Invoice({ params }: InvoiceProps) {
               </button>
             </div>
 
+            {isCredit && (
+              <div className="p-4 bg-red-50 border border-red-200 rounded-2xl text-red-800 text-[11px] font-semibold flex items-start gap-2.5 animate-in slide-in-from-top-2">
+                <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-extrabold block mb-0.5 text-red-900">Diqqət! Bu Qaimə Nisyə Satışdır</span>
+                  Bu satış nisyə (kredit) ilə edildiyi üçün geri qaytarılan məhsulların məbləği müştəriyə nağd olaraq <span className="underline decoration-wavy decoration-red-600 font-bold">geri ödənilmir</span>. Qaytarılan məbləğ avtomatik olaraq müştərinin qalıq borcundan silinəcəkdir.
+                </div>
+              </div>
+            )}
+
             <form onSubmit={handleReturnSubmit} className="space-y-6 text-xs font-semibold">
               {/* Items List */}
               <div className="space-y-4 max-h-[40vh] overflow-y-auto pr-1">
@@ -614,7 +638,9 @@ export default function Invoice({ params }: InvoiceProps) {
               {Object.values(returnItemsState).some(item => item.quantity > 0) && (
                 <div className="flex justify-between items-center bg-amber-50 p-4 rounded-2xl border border-amber-100 animate-in fade-in">
                   <div>
-                    <span className="text-[10px] text-amber-700 uppercase tracking-wider block font-bold">Müştəriyə Geri Ödəniləcək</span>
+                    <span className="text-[10px] text-amber-700 uppercase tracking-wider block font-bold">
+                      {isCredit ? "Müştərinin Borcundan Silinəcək (Nəğd Geri Ödənilmir ❌)" : "Müştəriyə Geri Ödəniləcək"}
+                    </span>
                     <span className="text-lg font-black text-amber-950 font-mono mt-0.5 block">
                       {Object.entries(returnItemsState).reduce((sum, [pIdStr, state]) => {
                         const pId = parseInt(pIdStr);
