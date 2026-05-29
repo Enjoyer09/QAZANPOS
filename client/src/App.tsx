@@ -22,6 +22,7 @@ import {
   Tag,
   Truck,
   UserCheck,
+  ChevronDown,
 } from "lucide-react";
 
 // Reusable components
@@ -133,6 +134,8 @@ const queryClient = new QueryClient({
 function AppLayout({ children, user, onLogout }: { children: React.ReactNode; user: any; onLogout: () => void }) {
   const [location, setLocation] = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+  const [mobileOpenGroups, setMobileOpenGroups] = useState<Record<string, boolean>>({});
   const { toast } = useToast();
 
   const host = window.location.hostname;
@@ -222,27 +225,67 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
 
   const isAdmin = user?.role === "Admin";
 
-  // Navigation links - optimized and compact
-  const menuItems = isSuperTenant
+  // Logical Navigation Groups for structured, unbloated menus
+  const navGroups = isSuperTenant
     ? [
-        { href: "/", label: "SaaS Panel", icon: LayoutDashboard },
-        { href: "/loqlar", label: "Audit Loqları", icon: Activity },
+        {
+          label: "SaaS Panel",
+          icon: LayoutDashboard,
+          items: [
+            { href: "/", label: "SaaS Panel", icon: LayoutDashboard },
+          ]
+        },
+        {
+          label: "Audit Loqları",
+          icon: Activity,
+          items: [
+            { href: "/loqlar", label: "Audit Loqları", icon: Activity },
+          ]
+        }
       ]
     : [
-        { href: "/pos", label: "POS ⚡", icon: Sparkles, isHighlight: true },
-        { href: "/satislar", label: "Tarixçə", icon: History },
-        { href: "/anbar", label: "Qalıqlar", icon: Boxes },
-        ...(isAdmin ? [{ href: "/anbar/daxil", label: "Mədaxil", icon: PlusCircle }] : []),
-        ...(isAdmin ? [{ href: "/mehsullar", label: "Kataloq", icon: FolderKanban }] : []),
-        { href: "/nisye", label: "Borclar", icon: AlertTriangle },
-        ...(isAdmin ? [{ href: "/tedarukculer", label: "Tədarükçülər", icon: Truck }] : []),
-        ...(isAdmin ? [{ href: "/xercler", label: "Xərclər", icon: TrendingDown }] : []),
-        { href: "/musteriler", label: "Müştərilər", icon: Users },
-        ...(isAdmin ? [{ href: "/hr", label: "HR & Əməkhaqqı", icon: UserCheck }] : []),
-        ...(isAdmin ? [{ href: "/", label: "Panel", icon: LayoutDashboard }] : []),
-        ...(isAdmin ? [{ href: "/etiketler", label: "Etiketlər", icon: Tag }] : []),
-        ...(isAdmin ? [{ href: "/loqlar", label: "Loqlar", icon: Activity }] : []),
-        { href: "/ayarlar", label: "Ayarlar", icon: SettingsIcon },
+        {
+          label: "Ticarət",
+          icon: Sparkles,
+          items: [
+            { href: "/pos", label: "POS Satış ⚡", icon: Sparkles, isHighlight: true },
+            { href: "/satislar", label: "Satış Tarixçəsi", icon: History },
+          ]
+        },
+        {
+          label: "Anbar",
+          icon: Boxes,
+          items: [
+            { href: "/anbar", label: "Məhsul Qalıqları", icon: Boxes },
+            ...(isAdmin ? [
+              { href: "/anbar/daxil", label: "Yeni Mədaxil", icon: PlusCircle },
+              { href: "/mehsullar", label: "Məhsul Kataloqu", icon: FolderKanban },
+              { href: "/etiketler", label: "Etiket Generatoru", icon: Tag }
+            ] : [])
+          ]
+        },
+        {
+          label: "Maliyyə & HR",
+          icon: TrendingDown,
+          items: [
+            { href: "/nisye", label: "Nisyə & Borclar", icon: AlertTriangle },
+            ...(isAdmin ? [
+              { href: "/tedarukculer", label: "Tədarükçülər", icon: Truck },
+              { href: "/xercler", label: "Xərclər Modulu", icon: TrendingDown },
+              { href: "/hr", label: "HR & Əməkhaqqı", icon: UserCheck }
+            ] : []),
+            { href: "/musteriler", label: "Müştəri Bazası", icon: Users },
+          ]
+        },
+        {
+          label: "Sistem",
+          icon: SettingsIcon,
+          items: [
+            ...(isAdmin ? [{ href: "/", label: "Statistika Paneli", icon: LayoutDashboard }] : []),
+            ...(isAdmin ? [{ href: "/loqlar", label: "Sistem Loqları", icon: Activity }] : []),
+            { href: "/ayarlar", label: "Sistem Ayarları", icon: SettingsIcon },
+          ]
+        }
       ];
 
   return (
@@ -289,40 +332,56 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
         </Link>
 
         {/* Dynamic Horizontal Navigation Menu */}
-        <nav className="hidden lg:flex items-center gap-0.5 xl:gap-1 max-w-[62vw] xl:max-w-[75vw] overflow-x-auto scrollbar-none flex-nowrap py-1 pr-2">
-          {menuItems.map((item) => {
-            const Icon = item.icon;
-            const isActive =
-              item.href === "/"
-                ? location === "/"
-                : item.href === "/anbar"
-                ? location === "/anbar"
-                : location.startsWith(item.href);
+        <nav className="hidden lg:flex items-center gap-1 xl:gap-2 max-w-[62vw] xl:max-w-[75vw] overflow-x-auto scrollbar-none flex-nowrap py-1 pr-2">
+          {navGroups.map((group) => {
+            const hasActiveChild = group.items.some(
+              (item) =>
+                item.href === "/"
+                  ? location === "/"
+                  : item.href === "/anbar"
+                  ? location === "/anbar"
+                  : location.startsWith(item.href)
+            );
 
-            const isItemDisabled = !isOnline && item.href !== "/pos" && item.href !== "/anbar";
+            const isOpen = activeDropdown === group.label;
 
-            if (item.isHighlight) {
+            // Render single-item groups as simple flat buttons to avoid unnecessary dropdown wrappers
+            if (group.items.length === 1) {
+              const item = group.items[0];
+              const isActive =
+                item.href === "/"
+                  ? location === "/"
+                  : item.href === "/anbar"
+                  ? location === "/anbar"
+                  : location.startsWith(item.href);
+
+              const isItemDisabled = !isOnline && item.href !== "/pos" && item.href !== "/anbar";
+
               return (
-                <Link key={item.href} href={item.href} onClick={(e) => {
-                  if (isItemDisabled) {
-                    e.preventDefault();
-                    toast({
-                      title: "Oflayn Rejim Kilidi 🔒",
-                      description: "Bu bölmə yalnız onlayn rejimdə aktivdir. Oflayn rejimdə yalnız POS Satış və Qalıqlar bölmələri keçərlidir.",
-                      variant: "destructive",
-                    });
-                  }
-                }}>
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={(e) => {
+                    if (isItemDisabled) {
+                      e.preventDefault();
+                      toast({
+                        title: "Oflayn Rejim Kilidi 🔒",
+                        description: "Bu bölmə yalnız onlayn rejimdə aktivdir. Oflayn rejimdə yalnız POS Satış və Qalıqlar bölmələri keçərlidir.",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
+                >
                   <div
-                    className={`flex items-center gap-1 xl:gap-1.5 px-2 xl:px-4 py-1.5 rounded-xl font-extrabold text-[11px] xl:text-xs cursor-pointer shadow-md transition-all hover-elevate ${
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-extrabold text-[11px] xl:text-xs cursor-pointer transition-all ${
                       isItemDisabled
-                        ? "bg-gray-200 text-gray-400 opacity-50 cursor-not-allowed"
+                        ? "text-gray-300 opacity-50 cursor-not-allowed"
                         : isActive
-                        ? "bg-primary text-white shadow-primary/20 border border-primary/20"
-                        : "bg-primary/10 text-primary hover:bg-primary/20 border border-primary/10"
+                        ? "bg-primary/10 text-primary font-extrabold border border-primary/20 shadow-xs"
+                        : "text-gray-500 hover:text-gray-900 hover:bg-gray-50/50"
                     }`}
                   >
-                    <Icon className="w-3.5 h-3.5 shrink-0" />
+                    <item.icon className="w-3.5 h-3.5 shrink-0" />
                     <span>{item.label}</span>
                   </div>
                 </Link>
@@ -330,30 +389,77 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
             }
 
             return (
-              <Link key={item.href} href={item.href} onClick={(e) => {
-                if (isItemDisabled) {
-                  e.preventDefault();
-                  toast({
-                    title: "Oflayn Rejim Kilidi 🔒",
-                    description: "Bu bölmə yalnız onlayn rejimdə aktivdir. Oflayn rejimdə yalnız POS Satış və Qalıqlar bölmələri keçərlidir.",
-                    variant: "destructive",
-                  });
-                }
-              }}>
-                <div
-                  className={`flex items-center gap-1 xl:gap-1.5 px-2 xl:px-3 py-1.5 rounded-xl font-extrabold text-[11px] xl:text-xs cursor-pointer transition-all ${
-                    isItemDisabled
-                      ? "text-gray-300 opacity-50 cursor-not-allowed"
-                      : isActive
-                      ? "bg-gray-900/10 text-gray-900 font-extrabold"
+              <div
+                key={group.label}
+                className="relative"
+                onMouseEnter={() => setActiveDropdown(group.label)}
+                onMouseLeave={() => setActiveDropdown(null)}
+              >
+                {/* Trigger Button */}
+                <button
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-extrabold text-[11px] xl:text-xs transition-all cursor-pointer select-none border border-transparent ${
+                    hasActiveChild
+                      ? "bg-primary/10 text-primary border-primary/20"
                       : "text-gray-500 hover:text-gray-900 hover:bg-gray-50/50"
                   }`}
                 >
-                  <Icon className={`w-3.5 h-3.5 shrink-0 ${isItemDisabled ? "text-gray-300" : isActive ? "text-primary" : "text-gray-400"}`} />
-                  <span>{item.label}</span>
-                  {isItemDisabled && <span className="text-[9px] text-gray-400 ml-0.5">🔒</span>}
-                </div>
-              </Link>
+                  <group.icon className="w-3.5 h-3.5 shrink-0" />
+                  <span>{group.label}</span>
+                  <ChevronDown className={`w-3 h-3 transition-transform duration-200 shrink-0 ${isOpen ? "rotate-180" : ""}`} />
+                </button>
+
+                {/* Dropdown Card overlay */}
+                {isOpen && (
+                  <div className="absolute left-0 mt-1 w-52 bg-white/95 backdrop-blur-md border border-gray-100 rounded-2xl p-2.5 shadow-2xl animate-in fade-in slide-in-from-top-2 duration-150 z-50">
+                    <div className="flex flex-col gap-1">
+                      {group.items.map((item) => {
+                        const Icon = item.icon;
+                        const isActive =
+                          item.href === "/"
+                            ? location === "/"
+                            : item.href === "/anbar"
+                            ? location === "/anbar"
+                            : location.startsWith(item.href);
+
+                        const isItemDisabled = !isOnline && item.href !== "/pos" && item.href !== "/anbar";
+
+                        return (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            onClick={(e) => {
+                              if (isItemDisabled) {
+                                e.preventDefault();
+                                toast({
+                                  title: "Oflayn Rejim Kilidi 🔒",
+                                  description: "Bu bölmə yalnız onlayn rejimdə aktivdir. Oflayn rejimdə yalnız POS Satış və Qalıqlar bölmələri keçərlidir.",
+                                  variant: "destructive",
+                                });
+                              } else {
+                                setActiveDropdown(null);
+                              }
+                            }}
+                          >
+                            <div
+                              className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-[11px] font-bold cursor-pointer transition-all ${
+                                isItemDisabled
+                                  ? "text-gray-300 opacity-40 cursor-not-allowed"
+                                  : isActive
+                                  ? "bg-primary text-white font-extrabold shadow-sm"
+                                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                              }`}
+                            >
+                              <Icon className={`w-3.5 h-3.5 shrink-0 ${isItemDisabled ? "text-gray-300" : isActive ? "text-white" : "text-gray-400"}`} />
+                              <span>{item.label}</span>
+                              {isItemDisabled && <span className="text-[9px] ml-auto">🔒</span>}
+                            </div>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
             );
           })}
         </nav>
@@ -426,49 +532,131 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
               </div>
 
               {/* Menu List */}
-              <nav className="flex flex-col gap-1.5 pt-4">
-                {menuItems.map((item) => {
-                  const Icon = item.icon;
-                  const isActive =
-                    item.href === "/"
-                      ? location === "/"
-                      : item.href === "/anbar"
-                      ? location === "/anbar"
-                      : location.startsWith(item.href);
+              <nav className="flex flex-col gap-2.5 pt-4 overflow-y-auto max-h-[60vh] pr-1 scrollbar-none">
+                {navGroups.map((group) => {
+                  const hasActiveChild = group.items.some(
+                    (item) =>
+                      item.href === "/"
+                        ? location === "/"
+                        : item.href === "/anbar"
+                        ? location === "/anbar"
+                        : location.startsWith(item.href)
+                  );
 
-                  const isItemDisabled = !isOnline && item.href !== "/pos" && item.href !== "/anbar";
+                  const isGroupOpen = mobileOpenGroups[group.label] ?? hasActiveChild;
+
+                  // Render single-item groups as flat items in mobile menu to avoid unnecessary drawers
+                  if (group.items.length === 1) {
+                    const item = group.items[0];
+                    const isActive =
+                      item.href === "/"
+                        ? location === "/"
+                        : item.href === "/anbar"
+                        ? location === "/anbar"
+                        : location.startsWith(item.href);
+
+                    const isItemDisabled = !isOnline && item.href !== "/pos" && item.href !== "/anbar";
+
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={(e) => {
+                          if (isItemDisabled) {
+                            e.preventDefault();
+                            toast({
+                              title: "Oflayn Rejim Kilidi 🔒",
+                              description: "Bu bölmə yalnız onlayn rejimdə aktivdir. Oflayn rejimdə yalnız POS Satış və Qalıqlar bölmələri keçərlidir.",
+                              variant: "destructive",
+                            });
+                          } else {
+                            setIsMobileMenuOpen(false);
+                          }
+                        }}
+                      >
+                        <div
+                          className={`flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-xs cursor-pointer transition-all border border-transparent ${
+                            isItemDisabled
+                              ? "text-gray-300 opacity-40 cursor-not-allowed"
+                              : isActive
+                              ? "bg-primary/10 text-primary font-extrabold"
+                              : "text-gray-600 hover:text-gray-900 hover:bg-gray-50/50"
+                          }`}
+                        >
+                          <item.icon className="w-4 h-4 shrink-0" />
+                          <span>{item.label}</span>
+                          {isItemDisabled && <span className="text-[9px] text-gray-400 ml-auto">🔒</span>}
+                        </div>
+                      </Link>
+                    );
+                  }
 
                   return (
-                    <Link 
-                      key={item.href} 
-                      href={item.href} 
-                      onClick={(e) => {
-                        if (isItemDisabled) {
-                          e.preventDefault();
-                          toast({
-                            title: "Oflayn Rejim Kilidi 🔒",
-                            description: "Bu bölmə yalnız onlayn rejimdə aktivdir. Oflayn rejimdə yalnız POS Satış və Qalıqlar bölmələri keçərlidir.",
-                            variant: "destructive",
-                          });
-                        } else {
-                          setIsMobileMenuOpen(false);
-                        }
-                      }}
-                    >
-                      <div
-                        className={`flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-xs cursor-pointer transition-all ${
-                          isItemDisabled
-                            ? "text-gray-300 opacity-40 cursor-not-allowed"
-                            : isActive
-                            ? "bg-primary/10 text-primary font-extrabold"
-                            : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                    <div key={group.label} className="border border-gray-100/60 rounded-2xl overflow-hidden bg-gray-50/30 animate-in fade-in zoom-in-95 duration-150">
+                      {/* Accordion Header */}
+                      <button
+                        onClick={() => setMobileOpenGroups(prev => ({ ...prev, [group.label]: !isGroupOpen }))}
+                        className={`w-full flex items-center justify-between px-4 py-3 font-extrabold text-xs cursor-pointer transition-all ${
+                          hasActiveChild ? "bg-primary/5 text-primary" : "text-gray-800 hover:bg-gray-50"
                         }`}
                       >
-                        <Icon className={`w-4 h-4 shrink-0 ${isItemDisabled ? "text-gray-300" : ""}`} />
-                        <span>{item.label}</span>
-                        {isItemDisabled && <span className="text-[9px] text-gray-400 ml-auto">🔒</span>}
-                      </div>
-                    </Link>
+                        <div className="flex items-center gap-2.5">
+                          <group.icon className="w-4 h-4 shrink-0" />
+                          <span>{group.label}</span>
+                        </div>
+                        <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isGroupOpen ? "rotate-180" : ""}`} />
+                      </button>
+
+                      {/* Accordion Items */}
+                      {isGroupOpen && (
+                        <div className="p-1.5 bg-white border-t border-gray-100/50 flex flex-col gap-1 animate-in fade-in slide-in-from-top-1 duration-150">
+                          {group.items.map((item) => {
+                            const Icon = item.icon;
+                            const isActive =
+                              item.href === "/"
+                                ? location === "/"
+                                : item.href === "/anbar"
+                                ? location === "/anbar"
+                                : location.startsWith(item.href);
+
+                            const isItemDisabled = !isOnline && item.href !== "/pos" && item.href !== "/anbar";
+
+                            return (
+                              <Link
+                                key={item.href}
+                                href={item.href}
+                                onClick={(e) => {
+                                  if (isItemDisabled) {
+                                    e.preventDefault();
+                                    toast({
+                                      title: "Oflayn Rejim Kilidi 🔒",
+                                      description: "Bu bölmə yalnız onlayn rejimdə aktivdir. Oflayn rejimdə yalnız POS Satış və Qalıqlar bölmələri keçərlidir.",
+                                      variant: "destructive",
+                                    });
+                                  } else {
+                                    setIsMobileMenuOpen(false);
+                                  }
+                                }}
+                              >
+                                <div
+                                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl font-bold text-xs cursor-pointer transition-all ${
+                                    isItemDisabled
+                                      ? "text-gray-300 opacity-40 cursor-not-allowed"
+                                      : isActive
+                                      ? "bg-primary/10 text-primary font-extrabold"
+                                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                                  }`}
+                                >
+                                  <Icon className={`w-3.5 h-3.5 shrink-0 ${isItemDisabled ? "text-gray-300" : ""}`} />
+                                  <span>{item.label}</span>
+                                  {isItemDisabled && <span className="text-[9px] text-gray-400 ml-auto">🔒</span>}
+                                </div>
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </nav>
@@ -869,7 +1057,7 @@ function AppContent() {
       ) : isWwwOrBare ? (
         <Landing />
       ) : (
-        <Login onLoginSuccess={handleLoginSuccess} />
+        <Login onLoginSuccess={handleLoginSuccess} tenantConfig={tenantConfig} />
       )}
       {activeLimitError && (
         <LimitReachedModal

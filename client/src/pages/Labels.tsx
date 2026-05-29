@@ -536,7 +536,7 @@ export default function Labels() {
               let content: React.ReactNode = "";
 
               // Resolve dynamic values mapped to selected Product
-              if (el.type === "store") content = shopName;
+              if (el.type === "store") content = el.customText || shopName;
               else if (el.type === "name") content = selectedProduct?.name || "Nümunə Məhsul";
               else if (el.type === "price") content = `${selectedProduct?.salePrice || "0.00"} ₼`;
               else if (el.type === "unit") content = `Vahid: 1 ${selectedProduct?.unit || "ədəd"}`;
@@ -599,13 +599,16 @@ export default function Labels() {
                 <span className="text-xs font-black text-gray-900 bg-gray-50 px-3 py-2 rounded-xl block border border-gray-100">{selectedElement.name}</span>
               </div>
 
-              {/* Editable static text input */}
-              {selectedElement.type === "text" && (
+              {/* Editable static text or store name override input */}
+              {(selectedElement.type === "text" || selectedElement.type === "store") && (
                 <div className="space-y-1.5">
-                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Mətn Dəyəri</label>
+                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">
+                    {selectedElement.type === "store" ? "Fərdi Mağaza Adı (Boşdursa ayarlardan götürülür)" : "Mətn Dəyəri"}
+                  </label>
                   <input
                     type="text"
                     value={selectedElement.customText || ""}
+                    placeholder={selectedElement.type === "store" ? shopName : ""}
                     onChange={(e) => updateSelectedProperty("customText", e.target.value)}
                     className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:outline-none focus:border-primary"
                   />
@@ -734,7 +737,7 @@ export default function Labels() {
               {elements.map((el) => {
                 let content: React.ReactNode = "";
 
-                if (el.type === "store") content = shopName;
+                if (el.type === "store") content = el.customText || shopName;
                 else if (el.type === "name") content = selectedProduct?.name || "Nümunə Məhsul";
                 else if (el.type === "price") content = `${selectedProduct?.salePrice || "0.00"} ₼`;
                 else if (el.type === "unit") content = `Vahid: 1 ${selectedProduct?.unit || "ədəd"}`;
