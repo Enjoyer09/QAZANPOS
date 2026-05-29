@@ -64,7 +64,8 @@ export default function Vendors() {
   const [paymentData, setPaymentData] = useState({
     amount: "",
     paymentType: "Nəğd",
-    notes: ""
+    notes: "",
+    paymentDate: new Date().toISOString().split("T")[0]
   });
 
   // Query vendors
@@ -120,7 +121,7 @@ export default function Vendors() {
 
   // Mutation to log vendor payment
   const logPaymentMutation = useMutation({
-    mutationFn: async (payload: { amount: number; paymentType: string; notes: string }) => {
+    mutationFn: async (payload: { amount: number; paymentType: string; notes: string; paymentDate?: string }) => {
       const res = await fetch(`/api/vendors/${selectedVendor?.id}/payments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -135,7 +136,7 @@ export default function Vendors() {
         queryClient.invalidateQueries({ queryKey: [`/api/vendors/${selectedVendor.id}/payments`] });
       }
       setIsPayModalOpen(false);
-      setPaymentData({ amount: "", paymentType: "Nəğd", notes: "" });
+      setPaymentData({ amount: "", paymentType: "Nəğd", notes: "", paymentDate: new Date().toISOString().split("T")[0] });
       toast({
         title: "Ödəniş Qeydə Alındı 💳",
         description: "Tədarükçüyə edilən ödəniş uğurla balansdan çıxıldı.",
@@ -172,7 +173,8 @@ export default function Vendors() {
     logPaymentMutation.mutate({
       amount,
       paymentType: paymentData.paymentType,
-      notes: paymentData.notes
+      notes: paymentData.notes,
+      paymentDate: new Date(paymentData.paymentDate).toISOString()
     });
   };
 
@@ -373,69 +375,69 @@ export default function Vendors() {
 
       {/* MODAL 1: YENİ TƏDARÜKÇÜ */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-100 bg-gray-950/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-gray-100 rounded-3xl w-full max-w-md shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-200">
-            <h3 className="text-base font-black text-gray-900 tracking-tight flex items-center gap-2 border-b border-gray-100 pb-3 text-left">
+        <div className="fixed inset-0 z-100 bg-black/60 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white border border-gray-200 rounded-3xl w-full max-w-md shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-200 text-left">
+            <h3 className="text-lg font-black text-gray-900 tracking-tight flex items-center gap-2 border-b border-gray-100 pb-3 text-left">
               <Truck className="w-5 h-5 text-primary" />
               <span>Yeni Topdansatış Tədarükçüsü</span>
             </h3>
 
             <form onSubmit={handleAddSubmit} className="space-y-4 pt-4 text-left">
               <div className="space-y-1">
-                <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Firma / Tədarükçü Adı *</label>
+                <label className="text-[11px] font-bold text-gray-700 block mb-1">Firma / Tədarükçü Adı *</label>
                 <input
                   type="text"
                   required
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   placeholder="Məsələn: Sun Food MMC"
-                  className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:outline-none focus:border-primary"
+                  className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary focus:bg-white text-gray-900 transition-all"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Telefon Nömrəsi</label>
+                  <label className="text-[11px] font-bold text-gray-700 block mb-1">Telefon Nömrəsi</label>
                   <input
                     type="text"
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                     placeholder="+994 50 123 45 67"
-                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:outline-none focus:border-primary font-mono"
+                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary focus:bg-white text-gray-900 transition-all font-mono"
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">E-Poçt Ünvanı</label>
+                  <label className="text-[11px] font-bold text-gray-700 block mb-1">E-Poçt Ünvanı</label>
                   <input
                     type="email"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     placeholder="sales@sunfood.az"
-                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:outline-none focus:border-primary"
+                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary focus:bg-white text-gray-900 transition-all"
                   />
                 </div>
               </div>
 
               <div className="space-y-1">
-                <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Fiziki Ünvan</label>
+                <label className="text-[11px] font-bold text-gray-700 block mb-1">Fiziki Ünvan</label>
                 <input
                   type="text"
                   value={formData.address}
                   onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                   placeholder="Bakı şəhəri, Nizami r-nu"
-                  className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:outline-none focus:border-primary"
+                  className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary focus:bg-white text-gray-900 transition-all"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Qeydlər / Şərhlər</label>
+                <label className="text-[11px] font-bold text-gray-700 block mb-1">Qeydlər / Şərhlər</label>
                 <textarea
                   rows={2}
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                   placeholder="Çatdırılma günləri, daxili şərtlər..."
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:outline-none focus:border-primary"
+                  className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary focus:bg-white text-gray-900 transition-all"
                 />
               </div>
 
@@ -443,14 +445,14 @@ export default function Vendors() {
                 <button
                   type="button"
                   onClick={() => setIsAddModalOpen(false)}
-                  className="flex-1 py-3 border border-gray-200 hover:bg-gray-50 text-gray-500 rounded-xl font-black text-[10px] uppercase tracking-wider transition-all cursor-pointer text-center"
+                  className="flex-1 py-3 border border-gray-200 hover:bg-gray-50 text-gray-600 rounded-xl font-bold text-xs uppercase tracking-wide transition-all cursor-pointer text-center"
                 >
                   Geri
                 </button>
                 <button
                   type="submit"
                   disabled={createVendorMutation.isPending}
-                  className="flex-1 py-3 bg-primary hover:bg-primary/95 text-white font-black rounded-xl text-[10px] uppercase tracking-wider transition-all cursor-pointer text-center"
+                  className="flex-1 py-3 bg-primary hover:bg-primary/95 text-white font-bold rounded-xl text-xs uppercase tracking-wide transition-all cursor-pointer text-center shadow-md shadow-primary/10 hover-elevate"
                 >
                   {createVendorMutation.isPending ? "Yaradılır..." : "Tədarükçünü Yarat 👍"}
                 </button>
@@ -462,27 +464,27 @@ export default function Vendors() {
 
       {/* MODAL 2: TƏDARÜKÇÜYƏ ÖDƏNİŞ ET */}
       {isPayModalOpen && selectedVendor && (
-        <div className="fixed inset-0 z-100 bg-gray-950/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-gray-100 rounded-3xl w-full max-w-sm shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-200">
-            <h3 className="text-base font-black text-gray-900 tracking-tight flex items-center gap-2 border-b border-gray-100 pb-3 text-left">
+        <div className="fixed inset-0 z-100 bg-black/60 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white border border-gray-200 rounded-3xl w-full max-w-sm shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-200 text-left">
+            <h3 className="text-lg font-black text-gray-900 tracking-tight flex items-center gap-2 border-b border-gray-100 pb-3 text-left">
               <DollarSign className="w-5 h-5 text-emerald-600" />
               <span>Tədarükçüyə Ödəniş</span>
             </h3>
 
-            <div className="p-3 bg-gray-50 border border-gray-100 rounded-2xl text-left text-xs font-bold space-y-1.5 mt-4">
-              <div className="flex justify-between text-gray-400">
+            <div className="p-4 bg-gray-50 border border-gray-200 rounded-2xl text-left text-xs font-semibold space-y-2 mt-4">
+              <div className="flex justify-between text-gray-600">
                 <span>Firma:</span>
-                <span className="text-gray-900 font-black">{selectedVendor.name}</span>
+                <span className="text-gray-950 font-black">{selectedVendor.name}</span>
               </div>
-              <div className="flex justify-between text-gray-400">
+              <div className="flex justify-between text-gray-600">
                 <span>Mövcud Borcumuz:</span>
-                <span className="text-red-600 font-black font-mono">{selectedVendor.balance.toFixed(2)} ₼</span>
+                <span className="text-red-600 font-black font-mono text-sm">{selectedVendor.balance.toFixed(2)} ₼</span>
               </div>
             </div>
 
             <form onSubmit={handlePaySubmit} className="space-y-4 pt-4 text-left">
               <div className="space-y-1">
-                <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Ödənilən Məbləğ (₼) *</label>
+                <label className="text-[11px] font-bold text-gray-700 block mb-1">Ödənilən Məbləğ (₼) *</label>
                 <input
                   type="number"
                   step="0.01"
@@ -491,16 +493,28 @@ export default function Vendors() {
                   value={paymentData.amount}
                   onChange={(e) => setPaymentData({ ...paymentData, amount: e.target.value })}
                   placeholder="Məsələn: 150.00"
-                  className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:outline-none focus:border-primary font-mono"
+                  className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary focus:bg-white text-gray-900 transition-all font-mono"
+                />
+              </div>
+
+              {/* Payment Date Selector Input */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-gray-700 block mb-1">Ödəniş Tarixi *</label>
+                <input
+                  type="date"
+                  required
+                  value={paymentData.paymentDate}
+                  onChange={(e) => setPaymentData({ ...paymentData, paymentDate: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary focus:bg-white text-gray-900 transition-all font-mono"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Ödəniş Üsulu</label>
+                <label className="text-[11px] font-bold text-gray-700 block mb-1">Ödəniş Üsulu</label>
                 <select
                   value={paymentData.paymentType}
                   onChange={(e) => setPaymentData({ ...paymentData, paymentType: e.target.value })}
-                  className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:outline-none focus:border-primary"
+                  className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary focus:bg-white text-gray-900 transition-all cursor-pointer"
                 >
                   <option value="Nəğd">Nəğd Pul 💵</option>
                   <option value="Kart">Bank Kartı 💳</option>
@@ -509,13 +523,13 @@ export default function Vendors() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Ödəniş Qeydi</label>
+                <label className="text-[11px] font-bold text-gray-700 block mb-1">Ödəniş Qeydi</label>
                 <input
                   type="text"
                   value={paymentData.notes}
                   onChange={(e) => setPaymentData({ ...paymentData, notes: e.target.value })}
                   placeholder="Qəbz nömrəsi, bank transfer qeydi..."
-                  className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:outline-none focus:border-primary"
+                  className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary focus:bg-white text-gray-900 transition-all"
                 />
               </div>
 
@@ -523,14 +537,14 @@ export default function Vendors() {
                 <button
                   type="button"
                   onClick={() => setIsPayModalOpen(false)}
-                  className="flex-1 py-3 border border-gray-200 hover:bg-gray-50 text-gray-500 rounded-xl font-black text-[10px] uppercase tracking-wider transition-all cursor-pointer text-center"
+                  className="flex-1 py-3 border border-gray-200 hover:bg-gray-50 text-gray-600 rounded-xl font-bold text-xs uppercase tracking-wide transition-all cursor-pointer text-center"
                 >
                   İmtina
                 </button>
                 <button
                   type="submit"
                   disabled={logPaymentMutation.isPending}
-                  className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-[10px] uppercase tracking-wider transition-all cursor-pointer text-center"
+                  className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs uppercase tracking-wide transition-all cursor-pointer text-center shadow-md shadow-emerald-600/10 hover-elevate"
                 >
                   {logPaymentMutation.isPending ? "Ödənilir..." : "Ödənişi Qeyd Et 💸"}
                 </button>
@@ -542,32 +556,36 @@ export default function Vendors() {
 
       {/* MODAL 3: ÖDƏNİŞ TARİXÇƏSİ */}
       {isHistoryModalOpen && selectedVendor && (
-        <div className="fixed inset-0 z-100 bg-gray-950/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-gray-100 rounded-3xl w-full max-w-md shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-200 text-left">
-            <h3 className="text-base font-black text-gray-900 tracking-tight flex items-center gap-2 border-b border-gray-100 pb-3">
+        <div className="fixed inset-0 z-100 bg-black/60 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white border border-gray-200 rounded-3xl w-full max-w-md shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-200 text-left">
+            <h3 className="text-lg font-black text-gray-900 tracking-tight flex items-center gap-2 border-b border-gray-100 pb-3">
               <History className="w-5 h-5 text-gray-700" />
               <span>{selectedVendor.name} - Ödəniş Tarixçəsi</span>
             </h3>
 
-            <div className="max-h-[300px] overflow-y-auto space-y-2 mt-4 pr-1">
+            <div className="max-h-[350px] overflow-y-auto space-y-2 mt-4 pr-1">
               {activePayments.length === 0 ? (
-                <div className="py-8 text-center text-xs font-bold text-gray-400 uppercase tracking-wider">Heç bir ödəniş edilməyib.</div>
+                <div className="py-12 text-center text-xs font-bold text-gray-400 uppercase tracking-wider">Heç bir ödəniş edilməyib.</div>
               ) : (
                 activePayments.map((p) => (
-                  <div key={p.id} className="p-3 bg-gray-50 border border-gray-100 rounded-2xl flex items-center justify-between text-xs font-bold">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-1.5 text-gray-800">
-                        <CreditCard className="w-3.5 h-3.5 text-gray-400" />
+                  <div key={p.id} className="p-4 bg-gray-50 border border-gray-100 rounded-2xl flex items-center justify-between text-xs font-semibold">
+                    <div className="space-y-1 text-left">
+                      <div className="flex items-center gap-1.5 text-gray-950 font-black">
+                        <CreditCard className="w-3.5 h-3.5 text-primary shrink-0" />
                         <span>Növ: {p.paymentType}</span>
                       </div>
-                      {p.notes && <span className="block text-[10px] text-gray-400 font-medium">Qeyd: {p.notes}</span>}
-                      <span className="block text-[8px] text-gray-400 font-mono">
-                        Tarix: {new Date(p.paymentDate).toLocaleString("az-AZ")}
+                      {p.notes && (
+                        <div className="text-[11px] text-gray-600 bg-gray-100/50 p-2 rounded-lg mt-1 font-medium italic">
+                          Qeyd: "{p.notes}"
+                        </div>
+                      )}
+                      <span className="block text-[10px] text-gray-500 font-semibold font-mono block mt-1.5">
+                        Tarix: {new Date(p.paymentDate).toLocaleDateString("az-AZ")} | {new Date(p.paymentDate).toLocaleTimeString("az-AZ", { hour: "2-digit", minute: "2-digit" })}
                       </span>
                     </div>
 
-                    <div className="text-right">
-                      <span className="text-emerald-600 font-black font-mono">-{p.amount.toFixed(2)} ₼</span>
+                    <div className="text-right shrink-0">
+                      <span className="text-emerald-700 font-black font-mono text-sm">-{p.amount.toFixed(2)} ₼</span>
                     </div>
                   </div>
                 ))

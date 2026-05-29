@@ -69,6 +69,7 @@ export default function POS() {
   const [selectedProductId, setSelectedProductId] = useState("");
   const [selectedQuantity, setSelectedQuantity] = useState("1");
   const [productSearchQuery, setProductSearchQuery] = useState("");
+  const [savingCustomer, setSavingCustomer] = useState(false);
 
   // Customer State
   const [customerMode, setCustomerMode] = useState<"none" | "existing" | "new">("none");
@@ -292,6 +293,65 @@ export default function POS() {
         })
         .filter((item) => item.quantity > 0)
     );
+  };
+
+  const handleSaveNewCustomer = async () => {
+    if (!newCustomerName.trim()) {
+      toast({
+        title: "Xəta!",
+        description: "Müştəri adı daxil edilməlidir.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setSavingCustomer(true);
+    try {
+      const res = await fetch("/api/customers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newCustomerName.trim(),
+          phone: newCustomerPhone.trim() || null,
+          email: newCustomerEmail.trim() || null,
+          address: newCustomerAddress.trim() || null,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || "Müştəri qeyd edilərkən xəta baş verdi");
+      }
+
+      const createdCustomer = await res.json();
+      
+      // Invalidate queries so select list is updated
+      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      
+      // Auto-select the newly created customer
+      setSelectedCustomerId(createdCustomer.id.toString());
+      setCustomerMode("existing");
+      
+      // Clear fields
+      setNewCustomerName("");
+      setNewCustomerPhone("");
+      setNewCustomerEmail("");
+      setNewCustomerAddress("");
+
+      toast({
+        title: "Müştəri yaradıldı! 👤",
+        description: `"${createdCustomer.name}" müştərisi uğurla bazaya qeyd olundu və satış üçün seçildi.`,
+        variant: "success",
+      });
+    } catch (err: any) {
+      toast({
+        title: "Xəta!",
+        description: err.message || "Texniki problem yarandı.",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingCustomer(false);
+    }
   };
 
   // Add item to basket
@@ -595,6 +655,15 @@ export default function POS() {
       return;
     }
 
+    if (customerMode === "new") {
+      toast({
+        title: "Müştəri qeydiyyatı gözlənilir!",
+        description: "Lütfən, yeni müştərini yadda saxlamaq üçün 'Müştərini Yadda Saxla' düyməsinə klikləyin.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     if (isSellingAtLoss) {
       toast({
         title: "Xəta!",
@@ -607,10 +676,6 @@ export default function POS() {
     if (isCredit) {
       if (customerMode === "none") {
         toast({ title: "Xəta!", description: "Nisyə üçün müştəri seçilməlidir", variant: "destructive" });
-        return;
-      }
-      if (customerMode === "new" && !newCustomerName.trim()) {
-        toast({ title: "Xəta!", description: "Müştəri adı daxil edilməlidir", variant: "destructive" });
         return;
       }
       if (!creditDueDate) {
@@ -635,11 +700,6 @@ export default function POS() {
         customerEmail = cust.email;
         customerAddress = cust.address;
       }
-    } else if (customerMode === "new") {
-      customerName = newCustomerName.trim();
-      customerPhone = newCustomerPhone.trim() || null;
-      customerEmail = newCustomerEmail.trim() || null;
-      customerAddress = newCustomerAddress.trim() || null;
     }
 
     const payload = {
@@ -1120,6 +1180,16 @@ export default function POS() {
                     className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50"
                   />
                 </div>
+
+                {/* Save Customer Button */}
+                <button
+                  type="button"
+                  onClick={handleSaveNewCustomer}
+                  disabled={savingCustomer || !newCustomerName.trim()}
+                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl cursor-pointer text-center text-xs tracking-wide uppercase transition-all shadow-md shadow-emerald-600/10 hover-elevate disabled:opacity-50 mt-2"
+                >
+                  {savingCustomer ? "Yadda saxlanılır..." : "Müştərini Yadda Saxla 💾"}
+                </button>
               </div>
             )}
           </div>

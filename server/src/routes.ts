@@ -2882,7 +2882,7 @@ router.get("/vendors/:id/payments", requireAdmin, async (req, res) => {
 router.post("/vendors/:id/payments", requireAdmin, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const { amount, paymentType, notes } = req.body;
+    const { amount, paymentType, notes, paymentDate } = req.body;
     if (!amount || parseFloat(amount) <= 0 || !paymentType) {
       return res.status(400).json({ message: "Məbləğ və ödəniş növü məcburidir" });
     }
@@ -2901,7 +2901,7 @@ router.post("/vendors/:id/payments", requireAdmin, async (req, res) => {
       amount: parseFloat(amount),
       paymentType,
       notes: notes || null,
-      paymentDate: new Date().toISOString(),
+      paymentDate: paymentDate || new Date().toISOString(),
     }).returning();
     
     await logActivity(req, "CREATE_VENDOR_PAYMENT", `Tədarükçüyə ödəniş etdi: ${vendor.name} (${amount} ₼, Ödəniş: ${paymentType})`);
