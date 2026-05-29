@@ -416,8 +416,11 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
 
                 {/* Dropdown Card overlay */}
                 {isOpen && (
-                  <div className="absolute left-0 mt-1 w-52 bg-white/95 backdrop-blur-md border border-gray-100 rounded-2xl p-2.5 shadow-2xl animate-in fade-in slide-in-from-top-2 duration-150 z-50">
-                    <div className="flex flex-col gap-1">
+                  <div 
+                    className="absolute left-0 top-full pt-1.5 w-52 z-50 animate-in fade-in slide-in-from-top-2 duration-150"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="bg-white/95 backdrop-blur-md border border-gray-100 rounded-2xl p-2.5 shadow-2xl flex flex-col gap-1">
                       {group.items.map((item) => {
                         const Icon = item.icon;
                         const isActive =
