@@ -211,7 +211,7 @@ export default function POS() {
           productName: prod.productName,
           unit: prod.unit,
           quantity: qty,
-          salePrice: prod.lastPurchasePrice, // Defaults to last purchase price
+          salePrice: prod.lastSalePrice || prod.lastPurchasePrice || 0, // Defaults to last sale price, then purchase price
           minPrice: prod.lastPurchasePrice,
         },
       ]);
@@ -599,11 +599,18 @@ export default function POS() {
                   className={`w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none bg-gray-50/50 cursor-pointer focus:ring-1 ${posMode === "return" ? "focus:ring-amber-500" : "focus:ring-primary"}`}
                 >
                   <option value="">Məhsul seçin...</option>
-                  {sellableProducts.map((p) => (
-                    <option key={p.productId} value={p.productId}>
-                      {p.productName} — Qalıq: {p.currentQuantity} {p.unit} {posMode === "sale" ? `(Alış: ${p.lastPurchasePrice.toFixed(2)} ₼)` : ""}
-                    </option>
-                  ))}
+                  {sellableProducts.map((p) => {
+                    const priceLabel = posMode === "sale"
+                      ? (p.lastSalePrice 
+                        ? `(Satış: ${p.lastSalePrice.toFixed(2)} ₼, Alış: ${p.lastPurchasePrice.toFixed(2)} ₼)`
+                        : `(Alış: ${p.lastPurchasePrice.toFixed(2)} ₼)`)
+                      : `(Geri Ödəniş: ${(p.lastSalePrice || p.lastPurchasePrice || 0).toFixed(2)} ₼)`;
+                    return (
+                      <option key={p.productId} value={p.productId}>
+                        {p.productName} — Qalıq: {p.currentQuantity} {p.unit} {priceLabel}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
               <div className="w-full sm:w-24">

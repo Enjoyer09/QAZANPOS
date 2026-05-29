@@ -672,6 +672,15 @@ router.get("/stock/levels", async (req, res) => {
         .limit(1);
       const lastPurchasePrice = latestEntry[0]?.price || 0;
 
+      // 5. Get latest sale price (last retail selling price)
+      const latestSaleItem = await db
+        .select({ price: schema.saleItems.salePrice })
+        .from(schema.saleItems)
+        .where(and(eq(schema.saleItems.productId, product.id), eq(schema.saleItems.tenantId, req.tenantId)))
+        .orderBy(desc(schema.saleItems.id))
+        .limit(1);
+      const lastSalePrice = latestSaleItem[0]?.price || lastPurchasePrice;
+
       stockLevels.push({
         productId: product.id,
         productName: product.name,
@@ -679,6 +688,7 @@ router.get("/stock/levels", async (req, res) => {
         unit: product.unit,
         currentQuantity,
         lastPurchasePrice,
+        lastSalePrice,
         totalValue: currentQuantity * lastPurchasePrice,
       });
     }
