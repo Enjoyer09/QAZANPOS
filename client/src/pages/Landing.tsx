@@ -21,6 +21,9 @@ export default function Landing() {
   const [activeScreenshot, setActiveScreenshot] = useState<"dashboard" | "debts" | "expenses">("dashboard");
   const [isAutoPlay, setIsAutoPlay] = useState(true);
 
+  const screens: Array<"dashboard" | "debts" | "expenses"> = ["dashboard", "debts", "expenses"];
+  const activeIndex = screens.indexOf(activeScreenshot);
+
   // Construct dynamic sandbox redirect link based on current environment
   const currentHost = window.location.host;
   const hostParts = currentHost.split(".");
@@ -44,7 +47,6 @@ export default function Landing() {
   // Automatic slideshow timer
   useEffect(() => {
     if (!isAutoPlay) return;
-    const screens: Array<"dashboard" | "debts" | "expenses"> = ["dashboard", "debts", "expenses"];
     const interval = setInterval(() => {
       setActiveScreenshot((prev) => {
         const currentIndex = screens.indexOf(prev);
@@ -260,82 +262,68 @@ export default function Landing() {
           </div>
         </div>
 
-        {/* 3. Interactive Floating Laptop Showcase */}
-        <div className="w-full max-w-5xl space-y-8 pt-4">
+        {/* 3. Realistic Floating CSS Laptop Showcase */}
+        <div className="w-full max-w-4xl space-y-8 pt-4 mx-auto">
           
-          {/* Screenshot controller tabs */}
-          <div className="flex flex-wrap items-center justify-center gap-2 p-1.5 bg-gray-200/50 backdrop-blur-md rounded-2xl max-w-xl mx-auto border border-gray-200/20">
-            <button
-              onClick={() => {
-                setActiveScreenshot("dashboard");
-                setIsAutoPlay(false); // Stop autoplay when clicked
-              }}
-              className={`flex-1 py-2.5 px-4 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 ${
-                activeScreenshot === "dashboard"
-                  ? "bg-white text-gray-900 shadow-sm"
-                  : "text-gray-500 hover:text-gray-800"
-              }`}
-            >
-              <Monitor className="w-3.5 h-3.5 shrink-0" />
-              <span>İdarəetmə Paneli</span>
-            </button>
-            <button
-              onClick={() => {
-                setActiveScreenshot("debts");
-                setIsAutoPlay(false); // Stop autoplay when clicked
-              }}
-              className={`flex-1 py-2.5 px-4 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 ${
-                activeScreenshot === "debts"
-                  ? "bg-white text-gray-900 shadow-sm"
-                  : "text-gray-500 hover:text-gray-800"
-              }`}
-            >
-              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-              <span>Nisyə & Borclar</span>
-            </button>
-            <button
-              onClick={() => {
-                setActiveScreenshot("expenses");
-                setIsAutoPlay(false); // Stop autoplay when clicked
-              }}
-              className={`flex-1 py-2.5 px-4 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 ${
-                activeScreenshot === "expenses"
-                  ? "bg-white text-gray-900 shadow-sm"
-                  : "text-gray-500 hover:text-gray-800"
-              }`}
-            >
-              <TrendingDown className="w-3.5 h-3.5 shrink-0" />
-              <span>Xərclər Portalı</span>
-            </button>
-          </div>
+          {/* Realistic CSS Laptop Mockup (Floats and slides automatically!) */}
+          <div className="relative mx-auto max-w-[760px] w-full animate-float animate-in fade-in zoom-in-95 duration-700">
+            {/* SCREEN LID */}
+            <div className="relative mx-auto w-[90%] bg-zinc-950 p-[10px] pb-[18px] rounded-t-3xl border border-zinc-800 shadow-2xl">
+              {/* Webcam with subtle reflection lens & green active indicator LED */}
+              <div className="absolute top-2.5 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-20">
+                <div className="size-1.5 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center">
+                  <div className="size-0.5 rounded-full bg-indigo-950"></div>
+                </div>
+                <div className="size-1 rounded-full bg-emerald-500 shadow-[0_0_4px_rgba(16,185,129,0.8)] opacity-95"></div>
+              </div>
 
-          {/* Premium Laptop Mockup Frame (Floats dynamically without button clicks!) */}
-          <div className="laptop-mockup animate-float animate-in fade-in zoom-in-95 duration-500">
-            {/* Screen border */}
-            <div className="bg-slate-900 p-2 sm:p-3 rounded-t-3xl border-4 border-slate-800 shadow-2xl relative">
-              {/* Web-camera eye */}
-              <div className="size-1.5 bg-black rounded-full absolute top-1.5 left-1/2 -translate-x-1/2 border border-slate-700"></div>
-              
-              {/* Screen display wrapper */}
-              <div className="aspect-video w-full rounded-lg overflow-hidden bg-slate-950 border border-slate-700/50 shadow-inner relative group">
-                <img
-                  src={screenshotPaths[activeScreenshot]}
-                  alt="BirSaaS Screenshot Preview"
-                  className="w-full h-full object-cover select-none transition-opacity duration-500 ease-in-out opacity-100"
-                  key={activeScreenshot} // Force React remount for clean fade animation on transition
-                />
-                {/* Glossy overlay */}
-                <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 pointer-events-none"></div>
+              {/* High-Resolution Screen display wrapper with 16:10 aspect ratio */}
+              <div className="aspect-[16/10] w-full rounded-lg overflow-hidden bg-zinc-950 border border-zinc-900/80 relative shadow-inner">
+                {/* Smooth horizontal translation transition track */}
+                <div 
+                  className="w-full h-full flex transition-transform duration-700 ease-in-out" 
+                  style={{ transform: `translateX(-${activeIndex * 100}%)` }}
+                >
+                  {screens.map((screenKey) => (
+                    <div key={screenKey} className="w-full h-full shrink-0 relative">
+                      <img
+                        src={screenshotPaths[screenKey]}
+                        alt={screenshotsInfo[screenKey].title}
+                        className="w-full h-full object-cover select-none"
+                      />
+                      {/* Glossy screen glass gradient overlay */}
+                      <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/2 to-white/4 pointer-events-none"></div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Elegant branding in bottom center of display bezel */}
+              <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 text-[8px] font-black text-zinc-600 uppercase tracking-widest pointer-events-none opacity-30 select-none">
+                BirSaaS POS
               </div>
             </div>
 
-            {/* Laptop base */}
-            <div className="h-4 sm:h-5 bg-gradient-to-b from-slate-200 via-slate-300 to-slate-400 rounded-b-2xl relative border-t border-white shadow-xl flex items-center justify-center">
-              {/* Screen hinge notch */}
-              <div className="w-20 sm:w-28 h-1 bg-slate-600 rounded-b-md absolute top-0"></div>
+            {/* SCREEN HINGE */}
+            <div className="relative mx-auto w-[76%] h-[7px] bg-zinc-900 rounded-b-md shadow-md z-10"></div>
+
+            {/* LAPTOP BODY BASE */}
+            <div className="relative mx-auto w-full h-[16px] bg-gradient-to-b from-[#e5e7eb] via-[#d1d5db] to-[#9ca3af] rounded-b-2xl shadow-xl border-t border-white/60 z-20">
+              {/* Keyboard alignment visual separator */}
+              <div className="absolute top-[2px] left-1/2 -translate-x-1/2 w-[85%] h-[2px] bg-[#1e2022]/10 rounded-full"></div>
+
+              {/* Thumb open screen notch */}
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-14 h-[4px] bg-[#9ca3af] rounded-b-md shadow-inner"></div>
+
+              {/* Trackpad cutout layout */}
+              <div className="absolute bottom-[2px] left-1/2 -translate-x-1/2 w-[22%] h-[7px] border-x border-b border-[#9ca3af]/40 rounded-b-[2px] bg-gradient-to-b from-[#d1d5db]/20 to-[#9ca3af]/5"></div>
             </div>
-            {/* Laptop base shadow projection */}
-            <div className="w-[90%] h-6 bg-black/15 blur-md rounded-full mx-auto -mt-2"></div>
+
+            {/* 3D BASE FRONT LIP REFLECTION */}
+            <div className="relative mx-auto w-[98%] h-[3px] bg-gradient-to-b from-[#a1a1aa]/60 to-[#4b5563]/40 rounded-b-full opacity-60 z-10"></div>
+
+            {/* LAPTOP BASE SHADOW PROJECTION */}
+            <div className="w-[96%] h-8 bg-black/15 blur-xl rounded-full mx-auto -mt-3"></div>
           </div>
 
           {/* Dynamic Screenshot description */}
