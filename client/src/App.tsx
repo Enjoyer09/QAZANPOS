@@ -247,10 +247,16 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
       ]
     : [
         {
-          label: "Ticarət",
+          label: "POS Satış ⚡",
           icon: Sparkles,
           items: [
             { href: "/pos", label: "POS Satış ⚡", icon: Sparkles, isHighlight: true },
+          ]
+        },
+        {
+          label: "Tarixçə",
+          icon: History,
+          items: [
             { href: "/satislar", label: "Satış Tarixçəsi", icon: History },
           ]
         },
@@ -378,6 +384,10 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
                     className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-extrabold text-[11px] xl:text-xs cursor-pointer transition-all ${
                       isItemDisabled
                         ? "text-gray-300 opacity-50 cursor-not-allowed"
+                        : (item as any).isHighlight
+                        ? isActive
+                          ? "bg-primary text-white font-extrabold shadow-md shadow-primary/20 hover-elevate"
+                          : "bg-primary/10 text-primary font-extrabold border border-primary/20 hover:bg-primary/20 shadow-xs hover-elevate"
                         : isActive
                         ? "bg-primary/10 text-primary font-extrabold border border-primary/20 shadow-xs"
                         : "text-gray-500 hover:text-gray-900 hover:bg-gray-50/50"
@@ -587,6 +597,10 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
                           className={`flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-xs cursor-pointer transition-all border border-transparent ${
                             isItemDisabled
                               ? "text-gray-300 opacity-40 cursor-not-allowed"
+                              : (item as any).isHighlight
+                              ? isActive
+                                ? "bg-primary text-white font-extrabold shadow-md shadow-primary/20"
+                                : "bg-primary/10 text-primary font-extrabold border border-primary/20"
                               : isActive
                               ? "bg-primary/10 text-primary font-extrabold"
                               : "text-gray-600 hover:text-gray-900 hover:bg-gray-50/50"
