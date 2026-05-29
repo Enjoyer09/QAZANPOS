@@ -68,6 +68,7 @@ export default function POS() {
   const [basket, setBasket] = useState<BasketItem[]>([]);
   const [selectedProductId, setSelectedProductId] = useState("");
   const [selectedQuantity, setSelectedQuantity] = useState("1");
+  const [productSearchQuery, setProductSearchQuery] = useState("");
 
   // Customer State
   const [customerMode, setCustomerMode] = useState<"none" | "existing" | "new">("none");
@@ -168,6 +169,16 @@ export default function POS() {
   const sellableProducts = posMode === "sale"
     ? (activeStockLevels?.filter((p) => parseFloat(p.currentQuantity) > 0) || [])
     : (activeStockLevels || []);
+
+  // Filter products by manual search input
+  const searchedProducts = sellableProducts.filter((p) => {
+    const q = productSearchQuery.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      p.productName.toLowerCase().includes(q) ||
+      (p.barcode && p.barcode.toLowerCase().includes(q))
+    );
+  });
 
   // Scanning State & Helpers
   const [scanInput, setScanInput] = useState("");
@@ -308,6 +319,15 @@ export default function POS() {
       return;
     }
 
+    if (prod.unit.trim().toLowerCase() === "ədəd" && qty % 1 !== 0) {
+      toast({
+        title: "Xəta!",
+        description: `"${prod.productName}" məhsulunun ölçü vahidi "ədəd" olduğu üçün miqdarı yalnız tam ədəd daxil edilə bilər (məs. 1, 2, 5).`,
+        variant: "destructive"
+      });
+      return;
+    }
+
     // Check if adding exceeds stock (only in sale mode)
     const existingInBasket = basket.find((item) => item.productId === prod.productId);
     const currentBasketQty = existingInBasket ? existingInBasket.quantity : 0;
@@ -344,6 +364,7 @@ export default function POS() {
 
     setSelectedProductId("");
     setSelectedQuantity("1");
+    setProductSearchQuery(""); // Clear manual search query after adding!
   };
 
   // Remove item from basket
@@ -357,6 +378,18 @@ export default function POS() {
     setBasket((prev) =>
       prev.map((item) => {
         if (item.productId !== id) return item;
+
+        // If updating quantity, verify it is an integer for "ədəd" unit
+        if (field === "quantity") {
+          if (item.unit.trim().toLowerCase() === "ədəd" && value % 1 !== 0) {
+            toast({
+              title: "Xəta!",
+              description: `"${item.productName}" məhsulunun ölçü vahidi "ədəd" olduğu üçün miqdarı yalnız tam ədəd daxil edilə bilər (məs. 1, 2, 5).`,
+              variant: "destructive",
+            });
+            return item;
+          }
+        }
 
         // If updating quantity, verify it doesn't exceed stock limit (only in sale mode)
         if (field === "quantity" && posMode === "sale") {
@@ -751,6 +784,18 @@ export default function POS() {
               </div>
             </div>
 
+            {/* Manual Product Search Bar */}
+            <div className="relative w-full mb-3">
+              <Search className="absolute left-3.5 top-3.5 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Satılacaq məhsul axtar (ad və ya barkod)..."
+                value={productSearchQuery}
+                onChange={(e) => setProductSearchQuery(e.target.value)}
+                className={`w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none bg-gray-50/50 text-xs font-bold focus:ring-1 ${posMode === "return" ? "focus:ring-amber-500" : "focus:ring-primary"}`}
+              />
+            </div>
+
             <div className="flex flex-col sm:flex-row gap-3 text-xs font-semibold">
               <div className="flex-1 w-full">
                 <select
@@ -758,8 +803,10 @@ export default function POS() {
                   onChange={(e) => setSelectedProductId(e.target.value)}
                   className={`w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none bg-gray-50/50 cursor-pointer focus:ring-1 ${posMode === "return" ? "focus:ring-amber-500" : "focus:ring-primary"}`}
                 >
-                  <option value="">Məhsul seçin...</option>
-                  {sellableProducts.map((p) => {
+                  <option value="">
+                    {searchedProducts.length === 0 ? "Axtarışa uyğun məhsul tapılmadı..." : "Məhsul seçin..."}
+                  </option>
+                  {searchedProducts.map((p) => {
                     const priceLabel = posMode === "sale"
                       ? (p.lastSalePrice 
                         ? `(Satış: ${p.lastSalePrice.toFixed(2)} ₼, Alış: ${p.lastPurchasePrice.toFixed(2)} ₼)`
