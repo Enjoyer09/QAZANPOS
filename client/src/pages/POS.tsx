@@ -464,6 +464,16 @@ export default function POS() {
           }
         }
 
+        // If updating price, prevent staff (non-admin) from selling below purchase price (cost price)
+        if (field === "salePrice" && value < item.minPrice && !isAdmin) {
+          toast({
+            title: "Məhdudiyyət! 🔒",
+            description: `Kassir və satıcı heyəti malları maya dəyərindən (${item.minPrice.toFixed(2)} ₼) ucuz sata bilməz!`,
+            variant: "destructive",
+          });
+          return item;
+        }
+
         return { ...item, [field]: value };
       })
     );
@@ -660,6 +670,15 @@ export default function POS() {
         title: "Müştəri qeydiyyatı gözlənilir!",
         description: "Lütfən, yeni müştərini yadda saxlamaq üçün 'Müştərini Yadda Saxla' düyməsinə klikləyin.",
         variant: "destructive"
+      });
+      return;
+    }
+
+    if (isSellingAtLoss && !isAdmin) {
+      toast({
+        title: "Məhdudiyyət! 🔒",
+        description: "Kassir və satıcı heyəti (Staff) malları maya dəyərindən ucuz sata bilməz! Satışı tamamlamaq üçün qiyməti dəyişin.",
+        variant: "destructive",
       });
       return;
     }
