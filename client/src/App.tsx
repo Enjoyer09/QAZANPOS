@@ -200,12 +200,6 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
     };
   }, [toast]);
 
-  // Gracefully redirect to POS if offline and not in POS/Stock
-  useEffect(() => {
-    if (!isOnline && location !== "/pos" && location !== "/anbar") {
-      setLocation("/pos");
-    }
-  }, [isOnline, location, setLocation]);
 
   // Regular background sync check every 30 seconds
   useEffect(() => {
@@ -363,7 +357,7 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
                   ? location === "/anbar"
                   : location.startsWith(item.href);
 
-              const isItemDisabled = !isOnline && item.href !== "/pos" && item.href !== "/anbar";
+              const isItemDisabled = false;
 
               return (
                 <Link
@@ -433,7 +427,7 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
                             ? location === "/anbar"
                             : location.startsWith(item.href);
 
-                        const isItemDisabled = !isOnline && item.href !== "/pos" && item.href !== "/anbar";
+                        const isItemDisabled = false;
 
                         return (
                           <Link
@@ -567,7 +561,7 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
                         ? location === "/anbar"
                         : location.startsWith(item.href);
 
-                    const isItemDisabled = !isOnline && item.href !== "/pos" && item.href !== "/anbar";
+                    const isItemDisabled = false;
 
                     return (
                       <Link
@@ -631,7 +625,7 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
                                 ? location === "/anbar"
                                 : location.startsWith(item.href);
 
-                            const isItemDisabled = !isOnline && item.href !== "/pos" && item.href !== "/anbar";
+                            const isItemDisabled = false;
 
                             return (
                               <Link
