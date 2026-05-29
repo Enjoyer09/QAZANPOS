@@ -3057,5 +3057,201 @@ router.post("/payroll/:id/payments", requireAdmin, async (req, res) => {
   }
 });
 
+// ----------------------------------------------------
+// 17. BACKUP & RESTORE ENDPOINTS
+// ----------------------------------------------------
+
+// Export Tenant backup data (GET)
+router.get("/settings/backup/export", requireAdmin, async (req, res) => {
+  try {
+    const tenantId = req.tenantId;
+
+    const backupData = {
+      products: await db.select().from(schema.products).where(eq(schema.products.tenantId, tenantId)),
+      vendors: await db.select().from(schema.vendors).where(eq(schema.vendors.tenantId, tenantId)),
+      stockEntries: await db.select().from(schema.stockEntries).where(eq(schema.stockEntries.tenantId, tenantId)),
+      vendorPayments: await db.select().from(schema.vendorPayments).where(eq(schema.vendorPayments.tenantId, tenantId)),
+      employees: await db.select().from(schema.employees).where(eq(schema.employees.tenantId, tenantId)),
+      payroll: await db.select().from(schema.payroll).where(eq(schema.payroll.tenantId, tenantId)),
+      salaryPayments: await db.select().from(schema.salaryPayments).where(eq(schema.salaryPayments.tenantId, tenantId)),
+      customers: await db.select().from(schema.customers).where(eq(schema.customers.tenantId, tenantId)),
+      sales: await db.select().from(schema.sales).where(eq(schema.sales.tenantId, tenantId)),
+      saleItems: await db.select().from(schema.saleItems).where(eq(schema.saleItems.tenantId, tenantId)),
+      creditPayments: await db.select().from(schema.creditPayments).where(eq(schema.creditPayments.tenantId, tenantId)),
+      expenses: await db.select().from(schema.expenses).where(eq(schema.expenses.tenantId, tenantId)),
+      settings: await db.select().from(schema.settings).where(eq(schema.settings.tenantId, tenantId)),
+      users: await db.select().from(schema.users).where(eq(schema.users.tenantId, tenantId)),
+      activityLogs: await db.select().from(schema.activityLogs).where(eq(schema.activityLogs.tenantId, tenantId)),
+      returns: await db.select().from(schema.returns).where(eq(schema.returns.tenantId, tenantId)),
+      returnItems: await db.select().from(schema.returnItems).where(eq(schema.returnItems.tenantId, tenantId)),
+    };
+
+    const backupPayload = {
+      backupVersion: "1.0",
+      scope: "tenant",
+      tenantId: tenantId,
+      createdAt: new Date().toISOString(),
+      data: backupData,
+    };
+
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Content-Disposition", `attachment; filename=qazanpos_backup_tenant_${tenantId}_${Date.now()}.json`);
+    res.json(backupPayload);
+  } catch (error: any) {
+    console.error("Backup export error:", error);
+    res.status(500).json({ message: "Ehtiyat nüsxə yaradılarkən xəta baş verdi: " + error.message });
+  }
+});
+
+// Import Tenant backup data (POST)
+router.post("/settings/backup/import", requireAdmin, async (req, res) => {
+  try {
+    const tenantId = req.tenantId;
+    const { backupVersion, scope, tenantId: backupTenantId, data } = req.body;
+
+    if (!data || scope !== "tenant") {
+      return res.status(400).json({ message: "Düzgün ehtiyat nüsxəsi faylı seçilməyib." });
+    }
+
+    if (parseInt(backupTenantId) !== tenantId) {
+      return res.status(403).json({ message: "Bu ehtiyat nüsxəsi başqa bir biznesə aiddir. İdxal etmək olmaz!" });
+    }
+
+    await db.transaction(async (tx) => {
+      // 1. Delete existing data for this tenant in order to prevent foreign key issues
+      await tx.delete(schema.returnItems).where(eq(schema.returnItems.tenantId, tenantId));
+      await tx.delete(schema.returns).where(eq(schema.returns.tenantId, tenantId));
+      
+      await tx.delete(schema.creditPayments).where(eq(schema.creditPayments.tenantId, tenantId));
+      await tx.delete(schema.saleItems).where(eq(schema.saleItems.tenantId, tenantId));
+      await tx.delete(schema.sales).where(eq(schema.sales.tenantId, tenantId));
+
+      await tx.delete(schema.stockEntries).where(eq(schema.stockEntries.tenantId, tenantId));
+      await tx.delete(schema.vendorPayments).where(eq(schema.vendorPayments.tenantId, tenantId));
+      await tx.delete(schema.vendors).where(eq(schema.vendors.tenantId, tenantId));
+
+      await tx.delete(schema.salaryPayments).where(eq(schema.salaryPayments.tenantId, tenantId));
+      await tx.delete(schema.payroll).where(eq(schema.payroll.tenantId, tenantId));
+      await tx.delete(schema.employees).where(eq(schema.employees.tenantId, tenantId));
+
+      await tx.delete(schema.products).where(eq(schema.products.tenantId, tenantId));
+      await tx.delete(schema.customers).where(eq(schema.customers.tenantId, tenantId));
+      await tx.delete(schema.activityLogs).where(eq(schema.activityLogs.tenantId, tenantId));
+      await tx.delete(schema.settings).where(eq(schema.settings.tenantId, tenantId));
+      await tx.delete(schema.users).where(eq(schema.users.tenantId, tenantId));
+
+      // 2. Insert rows from backup
+      if (data.users && data.users.length > 0) {
+        await tx.insert(schema.users).values(data.users);
+      }
+      if (data.settings && data.settings.length > 0) {
+        await tx.insert(schema.settings).values(data.settings);
+      }
+      if (data.products && data.products.length > 0) {
+        await tx.insert(schema.products).values(data.products);
+      }
+      if (data.vendors && data.vendors.length > 0) {
+        await tx.insert(schema.vendors).values(data.vendors);
+      }
+      if (data.customers && data.customers.length > 0) {
+        await tx.insert(schema.customers).values(data.customers);
+      }
+      if (data.employees && data.employees.length > 0) {
+        await tx.insert(schema.employees).values(data.employees);
+      }
+      if (data.payroll && data.payroll.length > 0) {
+        await tx.insert(schema.payroll).values(data.payroll);
+      }
+      if (data.salaryPayments && data.salaryPayments.length > 0) {
+        await tx.insert(schema.salaryPayments).values(data.salaryPayments);
+      }
+      if (data.stockEntries && data.stockEntries.length > 0) {
+        await tx.insert(schema.stockEntries).values(data.stockEntries);
+      }
+      if (data.vendorPayments && data.vendorPayments.length > 0) {
+        await tx.insert(schema.vendorPayments).values(data.vendorPayments);
+      }
+      if (data.sales && data.sales.length > 0) {
+        await tx.insert(schema.sales).values(data.sales);
+      }
+      if (data.saleItems && data.saleItems.length > 0) {
+        await tx.insert(schema.saleItems).values(data.saleItems);
+      }
+      if (data.creditPayments && data.creditPayments.length > 0) {
+        await tx.insert(schema.creditPayments).values(data.creditPayments);
+      }
+      if (data.expenses && data.expenses.length > 0) {
+        await tx.insert(schema.expenses).values(data.expenses);
+      }
+      if (data.activityLogs && data.activityLogs.length > 0) {
+        await tx.insert(schema.activityLogs).values(data.activityLogs);
+      }
+      if (data.returns && data.returns.length > 0) {
+        await tx.insert(schema.returns).values(data.returns);
+      }
+      if (data.returnItems && data.returnItems.length > 0) {
+        await tx.insert(schema.returnItems).values(data.returnItems);
+      }
+
+      // 3. Reset primary key sequences for all tables so that subsequent inserts don't collide
+      const tables = [
+        "users", "settings", "products", "vendors", "customers", "employees", 
+        "payroll", "salary_payments", "stock_entries", "vendor_payments", 
+        "sales", "sale_items", "credit_payments", "expenses", "activity_logs", 
+        "returns", "return_items"
+      ];
+      for (const table of tables) {
+        await tx.execute(sql.raw(`SELECT setval(pg_get_serial_sequence('${table}', 'id'), coalesce(max(id), 1), max(id) IS NOT null) FROM ${table}`));
+      }
+    });
+
+    await logActivity(req, "RESTORE_BACKUP", "Sistem ehtiyat nüsxədən (backup) məlumatları uğurla bərpa etdi");
+    res.json({ success: true, message: "Məlumatlar uğurla bərpa olundu!" });
+  } catch (error: any) {
+    console.error("Backup import error:", error);
+    res.status(500).json({ message: "Ehtiyat nüsxəsi bərpa edilərkən xəta baş verdi: " + error.message });
+  }
+});
+
+// Export FULL DATABASE backup (Super Admin only)
+router.get("/super/backup/export", requireSuperAdmin, async (req, res) => {
+  try {
+    const data = {
+      tenants: await db.select().from(schema.tenants),
+      products: await db.select().from(schema.products),
+      vendors: await db.select().from(schema.vendors),
+      stockEntries: await db.select().from(schema.stockEntries),
+      vendorPayments: await db.select().from(schema.vendorPayments),
+      employees: await db.select().from(schema.employees),
+      payroll: await db.select().from(schema.payroll),
+      salaryPayments: await db.select().from(schema.salaryPayments),
+      customers: await db.select().from(schema.customers),
+      sales: await db.select().from(schema.sales),
+      saleItems: await db.select().from(schema.saleItems),
+      creditPayments: await db.select().from(schema.creditPayments),
+      expenses: await db.select().from(schema.expenses),
+      settings: await db.select().from(schema.settings),
+      users: await db.select().from(schema.users),
+      activityLogs: await db.select().from(schema.activityLogs),
+      returns: await db.select().from(schema.returns),
+      returnItems: await db.select().from(schema.returnItems),
+    };
+
+    const backupPayload = {
+      backupVersion: "1.0",
+      scope: "full-database",
+      createdAt: new Date().toISOString(),
+      data,
+    };
+
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Content-Disposition", `attachment; filename=qazanpos_full_backup_${Date.now()}.json`);
+    res.json(backupPayload);
+  } catch (error: any) {
+    console.error("Full database backup error:", error);
+    res.status(500).json({ message: "Tam sistem backup-ı alınarkən xəta baş verdi: " + error.message });
+  }
+});
+
 export default router;
 

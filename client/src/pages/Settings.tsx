@@ -54,6 +54,11 @@ export default function SettingsPage() {
   const [telegramNotificationsEnabled, setTelegramNotificationsEnabled] = useState(0);
   const [isTestingTelegram, setIsTestingTelegram] = useState(false);
 
+  // Backup Settings State
+  const [backupTime, setBackupTime] = useState("23:00");
+  const [telegramBackupEnabled, setTelegramBackupEnabled] = useState(0);
+  const [isImporting, setIsImporting] = useState(false);
+
   // Thermal Receipt Design State
   const [receiptWidth, setReceiptWidth] = useState("80mm");
   const [showBarcode, setShowBarcode] = useState(1);
@@ -277,6 +282,8 @@ export default function SettingsPage() {
       setTelegramBotToken(settingsData.telegramBotToken || "");
       setTelegramChatId(settingsData.telegramChatId || "");
       setTelegramNotificationsEnabled(settingsData.telegramNotificationsEnabled ?? 0);
+      setBackupTime(settingsData.backupTime || "23:00");
+      setTelegramBackupEnabled(settingsData.telegramBackupEnabled ?? 0);
     }
   }, [settingsData]);
 
@@ -546,9 +553,75 @@ export default function SettingsPage() {
       telegramBotToken: telegramBotToken.trim() || null,
       telegramChatId: telegramChatId.trim() || null,
       telegramNotificationsEnabled,
+      backupTime,
+      telegramBackupEnabled,
     };
 
     updateSettingsMutation.mutate(payload);
+  };
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!window.confirm("DİQQƏT: Bərpa (Restore) prosesi zamanı mövcud bütün məlumatlarınız silinəcək və bu backup faylındakı məlumatlar ilə əvəzlənəcək. Bu əməliyyat geri qaytarıla bilməz! Davam etmək istəyirsiniz?")) {
+      e.target.value = ""; // reset file input
+      return;
+    }
+
+    setIsImporting(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const text = event.target?.result as string;
+          const parsed = JSON.parse(text);
+
+          const response = await fetch("/api/settings/backup/import", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: text,
+          });
+
+          const result = await response.json();
+          if (response.ok) {
+            toast({
+              title: "Məlumatlar bərpa olundu!",
+              description: result.message || "Bütün məlumatlar uğurla backup-dan bərpa edildi.",
+              variant: "success",
+            });
+            queryClient.invalidateQueries();
+            setTimeout(() => window.location.reload(), 1500);
+          } else {
+            toast({
+              title: "Bərpa xətası!",
+              description: result.message || "Fayl idxal edilərkən xəta baş verdi.",
+              variant: "destructive",
+            });
+          }
+        } catch (parseErr) {
+          toast({
+            title: "Format xətası!",
+            description: "Seçilmiş fayl düzgün JSON formatında deyil.",
+            variant: "destructive",
+          });
+        } finally {
+          setIsImporting(false);
+          e.target.value = ""; // reset file input
+        }
+      };
+      reader.readAsText(file);
+    } catch (err) {
+      toast({
+        title: "Xəta!",
+        description: "Fayl oxunarkən xəta baş verdi.",
+        variant: "destructive",
+      });
+      setIsImporting(false);
+      e.target.value = ""; // reset file input
+    }
   };
 
   const handleExport = (table: string, title: string) => {
@@ -965,6 +1038,85 @@ export default function SettingsPage() {
                   >
                     {telegramNotificationsEnabled === 1 ? "Aktivdir 👍" : "Deaktivdir ❌"}
                   </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Card: Backup and Restore */}
+          <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card">
+            <div className="flex items-center gap-2 mb-6 border-b border-gray-100/50 pb-3">
+              <Database className="w-5 h-5 text-primary" />
+              <h3 className="font-extrabold text-gray-900 text-sm">🗄️ Ehtiyat Nüsxə və Bərpa (Backup & Restore)</h3>
+            </div>
+
+            <div className="space-y-4 text-xs font-semibold text-left">
+              <p className="text-gray-400 font-medium leading-normal mb-4">
+                Mağazanızın bütün məlumatlarını (anbar, satışlar, işçilər, müştərilər və s.) ehtiyat nüsxə kimi yükləyin və ya geri bərpa edin. Həmçinin hər gün avtomatik olaraq müəyyən edilmiş saatda sistem tərəfindən backup yaradılmasını tənzimləyə bilərsiniz.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Avtomatik Yedəklənmə Saatı</label>
+                  <input
+                    type="time"
+                    value={backupTime}
+                    onChange={(e) => setBackupTime(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Telegram Backup</label>
+                  <div className="flex items-center gap-3 h-[46px]">
+                    <button
+                      type="button"
+                      onClick={() => setTelegramBackupEnabled(prev => prev === 1 ? 0 : 1)}
+                      className={`px-4 py-2.5 rounded-xl font-bold text-xs cursor-pointer border transition-all w-full text-center font-black ${
+                        telegramBackupEnabled === 1
+                          ? "bg-primary text-white border-primary hover:bg-primary/95"
+                          : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
+                      }`}
+                    >
+                      {telegramBackupEnabled === 1 ? "Telegrama Göndərilsin 👍" : "Telegrama Göndərilməsin ❌"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-gray-100/50 my-4 pt-4 space-y-4">
+                <span className="font-extrabold text-gray-900 text-xs uppercase tracking-wider block">Manual Əməliyyatlar</span>
+                
+                <div className="flex flex-col sm:flex-row gap-3 w-full">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      toast({
+                        title: "Yüklənir...",
+                        description: "Ehtiyat nüsxə faylı hazırlanır.",
+                        variant: "success",
+                      });
+                      window.location.href = "/api/settings/backup/export";
+                    }}
+                    className="flex-1 px-5 py-3 bg-gray-900 text-white hover:bg-gray-800 font-extrabold text-xs rounded-xl cursor-pointer flex items-center justify-center gap-1.5 transition-all text-center"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Ehtiyat Nüsxə Yüklə (JSON)</span>
+                  </button>
+
+                  <label className="flex-1 relative">
+                    <input
+                      type="file"
+                      accept=".json"
+                      onChange={handleImportFile}
+                      disabled={isImporting}
+                      className="hidden"
+                    />
+                    <div className="px-5 py-3 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300 font-extrabold text-xs rounded-xl cursor-pointer flex items-center justify-center gap-1.5 transition-all text-center select-none">
+                      <Database className="w-4 h-4 text-primary" />
+                      <span>{isImporting ? "Bərpa Edilir..." : "Backup-dan Bərpa Et (Restore)"}</span>
+                    </div>
+                  </label>
                 </div>
               </div>
             </div>

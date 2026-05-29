@@ -246,6 +246,8 @@ export const settings = pgTable("settings", {
   telegramBotToken: text("telegram_bot_token"),
   telegramChatId: text("telegram_chat_id"),
   telegramNotificationsEnabled: integer("telegram_notifications_enabled").notNull().default(0),
+  backupTime: text("backup_time").notNull().default("23:00"),
+  telegramBackupEnabled: integer("telegram_backup_enabled").notNull().default(0),
 });
 
 // 9. Users Table for Authentication & Authorization

@@ -4,6 +4,8 @@ import router from "./routes.js";
 import path from "path";
 import { fileURLToPath } from "url";
 import { eq, desc } from "drizzle-orm";
+import fs from "fs";
+import https from "https";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -219,9 +221,132 @@ async function selfHealDatabaseTotals() {
   }
 }
 
+// Telegram file upload helper for scheduled backups
+async function sendTelegramBackupFile(token: string, chatId: string, fileContent: string, fileName: string) {
+  return new Promise((resolve, reject) => {
+    const boundary = `----WebKitFormBoundary${Math.random().toString(36).substring(2)}`;
+    const url = `https://api.telegram.org/bot${token}/sendDocument`;
+
+    const header = [
+      `--${boundary}`,
+      `Content-Disposition: form-data; name="chat_id"`,
+      '',
+      chatId,
+      `--${boundary}`,
+      `Content-Disposition: form-data; name="document"; filename="${fileName}"`,
+      'Content-Type: application/json',
+      '',
+      fileContent,
+      `--${boundary}--`,
+      ''
+    ].join('\r\n');
+
+    const req = https.request(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        'Content-Length': Buffer.byteLength(header)
+      }
+    }, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        if (res.statusCode === 200) {
+          resolve(JSON.parse(data));
+        } else {
+          reject(new Error(`Telegram responded with status ${res.statusCode}: ${data}`));
+        }
+      });
+    });
+
+    req.on('error', (err) => reject(err));
+    req.write(header);
+    req.end();
+  });
+}
+
+// Scheduled Backup Engine
+async function executeScheduledBackups(timeStr: string) {
+  try {
+    const settingsList = await db.select().from(schema.settings).where(eq(schema.settings.backupTime, timeStr));
+    
+    for (const setting of settingsList) {
+      const tenantId = setting.tenantId;
+      console.log(`Scheduled Backup: Triggering backup for Tenant ${tenantId} at ${timeStr}`);
+
+      const backupData = {
+        products: await db.select().from(schema.products).where(eq(schema.products.tenantId, tenantId)),
+        vendors: await db.select().from(schema.vendors).where(eq(schema.vendors.tenantId, tenantId)),
+        stockEntries: await db.select().from(schema.stockEntries).where(eq(schema.stockEntries.tenantId, tenantId)),
+        vendorPayments: await db.select().from(schema.vendorPayments).where(eq(schema.vendorPayments.tenantId, tenantId)),
+        employees: await db.select().from(schema.employees).where(eq(schema.employees.tenantId, tenantId)),
+        payroll: await db.select().from(schema.payroll).where(eq(schema.payroll.tenantId, tenantId)),
+        salaryPayments: await db.select().from(schema.salaryPayments).where(eq(schema.salaryPayments.tenantId, tenantId)),
+        customers: await db.select().from(schema.customers).where(eq(schema.customers.tenantId, tenantId)),
+        sales: await db.select().from(schema.sales).where(eq(schema.sales.tenantId, tenantId)),
+        saleItems: await db.select().from(schema.saleItems).where(eq(schema.saleItems.tenantId, tenantId)),
+        creditPayments: await db.select().from(schema.creditPayments).where(eq(schema.creditPayments.tenantId, tenantId)),
+        expenses: await db.select().from(schema.expenses).where(eq(schema.expenses.tenantId, tenantId)),
+        settings: await db.select().from(schema.settings).where(eq(schema.settings.tenantId, tenantId)),
+        users: await db.select().from(schema.users).where(eq(schema.users.tenantId, tenantId)),
+        activityLogs: await db.select().from(schema.activityLogs).where(eq(schema.activityLogs.tenantId, tenantId)),
+        returns: await db.select().from(schema.returns).where(eq(schema.returns.tenantId, tenantId)),
+        returnItems: await db.select().from(schema.returnItems).where(eq(schema.returnItems.tenantId, tenantId)),
+      };
+
+      const backupPayload = {
+        backupVersion: "1.0",
+        scope: "tenant",
+        tenantId: tenantId,
+        createdAt: new Date().toISOString(),
+        data: backupData,
+      };
+
+      const backupStr = JSON.stringify(backupPayload, null, 2);
+      const dateLabel = new Date().toISOString().split('T')[0];
+      const fileName = `qazanpos_backup_tenant_${tenantId}_${dateLabel}.json`;
+
+      // 1. Save locally
+      try {
+        const backupDir = path.resolve(process.cwd(), "backups", `tenant-${tenantId}`);
+        if (!fs.existsSync(backupDir)) {
+          fs.mkdirSync(backupDir, { recursive: true });
+        }
+        const filePath = path.join(backupDir, fileName);
+        fs.writeFileSync(filePath, backupStr, "utf-8");
+        console.log(`Scheduled Backup: Local backup saved at ${filePath}`);
+      } catch (err) {
+        console.error(`Scheduled Backup: Failed to save local backup for tenant ${tenantId}:`, err);
+      }
+
+      // 2. Telegram Send
+      if (setting.telegramBackupEnabled === 1 && setting.telegramBotToken && setting.telegramChatId) {
+        try {
+          console.log(`Scheduled Backup: Sending Telegram backup document for Tenant ${tenantId}`);
+          await sendTelegramBackupFile(setting.telegramBotToken, setting.telegramChatId, backupStr, fileName);
+          console.log(`Scheduled Backup: Telegram backup sent successfully for Tenant ${tenantId}`);
+        } catch (err) {
+          console.error(`Scheduled Backup: Telegram backup upload failed for Tenant ${tenantId}:`, err);
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Scheduled Backup runner failed:", error);
+  }
+}
+
 app.listen(PORT, async () => {
   console.log(`Server listening on port ${PORT}`);
   await ensureDefaultTenantsAndUsers();
   await selfHealDatabaseTotals();
+
+  // Start the background cron check for backups every 60 seconds
+  setInterval(async () => {
+    const now = new Date();
+    const hour = String(now.getHours()).padStart(2, "0");
+    const minute = String(now.getMinutes()).padStart(2, "0");
+    const timeStr = `${hour}:${minute}`;
+    await executeScheduledBackups(timeStr);
+  }, 60000);
 });
 

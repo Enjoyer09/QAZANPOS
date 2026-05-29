@@ -17,7 +17,9 @@ import {
   EyeOff,
   Trash2,
   Activity,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  Database,
+  Download
 } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
 
@@ -417,6 +419,21 @@ export default function SuperDashboard() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              toast({
+                title: "Ehtiyat Nüsxə Hazırlanır...",
+                description: "Bütün platformanın ehtiyat nüsxəsi yüklənir.",
+                variant: "success",
+              });
+              window.location.href = "/api/super/backup/export";
+            }}
+            className="px-4 py-2.5 bg-gray-900 text-white hover:bg-gray-800 cursor-pointer shadow-xs transition-all text-xs flex items-center justify-center gap-2 rounded-xl font-bold border border-gray-900"
+          >
+            <Database className="w-4 h-4 text-primary shrink-0" /> Tam DB Backup Yüklə (JSON)
+          </button>
+
           <button
             type="button"
             onClick={() => setIsProfileOpen(true)}
