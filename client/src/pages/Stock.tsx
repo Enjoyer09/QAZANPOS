@@ -11,6 +11,7 @@ interface StockLevel {
   currentQuantity: number;
   lastPurchasePrice: number;
   totalValue: number;
+  lastPurchaseDate?: string | null;
 }
 export default function Stock() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -117,7 +118,18 @@ export default function Stock() {
               ) : (
                 filteredList.map((item) => (
                   <tr key={item.productId} className="border-b border-gray-50 hover:bg-gray-50/30 transition-all text-xs">
-                    <td className="p-4 pl-6 font-bold text-gray-900">{item.productName}</td>
+                    <td className="p-4 pl-6">
+                      <span className="font-bold text-gray-900 block">{item.productName}</span>
+                      {item.lastPurchaseDate ? (
+                        <span className="text-[10px] text-gray-400 font-semibold block mt-0.5 uppercase tracking-wide">
+                          Son Mədaxil: {new Date(item.lastPurchaseDate).toLocaleDateString("az-AZ")}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-gray-400 font-semibold block mt-0.5 uppercase tracking-wide">
+                          Mədaxil yoxdur
+                        </span>
+                      )}
+                    </td>
                     <td className="p-4 font-medium text-gray-600">
                       {item.category ? (
                         <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md text-[10px] font-bold">

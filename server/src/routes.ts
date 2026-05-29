@@ -755,12 +755,16 @@ router.get("/stock/levels", async (req, res) => {
 
       // 4. Get latest purchase price
       const latestEntry = await db
-        .select({ price: schema.stockEntries.purchasePrice })
+        .select({ 
+          price: schema.stockEntries.purchasePrice,
+          entryDate: schema.stockEntries.entryDate
+        })
         .from(schema.stockEntries)
         .where(and(eq(schema.stockEntries.productId, product.id), eq(schema.stockEntries.tenantId, req.tenantId)))
         .orderBy(desc(schema.stockEntries.entryDate))
         .limit(1);
       const lastPurchasePrice = latestEntry[0]?.price || 0;
+      const lastPurchaseDate = latestEntry[0]?.entryDate || null;
 
       // 5. Get latest sale price (last retail selling price)
       const latestSaleItem = await db
@@ -795,6 +799,7 @@ router.get("/stock/levels", async (req, res) => {
         totalValue: currentQuantity * lastPurchasePrice,
         trackingType: product.trackingType,
         activeSerials,
+        lastPurchaseDate,
       });
     }
 
@@ -980,8 +985,18 @@ router.get("/customers/:id/sales", async (req, res) => {
 
 router.get("/sales", async (req, res) => {
   try {
+    const { from, to } = req.query;
+    let conditions = eq(schema.sales.tenantId, req.tenantId);
+
+    if (from) {
+      conditions = and(conditions, gte(schema.sales.saleDate, `${from}T00:00:00.000Z`)) as any;
+    }
+    if (to) {
+      conditions = and(conditions, lte(schema.sales.saleDate, `${to}T23:59:59.999Z`)) as any;
+    }
+
     const list = await db.query.sales.findMany({
-      where: eq(schema.sales.tenantId, req.tenantId),
+      where: conditions,
       with: { 
         payments: true, 
         returns: { with: { items: true } },
