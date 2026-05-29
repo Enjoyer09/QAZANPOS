@@ -254,3 +254,21 @@
   animation: bounce-subtle 2s infinite ease-in-out;
 }
 
+/* Universal Modal Max-Height & Mouse Scrolling Protection */
+div.fixed.inset-0.z-100 > div,
+div.fixed.inset-0.z-150 > div,
+div.fixed.inset-0.z-50 > div {
+  max-h: 92vh !important;
+  overflow-y: auto !important;
+  scrollbar-width: thin;
+  padding: 1.5rem !important; /* Ensure content is spaced beautifully */
+}
+
+/* Ensure nested elements do not get distorted during container scroll */
+div.fixed.inset-0.z-100 > div > div,
+div.fixed.inset-0.z-150 > div > div,
+div.fixed.inset-0.z-50 > div > div {
+  max-height: none !important;
+  overflow-y: visible !important;
+}
+

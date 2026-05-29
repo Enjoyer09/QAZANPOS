@@ -789,12 +789,64 @@ export default function POS() {
               <Search className="absolute left-3.5 top-3.5 w-4 h-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Satılacaq məhsul axtar (ad və ya barkod)..."
+                placeholder="Satılacaq məhsul axtar (ad, barkod və ya kateqoriya)..."
                 value={productSearchQuery}
                 onChange={(e) => setProductSearchQuery(e.target.value)}
                 className={`w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none bg-gray-50/50 text-xs font-bold focus:ring-1 ${posMode === "return" ? "focus:ring-amber-500" : "focus:ring-primary"}`}
               />
             </div>
+
+            {/* Premium Autocomplete Search Results Grid */}
+            {productSearchQuery.trim() && (
+              <div className="bg-white border border-gray-100 rounded-2xl p-3 shadow-lg max-h-60 overflow-y-auto space-y-2 mb-4 animate-in fade-in duration-200">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
+                  Axtarış Nəticələri ({searchedProducts.length})
+                </span>
+                {searchedProducts.length === 0 ? (
+                  <p className="text-xs text-gray-400 py-3 text-center">Axtarışa uyğun məhsul tapılmadı.</p>
+                ) : (
+                  searchedProducts.map((p) => {
+                    const price = p.lastSalePrice || p.lastPurchasePrice || 0;
+                    return (
+                      <div
+                        key={p.productId}
+                        onClick={() => {
+                          if (p.trackingType === "serialized") {
+                            toast({
+                              title: "Diqqət!",
+                              description: "Serial nömrəli (IMEI) məhsulları lütfən yuxarıdakı 'Sürətli Skan' bölməsindən birbaşa skan edərək əlavə edin.",
+                              variant: "destructive"
+                            });
+                          } else {
+                            addProductToBasket(p);
+                            setProductSearchQuery(""); // Reset search bar
+                            toast({
+                              title: "Əlavə edildi!",
+                              description: `"${p.productName}" səbətə əlavə olundu.`,
+                              variant: "success"
+                            });
+                          }
+                        }}
+                        className="flex items-center justify-between p-2.5 hover:bg-primary/5 rounded-xl cursor-pointer transition-colors border border-gray-50 hover:border-primary/10 text-xs font-semibold text-left"
+                      >
+                        <div className="text-left">
+                          <span className="block font-bold text-gray-900">{p.productName}</span>
+                          <span className="block text-[10px] text-gray-400 mt-0.5">
+                            Qalıq: {p.currentQuantity} {p.unit} | Barkod: {p.barcode || "Yoxdur"}
+                          </span>
+                        </div>
+                        <div className="text-right flex items-center gap-3">
+                          <span className="font-mono font-bold text-gray-900">{price.toFixed(2)} ₼</span>
+                          <span className="px-2 py-1 bg-primary/10 text-primary rounded-lg text-[10px] font-black uppercase tracking-wider">
+                            + Əlavə Et
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
 
             <div className="flex flex-col sm:flex-row gap-3 text-xs font-semibold">
               <div className="flex-1 w-full">
