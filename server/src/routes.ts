@@ -6,6 +6,7 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { verifyTOTP, generateSecret, getOTPAuthURI } from "./db/totp.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -188,6 +189,35 @@ router.post("/auth/login", async (req, res) => {
       where: eq(schema.tenants.id, req.tenantId)
     });
 
+    // Check if 2FA is enabled for the user
+    if (user.twoFactorEnabled === 1) {
+      const clientIp = ((req.headers["x-forwarded-for"] as string) || req.ip || "127.0.0.1").split(",")[0].trim();
+      const trustToken = req.headers["x-2fa-trust-token"];
+      const trustTokenStr = Array.isArray(trustToken) ? trustToken[0] : (trustToken || "");
+
+      let trustedDevices: Array<{ deviceToken: string; ip: string; expireAt: number }> = [];
+      if (user.twoFactorTrustedDevices) {
+        try {
+          trustedDevices = JSON.parse(user.twoFactorTrustedDevices);
+        } catch (e) {}
+      }
+
+      const now = Date.now();
+      const isTrusted = trustedDevices.some((d) => {
+        const isTokenMatch = trustTokenStr && d.deviceToken === trustTokenStr;
+        const isIpMatch = d.ip === clientIp;
+        const isNotExpired = d.expireAt > now;
+        return (isTokenMatch || isIpMatch) && isNotExpired;
+      });
+
+      if (!isTrusted) {
+        return res.json({
+          require2FA: true,
+          userId: user.id
+        });
+      }
+    }
+
     res.json({
       id: user.id,
       username: user.username,
@@ -198,6 +228,175 @@ router.post("/auth/login", async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ message: "Giriş zamanı xəta baş verdi" });
+  }
+});
+
+// 2FA setups & verification routes
+router.post("/auth/2fa-setup", async (req, res) => {
+  try {
+    const username = req.headers["x-user-username"];
+    if (!username) {
+      return res.status(401).json({ message: "Səlahiyyətləndirmə xətası: İstifadəçi adı göndərilməyib" });
+    }
+
+    const user = await db.query.users.findFirst({
+      where: and(
+        eq(schema.users.username, String(username)),
+        eq(schema.users.tenantId, req.tenantId)
+      )
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "İstifadəçi tapılmadı" });
+    }
+
+    const secret = generateSecret();
+    const tenant = await db.query.tenants.findFirst({
+      where: eq(schema.tenants.id, req.tenantId)
+    });
+    const issuer = tenant?.name || "BirSaaS";
+    const label = `${user.username}`;
+    const otpauthURI = getOTPAuthURI({ secret, label, issuer });
+
+    res.json({ secret, otpauthURI });
+  } catch (error) {
+    res.status(500).json({ message: "2FA qurulması zamanı xəta baş verdi" });
+  }
+});
+
+router.post("/auth/2fa-activate", async (req, res) => {
+  try {
+    const username = req.headers["x-user-username"];
+    const { secret, token } = req.body;
+
+    if (!username) {
+      return res.status(401).json({ message: "Səlahiyyətləndirmə xətası" });
+    }
+    if (!secret || !token) {
+      return res.status(400).json({ message: "Gizli açar və OTP kod daxil edilməlidir" });
+    }
+
+    const user = await db.query.users.findFirst({
+      where: and(
+        eq(schema.users.username, String(username)),
+        eq(schema.users.tenantId, req.tenantId)
+      )
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "İstifadəçi tapılmadı" });
+    }
+
+    const isValid = verifyTOTP(token, secret);
+    if (!isValid) {
+      return res.status(400).json({ message: "Daxil edilən OTP kod yanlışdır" });
+    }
+
+    await db.update(schema.users)
+      .set({
+        twoFactorSecret: secret,
+        twoFactorEnabled: 1,
+        twoFactorTrustedDevices: JSON.stringify([])
+      })
+      .where(eq(schema.users.id, user.id));
+
+    await logActivity(req, "2FA Aktiv Edildi", `İstifadəçi '${user.username}' 2FA təhlükəsizliyini aktiv etdi`);
+
+    res.json({ success: true, message: "İki-mərhələli təhlükəsizlik (2FA) uğurla aktiv edildi!" });
+  } catch (error) {
+    res.status(500).json({ message: "2FA aktivləşdirilməsi zamanı xəta baş verdi" });
+  }
+});
+
+router.post("/auth/2fa-verify", async (req, res) => {
+  try {
+    const { userId, token, rememberDevice } = req.body;
+    if (!userId || !token) {
+      return res.status(400).json({ message: "İstifadəçi ID və OTP kod daxil edilməlidir" });
+    }
+
+    const user = await db.query.users.findFirst({
+      where: eq(schema.users.id, Number(userId))
+    });
+
+    if (!user || !user.twoFactorSecret) {
+      return res.status(404).json({ message: "İstifadəçi və ya 2FA tənzimləmələri tapılmadı" });
+    }
+
+    const isValid = verifyTOTP(token, user.twoFactorSecret);
+    if (!isValid) {
+      return res.status(400).json({ message: "Daxil edilən OTP kod yanlışdır" });
+    }
+
+    let deviceToken = "";
+    if (rememberDevice) {
+      deviceToken = crypto.randomUUID();
+      const clientIp = ((req.headers["x-forwarded-for"] as string) || req.ip || "127.0.0.1").split(",")[0].trim();
+      const expireAt = Date.now() + 30 * 24 * 60 * 60 * 1000; // 30 days
+      const newDevice = { deviceToken, ip: clientIp, expireAt };
+
+      let trustedDevices: any[] = [];
+      if (user.twoFactorTrustedDevices) {
+        try {
+          trustedDevices = JSON.parse(user.twoFactorTrustedDevices);
+        } catch (e) {}
+      }
+      trustedDevices.push(newDevice);
+
+      await db.update(schema.users)
+        .set({ twoFactorTrustedDevices: JSON.stringify(trustedDevices) })
+        .where(eq(schema.users.id, user.id));
+    }
+
+    const tenant = await db.query.tenants.findFirst({
+      where: eq(schema.tenants.id, user.tenantId)
+    });
+
+    res.json({
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      tenantId: user.tenantId,
+      tenantName: tenant?.name || "Qazan POS",
+      tenantSlug: tenant?.slug || "demo",
+      deviceToken: rememberDevice ? deviceToken : undefined
+    });
+  } catch (error) {
+    res.status(500).json({ message: "2FA təsdiqlənməsi zamanı xəta baş verdi" });
+  }
+});
+
+router.post("/auth/2fa-disable", async (req, res) => {
+  try {
+    const username = req.headers["x-user-username"];
+    if (!username) {
+      return res.status(401).json({ message: "Səlahiyyətləndirmə xətası" });
+    }
+
+    const user = await db.query.users.findFirst({
+      where: and(
+        eq(schema.users.username, String(username)),
+        eq(schema.users.tenantId, req.tenantId)
+      )
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "İstifadəçi tapılmadı" });
+    }
+
+    await db.update(schema.users)
+      .set({
+        twoFactorSecret: null,
+        twoFactorEnabled: 0,
+        twoFactorTrustedDevices: JSON.stringify([])
+      })
+      .where(eq(schema.users.id, user.id));
+
+    await logActivity(req, "2FA Deaktiv Edildi", `İstifadəçi '${user.username}' 2FA təhlükəsizliyini söndürdü`);
+
+    res.json({ success: true, message: "İki-mərhələli təhlükəsizlik deaktiv edildi!" });
+  } catch (error) {
+    res.status(500).json({ message: "2FA söndürülməsi zamanı xəta baş verdi" });
   }
 });
 
@@ -1668,6 +1867,7 @@ router.get("/users", requireAdmin, async (req, res) => {
         id: schema.users.id,
         username: schema.users.username,
         role: schema.users.role,
+        twoFactorEnabled: schema.users.twoFactorEnabled,
       })
       .from(schema.users)
       .where(eq(schema.users.tenantId, req.tenantId))

@@ -12,6 +12,12 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
+  // 2FA state management
+  const [require2FA, setRequire2FA] = useState(false);
+  const [userIdFor2FA, setUserIdFor2FA] = useState<number | null>(null);
+  const [otpDigits, setOtpDigits] = useState<string[]>(Array(6).fill(""));
+  const [rememberDevice, setRememberDevice] = useState(true);
+
   // Subdomain detection for dedicated public sandbox demo
   const host = window.location.hostname;
   const parts = host.split(".");
@@ -42,6 +48,17 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       }
 
       const userData = await res.json();
+
+      // Intercept 2FA requirement
+      if (userData.require2FA) {
+        setUserIdFor2FA(userData.userId);
+        setRequire2FA(true);
+        setTimeout(() => {
+          document.getElementById("otp-input-0")?.focus();
+        }, 150);
+        return;
+      }
+
       toast({
         title: "Xoş gəldiniz!",
         description: `${userData.role === "Admin" ? "Administrator" : "Satıcı"} olaraq giriş edildi.`,
@@ -54,6 +71,106 @@ export default function Login({ onLoginSuccess }: LoginProps) {
         description: err.message || "İstifadəçi adı və ya şifrə yanlışdır.",
         variant: "destructive",
       });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleOtpChange = (index: number, value: string) => {
+    const cleanValue = value.replace(/[^0-9]/g, "").substring(0, 1);
+    const newDigits = [...otpDigits];
+    newDigits[index] = cleanValue;
+    setOtpDigits(newDigits);
+
+    // Auto-advance to the next field if filled
+    if (cleanValue !== "" && index < 5) {
+      const nextInput = document.getElementById(`otp-input-${index + 1}`);
+      nextInput?.focus();
+    }
+  };
+
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Backspace") {
+      if (otpDigits[index] === "" && index > 0) {
+        const prevInput = document.getElementById(`otp-input-${index - 1}`);
+        prevInput?.focus();
+        const newDigits = [...otpDigits];
+        newDigits[index - 1] = "";
+        setOtpDigits(newDigits);
+      } else {
+        const newDigits = [...otpDigits];
+        newDigits[index] = "";
+        setOtpDigits(newDigits);
+      }
+    } else if (e.key === "ArrowLeft" && index > 0) {
+      const prevInput = document.getElementById(`otp-input-${index - 1}`);
+      prevInput?.focus();
+    } else if (e.key === "ArrowRight" && index < 5) {
+      const nextInput = document.getElementById(`otp-input-${index + 1}`);
+      nextInput?.focus();
+    }
+  };
+
+  const handleOtpPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pastedData = e.clipboardData.getData("text").trim();
+    if (/^[0-9]{6}$/.test(pastedData)) {
+      const digits = pastedData.split("");
+      setOtpDigits(digits);
+      document.getElementById("otp-input-5")?.focus();
+    }
+  };
+
+  const handleVerify2FA = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const token = otpDigits.join("");
+    if (token.length !== 6) {
+      toast({
+        title: "Xəta!",
+        description: "Lütfən, 6 rəqəmli OTP kodu tam daxil edin.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const res = await fetch("/api/auth/2fa-verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: userIdFor2FA, token, rememberDevice }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "OTP kod yanlışdır");
+      }
+
+      const userData = await res.json();
+
+      // If user selected rememberDevice and server returned deviceToken, save it
+      if (rememberDevice && userData.deviceToken) {
+        localStorage.setItem("qazanpos_2fa_trust_token", userData.deviceToken);
+      }
+
+      toast({
+        title: "Giriş təsdiqləndi!",
+        description: `${userData.role === "Admin" ? "Administrator" : "Satıcı"} olaraq giriş edildi.`,
+        variant: "success",
+      });
+
+      onLoginSuccess(userData);
+    } catch (err: any) {
+      toast({
+        title: "OTP təsdiqlənmədi!",
+        description: err.message || "Daxil edilən kod yanlışdır və ya müddəti bitib.",
+        variant: "destructive",
+      });
+      // Reset inputs on error
+      setOtpDigits(Array(6).fill(""));
+      setTimeout(() => {
+        document.getElementById("otp-input-0")?.focus();
+      }, 100);
     } finally {
       setIsLoading(false);
     }
@@ -101,7 +218,88 @@ export default function Login({ onLoginSuccess }: LoginProps) {
         </div>
 
         {/* Dynamic Layout Scoping */}
-        {isSinaqSubdomain ? (
+        {require2FA ? (
+          /* Glassmorphic 2FA OTP Card */
+          <div className="bg-white border border-gray-100 rounded-3xl p-8 shadow-2xl glass-card relative overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="absolute top-0 right-0 p-4 text-primary/10">
+              <KeyRound className="size-12" />
+            </div>
+
+            <h2 className="text-lg font-black text-gray-900 tracking-tight mb-1.5">
+              İki-Mərhələli Təhlükəsizlik (2FA)
+            </h2>
+            <p className="text-[11px] text-gray-500 font-semibold mb-6">
+              Google Authenticator tətbiqindəki 6 rəqəmli birdəfəlik şifrəni (OTP) daxil edin.
+            </p>
+
+            <form onSubmit={handleVerify2FA} className="space-y-6 text-xs font-semibold">
+              {/* 6 Digit Inputs Box */}
+              <div className="flex justify-between gap-2" role="group" aria-label="6-digit OTP">
+                {otpDigits.map((digit, index) => (
+                  <input
+                    key={index}
+                    id={`otp-input-${index}`}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={1}
+                    autoComplete="one-time-code"
+                    value={digit}
+                    onChange={(e) => handleOtpChange(index, e.target.value)}
+                    onKeyDown={(e) => handleOtpKeyDown(index, e)}
+                    onPaste={index === 0 ? handleOtpPaste : undefined}
+                    className="size-11 sm:size-12 text-center text-lg font-black text-gray-900 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary bg-gray-50/50 transition-all shadow-xs"
+                    disabled={isLoading}
+                    required
+                  />
+                ))}
+              </div>
+
+              {/* Remember Device Checkbox */}
+              <label className="flex items-center gap-2.5 cursor-pointer py-1 select-none">
+                <input
+                  type="checkbox"
+                  checked={rememberDevice}
+                  onChange={(e) => setRememberDevice(e.target.checked)}
+                  className="rounded text-primary focus:ring-primary border-gray-300 size-4 cursor-pointer"
+                  disabled={isLoading}
+                />
+                <span className="text-[11px] text-gray-600 font-bold">
+                  Bu cihazı 30 gün yadda saxla 💻
+                </span>
+              </label>
+
+              {/* Submit & Cancel Buttons */}
+              <div className="space-y-3 pt-2">
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full py-4 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 text-sm shadow-md shadow-primary/10 transition-all hover-elevate"
+                >
+                  {isLoading ? (
+                    "Təsdiqlənir..."
+                  ) : (
+                    <>
+                      <CheckCircle className="size-4" /> Təsdiqlə
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isLoading}
+                  onClick={() => {
+                    setRequire2FA(false);
+                    setUserIdFor2FA(null);
+                    setOtpDigits(Array(6).fill(""));
+                  }}
+                  className="w-full py-3 bg-gray-50 hover:bg-gray-100 text-gray-500 font-bold rounded-xl border border-gray-200/60 flex items-center justify-center gap-2 text-xs transition-all cursor-pointer"
+                >
+                  Geri Qayıt
+                </button>
+              </div>
+            </form>
+          </div>
+        ) : isSinaqSubdomain ? (
           /* Gorgeous Public Welcoming Sandbox Card */
           <div className="bg-white border border-gray-100 rounded-3xl p-8 shadow-2xl glass-card relative overflow-hidden space-y-6 animate-in fade-in duration-300">
             <div className="absolute top-0 right-0 p-4 text-emerald-500/10">

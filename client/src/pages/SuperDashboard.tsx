@@ -54,6 +54,110 @@ export default function SuperDashboard() {
   const [superPassword, setSuperPassword] = useState("");
   const [showSuperPassword, setShowSuperPassword] = useState(false);
 
+  // Super Admin 2FA Setup State & Logic
+  const [showSuper2FASetupModal, setShowSuper2FASetupModal] = useState(false);
+  const [super2FASecret, setSuper2FASecret] = useState("");
+  const [super2FAQRCode, setSuper2FAQRCode] = useState("");
+  const [super2FACodeInput, setSuper2FACodeInput] = useState("");
+
+  const { data: superUsers, refetch: refetchSuperUsers } = useQuery<any[]>({
+    queryKey: ["/api/users"],
+    queryFn: async () => {
+      const res = await fetch("/api/users");
+      if (!res.ok) throw new Error("İstifadəçiləri gətirmək mümkün olmadı");
+      return res.json();
+    },
+  });
+
+  const activeSuperUserFromDb = superUsers?.find((u) => u.username === superUsername);
+  const isSuper2FAActive = activeSuperUserFromDb?.twoFactorEnabled === 1;
+
+  const handleStartSuper2FASetup = async () => {
+    try {
+      const res = await fetch("/api/auth/2fa-setup", { method: "POST" });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setSuper2FASecret(data.secret);
+      
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data.otpauthURI)}`;
+      setSuper2FAQRCode(qrUrl);
+      setShowSuper2FASetupModal(true);
+    } catch (e) {
+      toast({
+        title: "Xəta!",
+        description: "2FA qurulumuna başlamaq mümkün olmadı.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleActivateSuper2FA = async () => {
+    if (!super2FACodeInput.trim() || super2FACodeInput.length !== 6) {
+      toast({
+        title: "Xəta!",
+        description: "6 rəqəmli OTP kodu daxil edin.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/auth/2fa-activate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ secret: super2FASecret, token: super2FACodeInput }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "OTP kod yanlışdır");
+      }
+
+      toast({
+        title: "Təhlükəsizlik aktivdir!",
+        description: "Super Admin 2FA müdafiəsi uğurla aktiv edildi.",
+        variant: "success",
+      });
+
+      setShowSuper2FASetupModal(false);
+      setSuper2FACodeInput("");
+      refetchSuperUsers();
+    } catch (err: any) {
+      toast({
+        title: "Aktivləşdirmə alınmadı!",
+        description: err.message || "Daxil etdiyiniz OTP kod yanlışdır.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDisableSuper2FA = async () => {
+    if (!window.confirm("Super Admin 2FA müdafiəsini söndürmək istədiyinizə əminsiniz?")) {
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/auth/2fa-disable", { method: "POST" });
+      if (!res.ok) throw new Error();
+      
+      localStorage.removeItem("qazanpos_2fa_trust_token");
+
+      toast({
+        title: "2FA söndürüldü",
+        description: "Super Admin üçün iki-mərhələli təhlükəsizlik söndürüldü.",
+        variant: "success",
+      });
+      
+      refetchSuperUsers();
+    } catch (e) {
+      toast({
+        title: "Xəta!",
+        description: "2FA deaktiv edilərkən xəta baş verdi.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const updateProfileMutation = useMutation({
     mutationFn: async (payload: any) => {
       const res = await fetch("/api/super/profile", {
@@ -873,6 +977,38 @@ export default function SuperDashboard() {
                 </div>
               </div>
 
+              {/* 2FA Security section inside SuperAdmin profile modal */}
+              <div className="border-t border-gray-100/70 pt-4 mt-2 text-left space-y-3">
+                <span className="text-[10px] text-gray-400 font-extrabold uppercase tracking-wider block font-bold">İki-Mərhələli Təhlükəsizlik (2FA)</span>
+                
+                {isSuper2FAActive ? (
+                  <div className="flex items-center justify-between gap-3 p-3 bg-emerald-50 border border-emerald-100 rounded-xl">
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                      <span className="text-[10px] font-black text-emerald-800 uppercase tracking-wide font-extrabold">Qorunur (Aktivdir)</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleDisableSuper2FA}
+                      className="px-2.5 py-1.5 bg-white text-red-500 border border-red-100 rounded-lg font-bold text-[9px] hover:bg-red-50 cursor-pointer transition-all"
+                    >
+                      Söndür
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between gap-3 p-3 bg-gray-50 border border-gray-100 rounded-xl">
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-wide font-extrabold">Qorunmur (Deaktivdir)</span>
+                    <button
+                      type="button"
+                      onClick={handleStartSuper2FASetup}
+                      className="px-2.5 py-1.5 bg-primary text-white rounded-lg font-black text-[9px] hover:bg-primary/95 cursor-pointer shadow-xs transition-all uppercase tracking-wide"
+                    >
+                      Aktiv Et ⚡
+                    </button>
+                  </div>
+                )}
+              </div>
+
               <div className="flex gap-2.5 justify-end text-xs font-bold pt-4 border-t border-gray-100/50 mt-4">
                 <button
                   type="button"
@@ -894,6 +1030,80 @@ export default function SuperDashboard() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Super Admin 2FA Setup Modal Overlay */}
+      {showSuper2FASetupModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs z-100 flex items-center justify-center p-4 animate-in fade-in-0">
+          <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-2xl max-w-sm w-full relative space-y-5 animate-in zoom-in-95 duration-200 text-center">
+            
+            <div className="size-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto text-primary">
+              <Lock className="w-6 h-6" />
+            </div>
+
+            <div className="space-y-1">
+              <h3 className="font-extrabold text-gray-900 text-sm">
+                Super Admin 2FA Qurulum Kılavuzu
+              </h3>
+              <p className="text-[10px] text-gray-500 font-semibold">
+                Mobil telefonunuzda Google Authenticator ilə bu QR kodu skan edin.
+              </p>
+            </div>
+
+            {/* QR Code Container */}
+            {super2FAQRCode && (
+              <div className="bg-gray-50 p-4 rounded-2xl inline-block border border-gray-100 mx-auto shadow-inner">
+                <img
+                  src={super2FAQRCode}
+                  alt="2FA QR Code"
+                  className="size-40 mx-auto"
+                />
+              </div>
+            )}
+
+            {/* Secret key text copy alternative */}
+            <div className="space-y-1 text-xs">
+              <span className="text-[9px] text-gray-400 font-extrabold uppercase tracking-wider block font-bold">QR Skan etmək olmursa, gizli açar:</span>
+              <code className="bg-gray-100 text-primary px-3 py-1.5 rounded-lg font-mono font-bold tracking-widest text-[11px] select-all block">
+                {super2FASecret}
+              </code>
+            </div>
+
+            {/* Verification code input */}
+            <div className="space-y-1.5 text-xs text-left font-semibold">
+              <label className="text-gray-400 uppercase tracking-wider block text-[9px] text-center font-bold">Tətbiqdəki 6 Rəqəmli OTP Kodu daxil edin</label>
+              <input
+                type="text"
+                maxLength={6}
+                placeholder="000000"
+                value={super2FACodeInput}
+                onChange={(e) => setSuper2FACodeInput(e.target.value.replace(/[^0-9]/g, ""))}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 text-center font-mono font-black text-lg tracking-widest text-gray-900 animate-pulse"
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-2.5 text-xs font-bold pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSuper2FASetupModal(false);
+                  setSuper2FACodeInput("");
+                }}
+                className="flex-1 py-3 border border-gray-200 text-gray-500 rounded-xl hover:bg-gray-50 cursor-pointer transition-all font-bold"
+              >
+                İmtina Et
+              </button>
+              <button
+                type="button"
+                onClick={handleActivateSuper2FA}
+                className="flex-1 py-3 bg-primary text-white rounded-xl hover:bg-primary/90 cursor-pointer shadow-md shadow-primary/10 transition-all font-black uppercase tracking-wider"
+              >
+                Aktivləşdir
+              </button>
+            </div>
           </div>
         </div>
       )}

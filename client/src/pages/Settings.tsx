@@ -127,6 +127,101 @@ export default function SettingsPage() {
     enabled: isAdmin,
   });
 
+  // 2FA Setup State & Logic
+  const [show2FASetupModal, setShow2FASetupModal] = useState(false);
+  const [twoFactorSecret, setTwoFactorSecret] = useState("");
+  const [twoFactorQRCode, setTwoFactorQRCode] = useState("");
+  const [twoFactorCodeInput, setTwoFactorCodeInput] = useState("");
+
+  const currentUserFromDb = usersList?.find((u) => u.username === activeUser?.username);
+  const is2FAActive = currentUserFromDb?.twoFactorEnabled === 1;
+
+  const handleStart2FASetup = async () => {
+    try {
+      const res = await fetch("/api/auth/2fa-setup", { method: "POST" });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setTwoFactorSecret(data.secret);
+      
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data.otpauthURI)}`;
+      setTwoFactorQRCode(qrUrl);
+      setShow2FASetupModal(true);
+    } catch (e) {
+      toast({
+        title: "Xəta!",
+        description: "2FA qurulumuna başlamaq mümkün olmadı.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleActivate2FA = async () => {
+    if (!twoFactorCodeInput.trim() || twoFactorCodeInput.length !== 6) {
+      toast({
+        title: "Xəta!",
+        description: "6 rəqəmli OTP kodu daxil edin.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/auth/2fa-activate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ secret: twoFactorSecret, token: twoFactorCodeInput }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "OTP kod yanlışdır");
+      }
+
+      toast({
+        title: "Təhlükəsizlik aktivdir!",
+        description: "İki-mərhələli təhlükəsizlik (2FA) quraşdırıldı.",
+        variant: "success",
+      });
+
+      setShow2FASetupModal(false);
+      setTwoFactorCodeInput("");
+      refetchUsers();
+    } catch (err: any) {
+      toast({
+        title: "Aktivləşdirmə alınmadı!",
+        description: err.message || "Daxil etdiyiniz OTP kod yanlışdır.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDisable2FA = async () => {
+    if (!window.confirm("İki-mərhələli təhlükəsizliyi (2FA) söndürmək istədiyinizə əminsiniz?")) {
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/auth/2fa-disable", { method: "POST" });
+      if (!res.ok) throw new Error();
+      
+      localStorage.removeItem("qazanpos_2fa_trust_token");
+
+      toast({
+        title: "2FA söndürüldü",
+        description: "Hesabınız üçün iki-mərhələli təhlükəsizlik söndürüldü.",
+        variant: "success",
+      });
+      
+      refetchUsers();
+    } catch (e) {
+      toast({
+        title: "Xəta!",
+        description: "2FA deaktiv edilərkən xəta baş verdi.",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Fetch Settings
   const { data: settingsData, isLoading } = useQuery<any>({
     queryKey: ["/api/settings"],
@@ -1116,6 +1211,54 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
+
+          {/* İki-Mərhələli Təhlükəsizlik (2FA) Card */}
+          <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card space-y-4">
+            <div className="flex items-center gap-2 mb-2 border-b border-gray-100/50 pb-3">
+              <Lock className="w-5 h-5 text-primary" />
+              <h3 className="font-extrabold text-gray-900 text-sm">İki-Mərhələli Təhlükəsizlik (2FA)</h3>
+            </div>
+
+            <div className="space-y-4">
+              <p className="text-[11px] text-gray-500 font-semibold leading-relaxed">
+                Hesabınızın təhlükəsizliyini artırmaq üçün Google Authenticator və ya digər TOTP tətbiqləri vasitəsilə 2FA müdafiəsini aktivləşdirin.
+              </p>
+
+              {is2FAActive ? (
+                <div className="space-y-4">
+                  {/* Status Badge */}
+                  <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-100 rounded-xl">
+                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span className="text-xs font-black text-emerald-800">2FA AKTİVDİR (QORUNUR)</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleDisable2FA}
+                    className="w-full py-3 bg-red-50 hover:bg-red-100 text-red-500 border border-red-100 font-bold text-xs rounded-xl cursor-pointer transition-all hover-elevate flex items-center justify-center gap-2"
+                  >
+                    2FA Müdafiəsini Söndür
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Status Badge */}
+                  <div className="flex items-center gap-2 p-3 bg-gray-50 border border-gray-100 rounded-xl">
+                    <span className="h-2.5 w-2.5 rounded-full bg-gray-400"></span>
+                    <span className="text-xs font-black text-gray-500">2FA DEAKTİVDİR</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleStart2FASetup}
+                    className="w-full py-3 bg-primary text-white font-bold text-xs rounded-xl hover:bg-primary/90 cursor-pointer shadow-md shadow-primary/10 transition-all hover-elevate flex items-center justify-center gap-2"
+                  >
+                    2FA-nı Aktiv Et ⚡
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1164,6 +1307,80 @@ export default function SettingsPage() {
                 className="px-4 py-2.5 bg-primary text-white rounded-xl hover:bg-primary/90 cursor-pointer shadow-md shadow-primary/10 transition-all"
               >
                 Şifrəni Dəyiş
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2FA Setup Modal Overlay */}
+      {show2FASetupModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs z-100 flex items-center justify-center p-4 animate-in fade-in-0">
+          <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-2xl max-w-sm w-full relative space-y-5 animate-in zoom-in-95 duration-200 text-center">
+            
+            <div className="size-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto text-primary">
+              <Lock className="w-6 h-6" />
+            </div>
+
+            <div className="space-y-1">
+              <h3 className="font-extrabold text-gray-900 text-sm">
+                2FA Qurulum Kılavuzu
+              </h3>
+              <p className="text-[10px] text-gray-500 font-semibold">
+                Mobil telefonunuzda Google Authenticator ilə bu QR kodu skan edin.
+              </p>
+            </div>
+
+            {/* QR Code Container */}
+            {twoFactorQRCode && (
+              <div className="bg-gray-50 p-4 rounded-2xl inline-block border border-gray-100 mx-auto shadow-inner">
+                <img
+                  src={twoFactorQRCode}
+                  alt="2FA QR Code"
+                  className="size-40 mx-auto"
+                />
+              </div>
+            )}
+
+            {/* Secret key text copy alternative */}
+            <div className="space-y-1 text-xs">
+              <span className="text-[9px] text-gray-400 font-extrabold uppercase tracking-wider block font-bold">QR Skan etmək olmursa, gizli açar:</span>
+              <code className="bg-gray-100 text-primary px-3 py-1.5 rounded-lg font-mono font-bold tracking-widest text-[11px] select-all block">
+                {twoFactorSecret}
+              </code>
+            </div>
+
+            {/* Verification code input */}
+            <div className="space-y-1.5 text-xs text-left font-semibold">
+              <label className="text-gray-400 uppercase tracking-wider block text-[9px] text-center font-bold">Tətbiqdəki 6 Rəqəmli OTP Kodu daxil edin</label>
+              <input
+                type="text"
+                maxLength={6}
+                placeholder="000000"
+                value={twoFactorCodeInput}
+                onChange={(e) => setTwoFactorCodeInput(e.target.value.replace(/[^0-9]/g, ""))}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 text-center font-mono font-black text-lg tracking-widest text-gray-900 animate-pulse"
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-2.5 text-xs font-bold pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setShow2FASetupModal(false);
+                  setTwoFactorCodeInput("");
+                }}
+                className="flex-1 py-3 border border-gray-200 text-gray-500 rounded-xl hover:bg-gray-50 cursor-pointer transition-all font-bold"
+              >
+                İmtina Et
+              </button>
+              <button
+                type="button"
+                onClick={handleActivate2FA}
+                className="flex-1 py-3 bg-primary text-white rounded-xl hover:bg-primary/90 cursor-pointer shadow-md shadow-primary/10 transition-all font-black uppercase tracking-wider"
+              >
+                Aktivləşdir
               </button>
             </div>
           </div>

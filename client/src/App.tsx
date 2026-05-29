@@ -85,6 +85,21 @@ window.fetch = async (input, init) => {
       // Ignore
     }
   }
+
+  // Attach 2FA trust token if it exists in localStorage
+  const trustToken = localStorage.getItem("qazanpos_2fa_trust_token");
+  if (trustToken) {
+    if (init.headers instanceof Headers) {
+      init.headers.set("x-2fa-trust-token", trustToken);
+    } else if (Array.isArray(init.headers)) {
+      const hasHeaderTrust = init.headers.some(([k]) => k.toLowerCase() === "x-2fa-trust-token");
+      if (!hasHeaderTrust) {
+        init.headers.push(["x-2fa-trust-token", trustToken]);
+      }
+    } else {
+      (init.headers as Record<string, string>)["x-2fa-trust-token"] = trustToken;
+    }
+  }
   const response = await originalFetch(input, init);
   if (response.status === 402) {
     try {

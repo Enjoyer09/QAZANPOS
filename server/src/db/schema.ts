@@ -162,6 +162,9 @@ export const users = pgTable("users", {
   username: text("username").notNull(),
   password: text("password").notNull(),
   role: text("role").notNull().default("Staff"), // "Admin" or "Staff"
+  twoFactorSecret: text("two_factor_secret"),
+  twoFactorEnabled: integer("two_factor_enabled").notNull().default(0), // 0 = disabled, 1 = enabled
+  twoFactorTrustedDevices: text("two_factor_trusted_devices"), // JSON array of { deviceToken, ip, expireAt }
 }, (table) => ({
   usersTenantUsernameIdx: uniqueIndex("users_tenant_username_idx").on(table.tenantId, table.username)
 }));
