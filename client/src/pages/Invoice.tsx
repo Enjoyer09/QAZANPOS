@@ -29,6 +29,7 @@ export default function Invoice({ params }: InvoiceProps) {
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [returnItemsState, setReturnItemsState] = useState<Record<number, { quantity: number; status: "returned_to_stock" | "defective" }>>({});
   const [returnReason, setReturnReason] = useState("");
+  const [showFullPayConfirmModal, setShowFullPayConfirmModal] = useState(false);
 
   // Query
   const { data: invoice, isLoading, error } = useQuery<any>({
@@ -558,7 +559,7 @@ export default function Invoice({ params }: InvoiceProps) {
                   </div>
 
                   <button
-                    onClick={() => fullPayMutation.mutate()}
+                    onClick={() => setShowFullPayConfirmModal(true)}
                     disabled={fullPayMutation.isPending}
                     className="w-full py-2.5 bg-green-600 hover:bg-green-700 text-white font-bold text-xs rounded-xl cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 shadow-md shadow-green-500/5 transition-all"
                   >
@@ -613,6 +614,49 @@ export default function Invoice({ params }: InvoiceProps) {
           </div>
         )}
       </div>
+
+      {/* Tam Borcu Bağla Təsdiq Modalı */}
+      {showFullPayConfirmModal && (
+        <div className="liquid-glass-overlay">
+          <div className="liquid-glass-card max-w-sm p-6 text-center space-y-4">
+            <div className="mx-auto size-12 rounded-full bg-amber-50 text-amber-500 border border-amber-100 flex items-center justify-center">
+              <AlertTriangle className="w-6 h-6 animate-bounce" />
+            </div>
+            
+            <div className="space-y-1">
+              <h3 className="text-base font-black text-gray-900 tracking-tight">Əminsiniz? 💸</h3>
+              <p className="text-xs text-gray-400 font-semibold leading-normal">
+                Müştərinin qalıq borcunun tamamını bağlamaq və ödənilmiş kimi qeyd etmək istədiyinizə əminsiniz?
+              </p>
+            </div>
+
+            <div className="p-3 bg-gray-50 border border-gray-100 rounded-xl text-xs font-bold text-gray-700">
+              Qalıq Borc: <span className="text-red-600 font-mono text-sm font-black">{remainingDebt.toFixed(2)} ₼</span>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowFullPayConfirmModal(false)}
+                className="flex-1 py-3 border border-gray-200 hover:bg-gray-50 text-gray-500 rounded-xl font-black text-[10px] uppercase tracking-wider transition-all cursor-pointer"
+              >
+                İmtina
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  fullPayMutation.mutate();
+                  setShowFullPayConfirmModal(false);
+                }}
+                disabled={fullPayMutation.isPending}
+                className="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white font-black rounded-xl text-[10px] uppercase tracking-wider transition-all cursor-pointer shadow-md shadow-green-500/10"
+              >
+                Təsdiq Et
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Geri Qaytarış Modal Overlay */}
       {showReturnModal && (
