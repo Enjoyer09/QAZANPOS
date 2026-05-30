@@ -153,6 +153,7 @@ export default function Payroll() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
+      calculatePayrollMutation.mutate();
       setIsAddEmpModalOpen(false);
       setEmpForm({
         name: "",
