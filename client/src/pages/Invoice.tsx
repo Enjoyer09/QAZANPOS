@@ -13,6 +13,17 @@ export default function Invoice({ params }: InvoiceProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  const activeUser = (() => {
+    try {
+      const userStr = localStorage.getItem("qazanpos_user");
+      return userStr ? JSON.parse(userStr) : null;
+    } catch (e) {
+      return null;
+    }
+  })();
+
+  const isAdmin = activeUser?.role === "Admin";
+
   const saleId = parseInt(params.id);
   const [payAmount, setPayAmount] = useState("");
   const [showReturnModal, setShowReturnModal] = useState(false);
@@ -103,6 +114,28 @@ export default function Invoice({ params }: InvoiceProps) {
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/summary"] });
       toast({ title: "Ödəniş qəbul edildi!", description: "Qalıq borc yeniləndi.", variant: "success" });
       setPayAmount("");
+    },
+    onError: (err: any) => {
+      toast({ title: "Xəta!", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deletePaymentMutation = useMutation({
+    mutationFn: async (paymentId: number) => {
+      const res = await fetch(`/api/sales/payments/${paymentId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Ödənişi ləğv etmək alınmadı");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/sales", saleId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/summary"] });
+      toast({ title: "Ödəniş ləğv edildi!", description: "Borc balansı bərpa olundu.", variant: "success" });
     },
     onError: (err: any) => {
       toast({ title: "Xəta!", description: err.message, variant: "destructive" });
@@ -494,23 +527,6 @@ export default function Invoice({ params }: InvoiceProps) {
                   <p className="text-[11px] text-gray-400 mt-1">Nisyə borca ödəniş əlavə edin və ya tamamilə bağlayın</p>
                 </div>
 
-                {/* Payments History log */}
-                {invoice.payments && invoice.payments.length > 0 && (
-                  <div className="space-y-2.5 border-t border-b border-gray-100 py-4 text-xs font-semibold">
-                    <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider block">
-                      Ödəniş Tarixçəsi
-                    </span>
-                    {invoice.payments.map((p: any, idx: number) => (
-                      <div key={p.id} className="flex justify-between items-center text-[11px]">
-                        <span className="text-gray-500">
-                          {idx + 1}. Ödəniş ({new Date(p.paymentDate).toLocaleDateString("az-AZ")})
-                        </span>
-                        <span className="font-bold font-mono text-gray-950">{Number(p.amount || 0).toFixed(2)} ₼</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
                 {/* Repayment inputs */}
                 <div className="space-y-4">
                   <form onSubmit={handlePartialPaySubmit} className="space-y-2 text-xs font-semibold">
@@ -548,6 +564,49 @@ export default function Invoice({ params }: InvoiceProps) {
                   >
                     <Check className="w-4 h-4" /> Tam Borcu Bağla
                   </button>
+                </div>
+              </div>
+            )}
+
+            {/* Payments History log (always visible if payments exist) */}
+            {invoice.payments && invoice.payments.length > 0 && (
+              <div className="space-y-4 pt-6 border-t border-gray-100 mt-6">
+                <div>
+                  <h3 className="font-extrabold text-gray-900 text-sm">Borc Ödənişləri Tarixçəsi</h3>
+                  <p className="text-[11px] text-gray-400 mt-1">Bu satış üçün qeydə alınmış borc qaytarılma tarixçəsi</p>
+                </div>
+
+                <div className="space-y-2.5 text-xs font-semibold">
+                  {invoice.payments.map((p: any, idx: number) => (
+                    <div key={p.id} className="flex justify-between items-center p-3 bg-gray-50/50 border border-gray-100 rounded-xl">
+                      <div className="space-y-0.5">
+                        <span className="text-gray-900 font-bold block">
+                          {idx + 1}. Ödəniş: {new Date(p.paymentDate).toLocaleDateString("az-AZ")}
+                        </span>
+                        <span className="text-[9px] text-gray-400 font-mono block">
+                          Vaxt: {new Date(p.paymentDate).toLocaleTimeString("az-AZ", { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      
+                      <div className="flex items-center gap-3">
+                        <span className="font-black font-mono text-gray-950 text-sm">{Number(p.amount || 0).toFixed(2)} ₼</span>
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (window.confirm("DİQQƏT: Bu ödəniş qeydini silmək və borcu geri qaytarmaq istədiyinizə əminsiniz?")) {
+                                deletePaymentMutation.mutate(p.id);
+                              }
+                            }}
+                            className="p-1.5 text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-100 rounded-lg transition-all cursor-pointer flex items-center justify-center"
+                            title="Ödənişi İptal Et / Sil"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}

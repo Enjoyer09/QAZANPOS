@@ -1279,6 +1279,62 @@ router.patch("/sales/:id/add-payment", async (req, res) => {
   }
 });
 
+// Delete/rollback customer credit payment
+router.delete("/sales/payments/:paymentId", requireAdmin, async (req, res) => {
+  try {
+    const paymentId = parseInt(req.params.paymentId);
+    
+    // 1. Find the payment record
+    const payment = await db.query.creditPayments.findFirst({
+      where: and(
+        eq(schema.creditPayments.id, paymentId),
+        eq(schema.creditPayments.tenantId, req.tenantId)
+      ),
+    });
+
+    if (!payment) {
+      return res.status(404).json({ message: "Ödəniş qeydi tapılmadı" });
+    }
+
+    const saleId = payment.saleId;
+
+    // 2. Delete the payment
+    await db
+      .delete(schema.creditPayments)
+      .where(eq(schema.creditPayments.id, paymentId));
+
+    // 3. Fetch parent sale record
+    const sale = await db.query.sales.findFirst({
+      where: and(eq(schema.sales.id, saleId), eq(schema.sales.tenantId, req.tenantId)),
+      with: { payments: true, returns: true },
+    });
+
+    if (sale) {
+      // 4. Calculate total paid and check if it is still fully paid
+      const totalPaid = sale.payments.reduce((acc, p) => acc + p.amount, 0);
+      const returned = sale.returns ? sale.returns.reduce((acc, r) => acc + r.totalAmount, 0) : 0;
+      
+      if (totalPaid < (sale.totalAmount - returned)) {
+        // Change status back to credit since it has unpaid balance
+        await db
+          .update(schema.sales)
+          .set({ paymentStatus: "credit" })
+          .where(eq(schema.sales.id, saleId));
+      }
+
+      await logActivity(
+        req,
+        "ROLLBACK_CUSTOMER_DEBT_PAYMENT",
+        `Müştəri nisyə borc ödənişini ləğv etdi: ${payment.amount.toFixed(2)} ₼ (Çek № ${saleId}, Müştəri: ${sale.customerName || "Anonim"})`
+      );
+    }
+
+    res.json({ message: "Ödəniş uğurla ləğv edildi və borc balansı yeniləndi" });
+  } catch (error) {
+    res.status(500).json({ message: "Ödəniş ləğv edilərkən xəta baş verdi" });
+  }
+});
+
 // ----------------------------------------------------
 // 4b. RETURN / REFUND ENDPOINTS
 // ----------------------------------------------------
