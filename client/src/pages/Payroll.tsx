@@ -574,8 +574,27 @@ export default function Payroll() {
                           <div className="size-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-black">
                             {emp.name.charAt(0).toUpperCase()}
                           </div>
-                          <div>
-                            <span className="block font-black text-gray-900 leading-tight">{emp.name}</span>
+                          <div
+                            onClick={() => {
+                              const empPayroll = payrollSheets.find(sheet => sheet.employeeId === emp.id);
+                              if (empPayroll) {
+                                setSelectedPayroll(empPayroll);
+                                setIsHistoryModalOpen(true);
+                              } else {
+                                toast({
+                                  title: "Məlumat Tapılmadı",
+                                  description: "Bu əməkdaş üçün cari ayda hələ heç bir maaş hesabatı və ya ödəniş yoxdur.",
+                                  variant: "destructive"
+                                });
+                              }
+                            }}
+                            className="cursor-pointer hover:text-primary group/empname transition-colors"
+                            title="Cari Ayın Ödəniş Tarixçəsini Göstər 🔍"
+                          >
+                            <span className="block font-black text-gray-900 group-hover/empname:text-primary leading-tight flex items-center gap-1">
+                              <span>{emp.name}</span>
+                              <span className="opacity-0 group-hover/empname:opacity-100 transition-opacity text-[10px] text-primary">🔍</span>
+                            </span>
                             {emp.notes && <span className="block text-[9px] font-medium text-gray-400 mt-0.5 truncate max-w-[150px]">{emp.notes}</span>}
                           </div>
                         </div>
@@ -672,8 +691,18 @@ export default function Payroll() {
                     return (
                       <tr key={sheet.id} className="hover:bg-gray-50/50 transition-colors">
                         <td className="py-3.5 px-4">
-                          <div>
-                            <span className="block font-black text-gray-900 leading-tight">{sheet.employee?.name}</span>
+                          <div
+                            onClick={() => {
+                              setSelectedPayroll(sheet);
+                              setIsHistoryModalOpen(true);
+                            }}
+                            className="cursor-pointer hover:text-primary group/name transition-colors"
+                            title="Ödəniş Tarixçəsini Göstər 🔍"
+                          >
+                            <span className="block font-black text-gray-900 group-hover/name:text-primary leading-tight flex items-center gap-1">
+                              <span>{sheet.employee?.name}</span>
+                              <span className="opacity-0 group-hover/name:opacity-100 transition-opacity text-[10px] text-primary">🔍</span>
+                            </span>
                             <span className="block text-[9px] font-bold text-gray-400 mt-0.5 uppercase tracking-wide">
                               {sheet.employee?.position}
                             </span>
@@ -1150,11 +1179,27 @@ export default function Payroll() {
 
               <div className="space-y-1">
                 <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Ödəniş Qeydi</label>
+                <div className="flex gap-2 mb-1">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentForm({ ...paymentForm, notes: "Avans" })}
+                    className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-100 rounded-lg text-[9px] font-black uppercase transition-all cursor-pointer"
+                  >
+                    Avans (Məxaric) 💸
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentForm({ ...paymentForm, notes: "Maaş" })}
+                    className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-100 rounded-lg text-[9px] font-black uppercase transition-all cursor-pointer"
+                  >
+                    Maaş (Yekun) 💵
+                  </button>
+                </div>
                 <input
                   type="text"
                   value={paymentForm.notes}
                   onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })}
-                  placeholder="Məsələn: Əməkhaqqı kartı ödənişi"
+                  placeholder="Məsələn: Avans və ya Yekun Maaş"
                   className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:outline-none focus:border-primary"
                 />
               </div>
