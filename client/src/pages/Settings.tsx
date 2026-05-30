@@ -53,6 +53,14 @@ export default function SettingsPage() {
   const [lowStockAlertCount, setLowStockAlertCount] = useState("5");
   const [defaultCreditDays, setDefaultCreditDays] = useState("30");
 
+  // Azerbaijan Tax State
+  const [voen, setVoen] = useState("");
+  const [taxStatus, setTaxStatus] = useState("sadelestirilmis");
+  const [edvRate, setEdvRate] = useState("18");
+  const [simplifiedRate, setSimplifiedRate] = useState("2");
+  const [showTaxOnReceipt, setShowTaxOnReceipt] = useState(1);
+  const [showTaxOnInvoice, setShowTaxOnInvoice] = useState(1);
+
   // Telegram Notifications State
   const [telegramBotToken, setTelegramBotToken] = useState("");
   const [telegramChatId, setTelegramChatId] = useState("");
@@ -289,6 +297,14 @@ export default function SettingsPage() {
       setTelegramNotificationsEnabled(settingsData.telegramNotificationsEnabled ?? 0);
       setBackupTime(settingsData.backupTime || "23:00");
       setTelegramBackupEnabled(settingsData.telegramBackupEnabled ?? 0);
+
+      // Load Azerbaijan Tax settings
+      setVoen(settingsData.voen || "");
+      setTaxStatus(settingsData.taxStatus || "sadelestirilmis");
+      setEdvRate("" + (settingsData.edvRate ?? 18));
+      setSimplifiedRate("" + (settingsData.simplifiedRate ?? 2));
+      setShowTaxOnReceipt(settingsData.showTaxOnReceipt ?? 1);
+      setShowTaxOnInvoice(settingsData.showTaxOnInvoice ?? 1);
     }
   }, [settingsData]);
 
@@ -560,6 +576,14 @@ export default function SettingsPage() {
       telegramNotificationsEnabled,
       backupTime,
       telegramBackupEnabled,
+
+      // Azerbaijan Tax fields
+      voen: voen.trim() || null,
+      taxStatus,
+      edvRate: parseFloat(edvRate) || 18.0,
+      simplifiedRate: parseFloat(simplifiedRate) || 2.0,
+      showTaxOnReceipt: parseInt(showTaxOnReceipt as any) ?? 1,
+      showTaxOnInvoice: parseInt(showTaxOnInvoice as any) ?? 1,
     };
 
     updateSettingsMutation.mutate(payload);
@@ -792,6 +816,18 @@ export default function SettingsPage() {
         </button>
         <button
           type="button"
+          onClick={() => setSettingsTab("tax")}
+          className={`flex items-center gap-2 px-5 py-3 border-b-2 text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+            settingsTab === "tax"
+              ? "border-primary text-primary"
+              : "border-transparent text-gray-400 hover:text-gray-600"
+          }`}
+        >
+          <Sliders className="w-4 h-4" />
+          Vergi Ayarları
+        </button>
+        <button
+          type="button"
           onClick={() => setSettingsTab("security")}
           className={`flex items-center gap-2 px-5 py-3 border-b-2 text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
             settingsTab === "security"
@@ -948,6 +984,98 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
+          )}
+
+          {settingsTab === "tax" && (
+            /* Card 3: Azerbaijan Tax Settings */
+            <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card">
+              <div className="flex items-center gap-2 mb-6 border-b border-gray-100/50 pb-3">
+                <Sliders className="w-5 h-5 text-primary" />
+                <h3 className="font-extrabold text-gray-900 text-sm">Azərbaycan Vergi Sistemi İnteqrasiyası</h3>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-semibold">
+                <div className="space-y-1">
+                  <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Vergi Ödəyicisinin VÖEN-i</label>
+                  <input
+                    type="text"
+                    maxLength={10}
+                    value={voen}
+                    onChange={(e) => setVoen(e.target.value.replace(/\D/g, ""))}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50"
+                    placeholder="Məs. 120XXXXXXXX (9-10 rəqəmli)"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Vergi Rejimi / Statusu</label>
+                  <select
+                    value={taxStatus}
+                    onChange={(e) => setTaxStatus(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 cursor-pointer"
+                  >
+                    <option value="sadelestirilmis">Sadələşdirilmiş vergi ödəyicisi</option>
+                    <option value="edv">ƏDV (Əlavə Dəyər Vergisi) ödəyicisi</option>
+                    <option value="gelir">Gəlir / Mənfəət vergisi ödəyicisi</option>
+                    <option value="azad">Vergidən azad (Azad status)</option>
+                  </select>
+                </div>
+
+                {taxStatus === "edv" && (
+                  <div className="space-y-1 animate-in fade-in-50 duration-200">
+                    <label className="text-gray-400 uppercase tracking-wider block text-[10px]">ƏDV Dərəcəsi (%)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={edvRate}
+                      onChange={(e) => setEdvRate(e.target.value)}
+                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50"
+                      placeholder="Standart 18%"
+                    />
+                  </div>
+                )}
+
+                {taxStatus === "sadelestirilmis" && (
+                  <div className="space-y-1 animate-in fade-in-50 duration-200">
+                    <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Sadələşdirilmiş Vergi Faizi (%)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={simplifiedRate}
+                      onChange={(e) => setSimplifiedRate(e.target.value)}
+                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50"
+                      placeholder="Standart 2%"
+                    />
+                  </div>
+                )}
+
+                <div className="md:col-span-2 border-t border-gray-100/70 pt-4 mt-2">
+                  <h4 className="font-extrabold text-gray-900 text-xs mb-3 uppercase tracking-wider">Görünüş və Çap Tənzimləmələri</h4>
+                  
+                  <div className="space-y-3 font-semibold text-xs text-gray-700">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={showTaxOnReceipt === 1}
+                        onChange={(e) => setShowTaxOnReceipt(e.target.checked ? 1 : 0)}
+                        className="rounded border-gray-300 text-primary focus:ring-primary size-4"
+                      />
+                      <span>POS Termal Çekində VÖEN və Vergi rejimini göstər</span>
+                    </label>
+
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={showTaxOnInvoice === 1}
+                        onChange={(e) => setShowTaxOnInvoice(e.target.checked ? 1 : 0)}
+                        className="rounded border-gray-300 text-primary focus:ring-primary size-4"
+                      />
+                      <span>Rəsmi Satış Qaiməsində (Invoice PDF/A4) vergi məlumatlarını göstər</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
           )}
 
           {settingsTab === "printer" && (

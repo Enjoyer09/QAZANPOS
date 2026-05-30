@@ -14,6 +14,13 @@ export function generateReceiptHtml(sale: any, settings: any): string {
   const showReceiptFooter = settings?.showReceiptFooter ?? 1;
   const showPaymentDetails = settings?.showPaymentDetails ?? 1;
 
+  // Azerbaijan Tax Compliance settings
+  const voen = settings?.voen || "";
+  const taxStatus = settings?.taxStatus || "";
+  const edvRate = settings?.edvRate ?? 18.0;
+  const simplifiedRate = settings?.simplifiedRate ?? 2.0;
+  const showTaxOnReceipt = settings?.showTaxOnReceipt ?? 1;
+
   const saleIdStr = sale.id.toString().padStart(5, "0");
   const dateStr = new Date(sale.saleDate).toLocaleDateString("az-AZ") + " " + new Date(sale.saleDate).toLocaleTimeString("az-AZ", { hour: '2-digit', minute: '2-digit' });
 
@@ -38,6 +45,32 @@ export function generateReceiptHtml(sale: any, settings: any): string {
       ? parseFloat(sale.remainingDebt) 
       : null;
     remainingDebt = customRemaining !== null ? customRemaining : Math.max(0, totalAmount - totalPaid);
+  }
+
+  // Azerbaijan Tax calculations
+  let taxDetailsHtml = "";
+  if (showTaxOnReceipt === 1 && taxStatus) {
+    if (taxStatus === "edv") {
+      const vatVal = (totalAmount * edvRate) / (100 + edvRate);
+      taxDetailsHtml = `
+        <table class="receipt-table" style="font-size: 8.5pt; color: #333333; margin-top: 2px;">
+          <tr>
+            <td>ƏDV (${edvRate}% daxil):</td>
+            <td>${vatVal.toFixed(2)} ₼</td>
+          </tr>
+        </table>
+      `;
+    } else if (taxStatus === "sadelestirilmis") {
+      const simplifiedVal = (totalAmount * simplifiedRate) / 100;
+      taxDetailsHtml = `
+        <table class="receipt-table" style="font-size: 8.5pt; color: #333333; margin-top: 2px;">
+          <tr>
+            <td>Sadələşdirilmiş V. (${simplifiedRate}%):</td>
+            <td>${simplifiedVal.toFixed(2)} ₼</td>
+          </tr>
+        </table>
+      `;
+    }
   }
 
   // Dynamically build items HTML
@@ -298,12 +331,15 @@ export function generateReceiptHtml(sale: any, settings: any): string {
         <h1 class="header-title">${storeName}</h1>
         <div class="header-meta">
           ${(showStorePhone === 1 && phone) ? `Əlaqə: ${phone}<br/>` : ""}
-          ${(showStoreAddress === 1 && address) ? `${address}` : ""}
+          ${(showStoreAddress === 1 && address) ? `${address}<br/>` : ""}
+          ${(showTaxOnReceipt === 1 && voen) ? `VÖEN: ${voen}<br/>` : ""}
+          ${(showTaxOnReceipt === 1 && taxStatus) ? `Vergi Rejimi: ${taxStatus === "edv" ? "ƏDV Ödəyicisi" : taxStatus === "sadelestirilmis" ? "Sadələşdirilmiş vergi" : taxStatus === "gelir" ? "Gəlir/Mənfəət" : "Vergidən Azad"}<br/>` : ""}
         </div>
       </div>
       ` : `
       <div class="text-center" style="font-size: 8.5pt; padding: 2px 0; font-weight: bold;">
         ${(showStorePhone === 1 && phone) ? `Əlaqə: ${phone}` : ""} ${(showStoreAddress === 1 && address) ? ` | Ünvan: ${address}` : ""}
+        ${(showTaxOnReceipt === 1 && voen) ? ` | VÖEN: ${voen}` : ""}
       </div>
       `}
 
@@ -348,6 +384,7 @@ export function generateReceiptHtml(sale: any, settings: any): string {
             <td style="width: 40%; text-align: right; font-size: 11.5pt;">${totalAmount.toFixed(2)} ₼</td>
           </tr>
         </table>
+        ${taxDetailsHtml}
         <table class="receipt-table">
           <tr>
             <td>Ödənilən:</td>

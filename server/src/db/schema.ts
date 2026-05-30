@@ -249,6 +249,12 @@ export const settings = pgTable("settings", {
   telegramNotificationsEnabled: integer("telegram_notifications_enabled").notNull().default(0),
   backupTime: text("backup_time").notNull().default("23:00"),
   telegramBackupEnabled: integer("telegram_backup_enabled").notNull().default(0),
+  voen: text("voen"),
+  taxStatus: text("tax_status").default("sadelestirilmis"),
+  edvRate: doublePrecision("edv_rate").default(18.0),
+  simplifiedRate: doublePrecision("simplified_rate").default(2.0),
+  showTaxOnReceipt: integer("show_tax_on_receipt").default(1),
+  showTaxOnInvoice: integer("show_tax_on_invoice").default(1),
 });
 
 // 9. Users Table for Authentication & Authorization

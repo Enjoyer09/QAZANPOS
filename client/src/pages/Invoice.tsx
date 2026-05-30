@@ -295,6 +295,14 @@ export default function Invoice({ params }: InvoiceProps) {
               </div>
               {settings?.phone && <p className="text-[10px] text-gray-400 font-medium">Əlaqə: {settings.phone}</p>}
               <p className="text-[10px] text-gray-400 font-medium mt-0.5">{settings?.address || "Bakı, Azərbaycan"}</p>
+              {settings?.showTaxOnInvoice !== 0 && settings?.voen && (
+                <>
+                  <p className="text-[10px] text-gray-400 font-medium mt-0.5">VÖEN: {settings.voen}</p>
+                  <p className="text-[10px] text-gray-400 font-medium mt-0.5">
+                    Vergi Rejimi: {settings.taxStatus === "edv" ? "ƏDV Ödəyicisi" : settings.taxStatus === "sadelestirilmis" ? "Sadələşdirilmiş vergi" : settings.taxStatus === "gelir" ? "Gəlir/Mənfəət" : "Vergidən Azad"}
+                  </p>
+                </>
+              )}
             </div>
 
             <div className="text-right">
@@ -394,6 +402,22 @@ export default function Invoice({ params }: InvoiceProps) {
                   {totalAmount.toFixed(2)} ₼
                 </span>
               </div>
+              {settings?.showTaxOnInvoice !== 0 && settings?.taxStatus === "edv" && (
+                <div className="flex justify-between text-[11px] text-gray-400 font-medium">
+                  <span>ƏDV ({settings?.edvRate ?? 18}% daxil)</span>
+                  <span className="font-bold text-gray-700 font-mono">
+                    {((totalAmount * (settings?.edvRate ?? 18)) / (100 + (settings?.edvRate ?? 18))).toFixed(2)} ₼
+                  </span>
+                </div>
+              )}
+              {settings?.showTaxOnInvoice !== 0 && settings?.taxStatus === "sadelestirilmis" && (
+                <div className="flex justify-between text-[11px] text-gray-400 font-medium">
+                  <span>Sadələşdirilmiş V. ({settings?.simplifiedRate ?? 2}%)</span>
+                  <span className="font-bold text-gray-700 font-mono">
+                    {((totalAmount * (settings?.simplifiedRate ?? 2)) / 100).toFixed(2)} ₼
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span>Ödənilən məbləğ</span>
                 <span className="font-bold text-green-600 font-mono text-sm">
