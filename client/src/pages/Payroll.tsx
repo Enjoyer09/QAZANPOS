@@ -1132,8 +1132,9 @@ export default function Payroll() {
                   className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:outline-none focus:border-primary"
                 >
                   <option value="Nəğd">Nəğd Pul 💵</option>
-                  <option value="Kart">Bank Kartı / Köçürmə 💳</option>
+                  <option value="Kart">Bank Kartı 💳</option>
                   <option value="Kart2Kart">Kartdan-Karta 📲</option>
+                  <option value="Köçürmə">Bank Köçürməsi 🏢</option>
                 </select>
               </div>
 

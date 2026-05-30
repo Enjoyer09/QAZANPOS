@@ -809,6 +809,7 @@ export default function Vendors() {
                   <option value="Nəğd">Nəğd Pul 💵</option>
                   <option value="Kart">Bank Kartı 💳</option>
                   <option value="Kart2Kart">Kartdan-Karta 📲</option>
+                  <option value="Köçürmə">Bank Köçürməsi 🏢</option>
                 </select>
               </div>
 

@@ -60,7 +60,7 @@ export const stockEntries = pgTable("stock_entries", {
   purchasePrice: doublePrecision("purchase_price").notNull(), // Alış qiyməti
   supplier: text("supplier"),
   notes: text("notes"),
-  paymentType: text("payment_type").notNull(), // "Nəğd", "Kart", "Kart2Kart", "Nisyə"
+  paymentType: text("payment_type").notNull(), // "Nəğd", "Kart", "Kart2Kart", "Köçürmə", "Nisyə"
   creditDueDate: text("credit_due_date"), // Borc son ödəniş tarixi
   entryDate: text("entry_date").notNull(), // ISO timestamp
   paidStatus: text("paid_status").notNull().default("paid"), // "paid" (ödənilib), "credit" (tədarükçüyə borc)
@@ -78,7 +78,7 @@ export const vendorPayments = pgTable("vendor_payments", {
     .references(() => vendors.id, { onDelete: "cascade" }),
   amount: doublePrecision("amount").notNull(),
   paymentDate: text("payment_date").notNull(), // ISO timestamp
-  paymentType: text("payment_type").notNull(), // "Nəğd", "Kart", "Kart2Kart"
+  paymentType: text("payment_type").notNull(), // "Nəğd", "Kart", "Kart2Kart", "Köçürmə"
   notes: text("notes"),
 });
 
@@ -133,7 +133,7 @@ export const salaryPayments = pgTable("salary_payments", {
     .references(() => payroll.id, { onDelete: "cascade" }),
   amount: doublePrecision("amount").notNull(),
   paymentDate: text("payment_date").notNull(), // ISO timestamp
-  paymentType: text("payment_type").notNull(), // "Nəğd", "Kart", "Kart2Kart"
+  paymentType: text("payment_type").notNull(), // "Nəğd", "Kart", "Kart2Kart", "Köçürmə"
   notes: text("notes"),
 });
 
@@ -163,7 +163,7 @@ export const sales = pgTable("sales", {
   }),
   customerName: text("customer_name"), // Snapshotted at sale time
   customerPhone: text("customer_phone"), // Snapshotted at sale time
-  paymentType: text("payment_type").notNull(), // "Nəğd", "Kart", "Kart2Kart", "Nisyə"
+  paymentType: text("payment_type").notNull(), // "Nəğd", "Kart", "Kart2Kart", "Köçürmə", "Nisyə"
   creditDueDate: text("credit_due_date"), // Borcun ödənilməli olduğu son tarix
   notes: text("notes"),
   saleDate: text("sale_date").notNull(), // ISO timestamp

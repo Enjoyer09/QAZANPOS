@@ -1284,6 +1284,7 @@ export default function POS() {
                   <option value="Nəğd">Nəğd</option>
                   <option value="Kart">Kart</option>
                   <option value="Kart2Kart">Kart2Kart</option>
+                  <option value="Köçürmə">Köçürmə</option>
                   {posMode === "sale" && <option value="Nisyə">Nisyə (Borc)</option>}
                 </select>
               </div>
