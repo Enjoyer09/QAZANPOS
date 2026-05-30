@@ -12,6 +12,7 @@ import {
   Receipt,
   UserPlus,
   AlertTriangle,
+  Globe,
 } from "lucide-react";
 import { 
   cacheProducts, 
@@ -35,6 +36,7 @@ interface BasketItem {
   salePrice: number;
   minPrice: number; // Snapshot of lastPurchasePrice
   serialNumbers?: string[];
+  category?: string;
 }
 
 export default function POS() {
@@ -84,6 +86,7 @@ export default function POS() {
   const [paymentType, setPaymentType] = useState("Nəğd");
   const [creditDueDate, setCreditDueDate] = useState("");
   const [notes, setNotes] = useState("");
+  const [salesChannel, setSalesChannel] = useState<string>("Mağaza");
 
   // POS Mode State
   const [posMode, setPosMode] = useState<"sale" | "return">("sale");
@@ -238,6 +241,7 @@ export default function POS() {
           salePrice: prod.lastSalePrice || prod.lastPurchasePrice || 0,
           minPrice: prod.lastPurchasePrice,
           serialNumbers: serialNum ? [serialNum] : [],
+          category: prod.category,
         },
       ]);
     }
@@ -419,6 +423,7 @@ export default function POS() {
           quantity: qty,
           salePrice: prod.lastSalePrice || prod.lastPurchasePrice || 0, // Defaults to last sale price, then purchase price
           minPrice: prod.lastPurchasePrice,
+          category: prod.category,
         },
       ]);
     }
@@ -485,6 +490,23 @@ export default function POS() {
   const totalCost = basket.reduce((sum, item) => sum + item.quantity * item.minPrice, 0);
   const profit = totalAmount - totalCost;
   const isSellingAtLoss = basket.some((item) => item.salePrice < item.minPrice);
+
+  const parsedCommissions = React.useMemo(() => {
+    try {
+      return settings?.marketplaceCommissions ? JSON.parse(settings?.marketplaceCommissions) : {};
+    } catch (e) {
+      return {};
+    }
+  }, [settings?.marketplaceCommissions]);
+
+  const marketplaceFee = React.useMemo(() => {
+    if (salesChannel !== "birmarket.az") return 0;
+    return basket.reduce((sum, item) => {
+      const cat = item.category?.trim() || "";
+      const rate = parsedCommissions[cat] || 0;
+      return sum + (item.quantity * item.salePrice * rate / 100);
+    }, 0);
+  }, [salesChannel, basket, parsedCommissions]);
 
   const isCredit = paymentType === "Nisyə";
 
@@ -733,6 +755,8 @@ export default function POS() {
       totalAmount,
       totalCost,
       offlineId: `ONL-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      salesChannel,
+      marketplaceFee,
       items: basket.map((item) => ({
         productId: item.productId,
         quantity: item.quantity,
@@ -1257,6 +1281,18 @@ export default function POS() {
                   {totalAmount.toFixed(2)} ₼
                 </span>
               </div>
+              {posMode === "sale" && salesChannel === "birmarket.az" && (
+                <>
+                  <div className="flex justify-between text-purple-600 font-bold animate-in fade-in">
+                    <span>birmarket.az Komissiyası</span>
+                    <span className="font-mono">-{marketplaceFee.toFixed(2)} ₼</span>
+                  </div>
+                  <div className="flex justify-between text-gray-900 font-bold border-t border-dashed border-gray-100 pt-1.5 animate-in fade-in">
+                    <span>Bizə Qalan Xalis</span>
+                    <span className="font-mono">{(totalAmount - marketplaceFee).toFixed(2)} ₼</span>
+                  </div>
+                </>
+              )}
               {posMode === "sale" && isAdmin && (
                 <>
                   <div className="flex justify-between">
@@ -1277,6 +1313,21 @@ export default function POS() {
                 </>
               )}
             </div>
+
+            {/* Sales Channel Selector */}
+            {posMode === "sale" && (
+              <div className="space-y-1.5 text-xs font-semibold">
+                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Satış Kanalı 🌐</label>
+                <select
+                  value={salesChannel}
+                  onChange={(e) => setSalesChannel(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none bg-gray-50/50 cursor-pointer focus:ring-1 focus:ring-primary"
+                >
+                  <option value="Mağaza">🏠 Mağaza (Pərakəndə)</option>
+                  <option value="birmarket.az">🌐 birmarket.az (Marketplace)</option>
+                </select>
+              </div>
+            )}
 
             {/* Payment Type */}
             <div className="space-y-4 text-xs font-semibold">

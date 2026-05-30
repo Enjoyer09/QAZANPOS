@@ -19,6 +19,7 @@ import {
   User,
   Send,
   Bell,
+  Globe,
 } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
 import { qzService } from "../lib/qz.ts";
@@ -42,6 +43,7 @@ export default function SettingsPage() {
 
   const [settingsTab, setSettingsTab] = useState("general");
   const [showResetConfirmModal, setShowResetConfirmModal] = useState(false);
+  const [marketplaceCommissions, setMarketplaceCommissions] = useState<Record<string, number>>({});
   const [resetPassword, setResetPassword] = useState("");
   const [isResetting, setIsResetting] = useState(false);
 
@@ -271,6 +273,25 @@ export default function SettingsPage() {
     },
   });
 
+  // Fetch Products for Categories list
+  const { data: productsList = [] } = useQuery<any[]>({
+    queryKey: ["/api/products"],
+    queryFn: async () => {
+      const res = await fetch("/api/products");
+      if (!res.ok) throw new Error();
+      return res.json();
+    },
+  });
+
+  // Extract unique product categories
+  const categories = Array.from(
+    new Set(
+      productsList
+        .map((p: any) => p.category?.trim())
+        .filter((cat): cat is string => !!cat && cat !== "")
+    )
+  ).sort();
+
   // Populate state on load
   useEffect(() => {
     if (settingsData) {
@@ -305,6 +326,16 @@ export default function SettingsPage() {
       setSimplifiedRate("" + (settingsData.simplifiedRate ?? 2));
       setShowTaxOnReceipt(settingsData.showTaxOnReceipt ?? 1);
       setShowTaxOnInvoice(settingsData.showTaxOnInvoice ?? 1);
+
+      // Load Marketplace Commissions settings
+      try {
+        const comms = settingsData.marketplaceCommissions 
+          ? JSON.parse(settingsData.marketplaceCommissions) 
+          : {};
+        setMarketplaceCommissions(comms);
+      } catch (e) {
+        setMarketplaceCommissions({});
+      }
     }
   }, [settingsData]);
 
@@ -584,6 +615,9 @@ export default function SettingsPage() {
       simplifiedRate: parseFloat(simplifiedRate) || 2.0,
       showTaxOnReceipt: parseInt(showTaxOnReceipt as any) ?? 1,
       showTaxOnInvoice: parseInt(showTaxOnInvoice as any) ?? 1,
+
+      // Marketplace commissions
+      marketplaceCommissions: JSON.stringify(marketplaceCommissions),
     };
 
     updateSettingsMutation.mutate(payload);
@@ -825,6 +859,18 @@ export default function SettingsPage() {
         >
           <Sliders className="w-4 h-4" />
           Vergi Ayarları
+        </button>
+        <button
+          type="button"
+          onClick={() => setSettingsTab("channels")}
+          className={`flex items-center gap-2 px-5 py-3 border-b-2 text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+            settingsTab === "channels"
+              ? "border-primary text-primary"
+              : "border-transparent text-gray-400 hover:text-gray-600"
+          }`}
+        >
+          <Globe className="w-4 h-4" />
+          Marketplace Komissiyaları 🌐
         </button>
         <button
           type="button"
@@ -1074,6 +1120,68 @@ export default function SettingsPage() {
                     </label>
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {settingsTab === "channels" && (
+            /* Card 5: Marketplace Channels and Commissions */
+            <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card">
+              <div className="flex items-center gap-2 mb-6 border-b border-gray-100/50 pb-3">
+                <Globe className="w-5 h-5 text-primary" />
+                <h3 className="font-extrabold text-gray-900 text-sm">Satış Kanalları & Marketplace Komissiyaları</h3>
+              </div>
+
+              <div className="space-y-4">
+                <p className="text-xs text-gray-400 leading-relaxed font-semibold">
+                  birmarket.az və digər onlayn satış kanalları üzərindən satılan malların kateqoriyalarına görə xidmət (komissiya) faizlərini dərəcələrlə qeyd edin. POS ekranında bu satış kanalı seçildikdə, sistem komissiya xərclərini avtomatik hesablayıb maliyyə uçotuna yazacaq.
+                </p>
+
+                {categories.length === 0 ? (
+                  <div className="p-8 border border-dashed border-gray-200 rounded-2xl text-center text-xs font-bold text-gray-400">
+                    Sistemdə hələ heç bir kateqoriyalı məhsul tapılmadı. Zəhmət olmasa ilk öncə Məhsullar bölməsindən kateqoriyalı məhsul yaradın.
+                  </div>
+                ) : (
+                  <div className="border border-gray-100 rounded-2xl overflow-hidden shadow-xs">
+                    <table className="w-full text-left text-xs font-semibold">
+                      <thead className="bg-gray-50 border-b border-gray-100 text-[10px] text-gray-400 uppercase tracking-wider">
+                        <tr>
+                          <th className="py-3 px-4">Kateqoriya Adı</th>
+                          <th className="py-3 px-4 text-right w-44">birmarket.az Komissiyası (%)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50 bg-white">
+                        {categories.map((cat) => (
+                          <tr key={cat} className="hover:bg-gray-50/50 transition-all">
+                            <td className="py-4 px-4 text-gray-800 font-bold">{cat}</td>
+                            <td className="py-2 px-4 text-right">
+                              <div className="relative inline-flex items-center w-32 ml-auto">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  step="0.1"
+                                  placeholder="0.0"
+                                  value={marketplaceCommissions[cat] !== undefined ? marketplaceCommissions[cat] : ""}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    const parsed = parseFloat(val);
+                                    setMarketplaceCommissions((prev) => ({
+                                      ...prev,
+                                      [cat]: isNaN(parsed) ? 0 : Math.min(100, Math.max(0, parsed)),
+                                    }));
+                                  }}
+                                  className="w-full pr-8 pl-3 py-2 border border-gray-200 rounded-xl text-right font-bold focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 font-mono"
+                                />
+                                <span className="absolute right-3 text-gray-400 font-bold font-sans">%</span>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1478,7 +1586,7 @@ export default function SettingsPage() {
           </div>
           )}
 
-          {(settingsTab === "general" || settingsTab === "printer") && (
+          {(settingsTab === "general" || settingsTab === "printer" || settingsTab === "tax" || settingsTab === "channels") && (
             /* Save Button */
             <div className="flex justify-end">
               <button

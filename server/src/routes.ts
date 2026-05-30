@@ -1033,7 +1033,7 @@ router.get("/sales", async (req, res) => {
 // Process a POS sale / checkout
 router.post("/sales", async (req, res) => {
   try {
-    const { customerId, paymentType, creditDueDate, notes, items, totalAmount, totalCost, paidAmount, offlineId } = req.body;
+    const { customerId, paymentType, creditDueDate, notes, items, totalAmount, totalCost, paidAmount, offlineId, salesChannel, marketplaceFee } = req.body;
 
     if (!items || items.length === 0 || !paymentType) {
       return res.status(400).json({ message: "Çek məlumatları boş ola bilməz" });
@@ -1098,6 +1098,8 @@ router.post("/sales", async (req, res) => {
           totalCost: parseFloat(totalCost),
           paymentStatus: isCredit ? "credit" : "paid",
           offlineId: offlineId || null,
+          salesChannel: salesChannel || "Mağaza",
+          marketplaceFee: marketplaceFee ? parseFloat(marketplaceFee) : 0,
         })
         .returning();
 
@@ -1143,6 +1145,17 @@ router.post("/sales", async (req, res) => {
           saleId,
           paymentDate: new Date().toISOString(),
           amount: parseFloat(paidAmount),
+        });
+      }
+
+      // If sale has marketplace commission, automatically record a matching platform commission expense!
+      if (marketplaceFee && parseFloat(marketplaceFee) > 0) {
+        await tx.insert(schema.expenses).values({
+          tenantId: req.tenantId,
+          amount: parseFloat(marketplaceFee),
+          category: "Marketplace Komissiyası",
+          description: `birmarket.az satışı üzrə platforma komissiyası (Çek № ${saleId})`,
+          date: new Date().toISOString(),
         });
       }
 

@@ -171,6 +171,8 @@ export const sales = pgTable("sales", {
   totalCost: doublePrecision("total_cost").notNull(), // Satışın Maya dəyəri (calculating total COGS)
   paymentStatus: text("payment_status").notNull().default("paid"), // "paid" (tam ödənilib), "credit" (nisyə borc)
   offlineId: text("offline_id"),
+  salesChannel: text("sales_channel").default("Mağaza").notNull(),
+  marketplaceFee: doublePrecision("marketplace_fee").default(0.0).notNull(),
 }, (table) => ({
   salesTenantOfflineIdIdx: uniqueIndex("sales_tenant_offline_id_idx").on(table.tenantId, table.offlineId)
 }));
@@ -255,6 +257,7 @@ export const settings = pgTable("settings", {
   simplifiedRate: doublePrecision("simplified_rate").default(2.0),
   showTaxOnReceipt: integer("show_tax_on_receipt").default(1),
   showTaxOnInvoice: integer("show_tax_on_invoice").default(1),
+  marketplaceCommissions: text("marketplace_commissions"),
 });
 
 // 9. Users Table for Authentication & Authorization
