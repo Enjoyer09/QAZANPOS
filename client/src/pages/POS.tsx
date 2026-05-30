@@ -25,6 +25,7 @@ import {
 } from "../lib/offlineSync.ts";
 import { useToast } from "../components/Toast.tsx";
 import { printReceipt } from "../components/ReceiptPrint.tsx";
+import { sanitizeQtyInput } from "../lib/utils.ts";
 
 interface BasketItem {
   productId: number;
@@ -980,7 +981,10 @@ export default function POS() {
                   step="0.01"
                   placeholder="Miqdar"
                   value={selectedQuantity}
-                  onChange={(e) => setSelectedQuantity(e.target.value)}
+                  onChange={(e) => {
+                    const sanitized = sanitizeQtyInput(e.target.value);
+                    setSelectedQuantity(sanitized);
+                  }}
                   className={`w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none bg-gray-50/50 focus:ring-1 ${posMode === "return" ? "focus:ring-amber-500" : "focus:ring-primary"}`}
                 />
               </div>
@@ -1062,7 +1066,11 @@ export default function POS() {
                               min="0.01"
                               step="0.01"
                               value={item.quantity}
-                              onChange={(e) => handleUpdateBasketItem(item.productId, "quantity", e.target.value)}
+                              onChange={(e) => {
+                                const sanitized = sanitizeQtyInput(e.target.value);
+                                e.target.value = sanitized;
+                                handleUpdateBasketItem(item.productId, "quantity", sanitized);
+                              }}
                               className={`w-16 px-2 py-1 border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-1 ${posMode === "return" ? "focus:ring-amber-500" : "focus:ring-primary"} ${item.serialNumbers && item.serialNumbers.length > 0 ? "bg-gray-100 cursor-not-allowed opacity-80" : ""}`}
                               readOnly={item.serialNumbers && item.serialNumbers.length > 0}
                               title={item.serialNumbers && item.serialNumbers.length > 0 ? "Serial nömrəli məhsulun miqdarı skan edilmiş IMEIlərin sayı ilə təyin edilir" : ""}

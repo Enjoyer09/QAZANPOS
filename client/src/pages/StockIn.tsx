@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { ArrowLeft, PlusCircle, CheckCircle, Info } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
+import { sanitizeQtyInput } from "../lib/utils.ts";
 
 const emptyEntry = {
   productId: "",
@@ -213,7 +214,10 @@ export default function StockIn() {
                   step="0.01"
                   placeholder="0.00"
                   value={formData.quantity}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, quantity: e.target.value }))}
+                  onChange={(e) => {
+                    const sanitized = sanitizeQtyInput(e.target.value);
+                    setFormData((prev) => ({ ...prev, quantity: sanitized }));
+                  }}
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50"
                   required
                 />
