@@ -108,6 +108,11 @@ export default function Payroll() {
   // Fetch employees
   const { data: employees = [], isLoading: isEmpLoading } = useQuery<Employee[]>({
     queryKey: ["/api/employees"],
+    queryFn: async () => {
+      const res = await fetch("/api/employees");
+      if (!res.ok) throw new Error("Əməkdaşları gətirmək mümkün olmadı");
+      return res.json();
+    },
   });
 
   // Fetch monthly payroll sheets
@@ -123,6 +128,11 @@ export default function Payroll() {
   // Fetch payment disbursements logs
   const { data: activeSalaryPayments = [] } = useQuery<SalaryPayment[]>({
     queryKey: [`/api/payroll/${selectedPayroll?.id}/payments`],
+    queryFn: async () => {
+      const res = await fetch(`/api/payroll/${selectedPayroll?.id}/payments`);
+      if (!res.ok) throw new Error("Əməkhaqqı ödənişlərini gətirmək mümkün olmadı");
+      return res.json();
+    },
     enabled: !!selectedPayroll,
   });
 
