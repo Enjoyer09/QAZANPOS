@@ -930,7 +930,30 @@ export default function POS() {
               <div className="flex-1 w-full">
                 <select
                   value={selectedProductId}
-                  onChange={(e) => setSelectedProductId(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedProductId(val);
+                    if (val) {
+                      const prod = sellableProducts.find((p) => p.productId === parseInt(val));
+                      if (prod) {
+                        if (prod.trackingType === "serialized") {
+                          toast({
+                            title: "Diqqət!",
+                            description: "Serial nömrəli (IMEI) məhsulları lütfən yuxarıdakı 'Sürətli Skan' bölməsindən birbaşa skan edərək əlavə edin.",
+                            variant: "destructive"
+                          });
+                        } else {
+                          addProductToBasket(prod);
+                          setSelectedProductId(""); // Reset select so it can be selected again
+                          toast({
+                            title: "Əlavə edildi!",
+                            description: `"${prod.productName}" səbətə əlavə olundu.`,
+                            variant: "success"
+                          });
+                        }
+                      }
+                    }
+                  }}
                   className={`w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none bg-gray-50/50 cursor-pointer focus:ring-1 ${posMode === "return" ? "focus:ring-amber-500" : "focus:ring-primary"}`}
                 >
                   <option value="">
