@@ -23,6 +23,7 @@ import {
   Truck,
   UserCheck,
   ChevronDown,
+  HelpCircle,
 } from "lucide-react";
 
 // Reusable components
@@ -42,6 +43,7 @@ import Customers from "./pages/Customers.tsx";
 import Debts from "./pages/Debts.tsx";
 import Expenses from "./pages/Expenses.tsx";
 import SettingsPage from "./pages/Settings.tsx";
+import Help from "./pages/Help.tsx";
 import Login from "./pages/Login.tsx";
 import Logs from "./pages/Logs.tsx";
 import SuperDashboard from "./pages/SuperDashboard.tsx";
@@ -293,6 +295,7 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
             ...(isAdmin ? [{ href: "/", label: "Statistika Paneli", icon: LayoutDashboard }] : []),
             ...(isAdmin ? [{ href: "/loqlar", label: "Sistem Loqları", icon: Activity }] : []),
             { href: "/ayarlar", label: "Sistem Ayarları", icon: SettingsIcon },
+            { href: "/yardim", label: "Yardım & Təlimat 📘", icon: HelpCircle },
           ]
         }
       ];
@@ -869,6 +872,7 @@ function MainRoutes({ user, onLogout }: { user: any; onLogout: () => void }) {
           {isAdmin && <Route path="/xercler" component={Expenses} />}
           {isAdmin && <Route path="/loqlar" component={Logs} />}
           <Route path="/ayarlar" component={SettingsPage} />
+          <Route path="/yardim" component={Help} />
           <Route>
             <div className="flex flex-col items-center justify-center py-20">
               <h1 className="text-6xl font-extrabold text-primary">403</h1>
