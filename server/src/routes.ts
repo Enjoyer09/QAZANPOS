@@ -1015,6 +1015,12 @@ router.get("/sales", async (req, res) => {
       conditions = and(conditions, lte(schema.sales.saleDate, `${to}T23:59:59.999Z`)) as any;
     }
 
+    const role = req.headers["x-user-role"] as string;
+    const username = req.headers["x-user-username"] as string;
+    if (role !== "Admin" && username) {
+      conditions = and(conditions, eq(schema.sales.sellerName, username)) as any;
+    }
+
     const list = await db.query.sales.findMany({
       where: conditions,
       with: { 
@@ -1080,6 +1086,8 @@ router.post("/sales", async (req, res) => {
       }
     }
 
+    const sellerName = (req.headers["x-user-username"] as string) || (req.headers["x-user-role"] === "Admin" ? "admin" : "satici") || "Sistem";
+
     // Execute database operations in a transaction
     const saleResult = await db.transaction(async (tx) => {
       // Insert sale
@@ -1100,6 +1108,7 @@ router.post("/sales", async (req, res) => {
           offlineId: offlineId || null,
           salesChannel: salesChannel || "Mağaza",
           marketplaceFee: marketplaceFee ? parseFloat(marketplaceFee) : 0,
+          sellerName,
         })
         .returning();
 
@@ -1192,6 +1201,13 @@ router.get("/sales/:id", async (req, res) => {
     });
 
     if (!sale) return res.status(404).json({ message: "Çek tapılmadı" });
+
+    const role = req.headers["x-user-role"] as string;
+    const username = req.headers["x-user-username"] as string;
+    if (role !== "Admin" && username && sale.sellerName !== username) {
+      return res.status(403).json({ message: "Bu satış məlumatına baxmaq üçün səlahiyyətiniz yoxdur" });
+    }
+
     res.json(sale);
   } catch (error) {
     res.status(500).json({ message: "Çek məlumatlarını gətirərkən xəta baş verdi" });
@@ -1208,6 +1224,12 @@ router.patch("/sales/:id/pay-credit", async (req, res) => {
     });
 
     if (!sale) return res.status(404).json({ message: "Satış tapılmadı" });
+
+    const role = req.headers["x-user-role"] as string;
+    const username = req.headers["x-user-username"] as string;
+    if (role !== "Admin" && username && sale.sellerName !== username) {
+      return res.status(403).json({ message: "Bu satışın borcunu ödəmək üçün səlahiyyətiniz yoxdur" });
+    }
 
     // Calculate total already paid
     const alreadyPaid = sale.payments.reduce((acc, p) => acc + p.amount, 0);
@@ -1257,6 +1279,12 @@ router.patch("/sales/:id/add-payment", async (req, res) => {
     });
 
     if (!sale) return res.status(404).json({ message: "Satış tapılmadı" });
+
+    const role = req.headers["x-user-role"] as string;
+    const username = req.headers["x-user-username"] as string;
+    if (role !== "Admin" && username && sale.sellerName !== username) {
+      return res.status(403).json({ message: "Bu satışın borcunu ödəmək üçün səlahiyyətiniz yoxdur" });
+    }
 
     // Insert payment
     await db.insert(schema.creditPayments).values({

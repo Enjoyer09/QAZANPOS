@@ -173,6 +173,7 @@ export const sales = pgTable("sales", {
   offlineId: text("offline_id"),
   salesChannel: text("sales_channel").default("Mağaza").notNull(),
   marketplaceFee: doublePrecision("marketplace_fee").default(0.0).notNull(),
+  sellerName: text("seller_name").default("Sistem"),
 }, (table) => ({
   salesTenantOfflineIdIdx: uniqueIndex("sales_tenant_offline_id_idx").on(table.tenantId, table.offlineId)
 }));

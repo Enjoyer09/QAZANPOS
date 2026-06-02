@@ -110,22 +110,33 @@ export default function Help() {
           <p>
             Əməkdaşlarınıza ay ərzində verilən maaş avanslarını, cari borc qalıqlarını və ödəniş tarixlərini mərkəzləşdirilmiş şəkildə izləyə bilərsiniz.
           </p>
-          <h4 className="font-extrabold text-gray-900 text-xs mt-2 uppercase tracking-wider">Avansın Verilməsi və Uçotu:</h4>
+          
+          <div className="bg-amber-50/60 border border-amber-100 rounded-xl p-4 space-y-2">
+            <span className="text-[10px] font-black text-amber-800 uppercase block tracking-wider">💡 Praktik Nümunə (800 ₼ Maaş + Həftəlik 100 ₼ Avans):</span>
+            <p className="text-xs text-amber-950 font-medium leading-relaxed">
+              Təsəvvür edək ki, <b>800 AZN</b> maaş alan işçiyə hər həftə <b>100 AZN</b> avans verirsiniz, ay sonunda isə qalan <b>400 AZN</b> yekun məbləği ödəyirsiniz. Sistemdə bunu etmək çox asandır:
+            </p>
+            <ul className="list-disc pl-4 text-[11px] text-amber-900 font-semibold space-y-1">
+              <li>Maaş hesabatını çıxardıqdan sonra işçinin sətirində <b>"Ödə 💸"</b> düyməsini sıxın.</li>
+              <li>Açılan pəncərədə məbləğə <b>100</b> yazıb, <b>"Avans (Məxaric) 💸"</b> sürətli qeydinə klikləyin və ödənişi təsdiqləyin. İşçinin qalıq borcu 700 ₼ olacaq və kassa balansı azalacaq.</li>
+              <li>Hər həftə bu prosesi təkrarlayın. 4 həftənin sonunda işçinin ödənilmiş cəmi 400 ₼, qalıq maaş öhdəliyi isə 400 ₼ olacaq.</li>
+              <li>Ay sonunda yenidən <b>"Ödə 💸"</b> düyməsinə kliklədikdə, sistem avtomatik olaraq qalıq məbləği (<b>400.00 ₼</b>) hazır gətirəcək. <b>"Maaş (Yekun) 💵"</b> qeydini seçib ödənişi təsdiqləyin və işçinin maaş kartını tam bağlayın (status <b>Ödənilib ✅</b> olacaq).</li>
+            </ul>
+          </div>
+
+          <h4 className="font-extrabold text-gray-900 text-xs mt-3 uppercase tracking-wider">Ümumi Avansın Verilməsi və Uçotu Addımları:</h4>
           <ol className="list-decimal pl-4 space-y-2 text-xs font-semibold">
             <li>
-              <b>Əməkdaş Seçin:</b> <a href="/hr" className="text-primary hover:underline font-bold">HR & Əməkhaqqı</a> səhifəsinə daxil olun. <b>"Maaş Hesabatı"</b> tabında müvafiq ay üçün siyahıdan işçinin <b>adı üzərinə klikləyin</b>.
+              <b>Əməkdaş Seçin:</b> <a href="/hr" className="text-primary hover:underline font-bold">HR & Əməkhaqqı</a> səhifəsinə daxil olun. <b>"Maaş Hesabatı"</b> tabında müvafiq ay üçün siyahıdan işçinin sətirində yerləşən yaşıl <b>"Ödə 💸"</b> düyməsinə klikləyin.
             </li>
             <li>
-              <b>Ödəniş Pəncərəsi:</b> Açılan əməkdaş kartında <b>"Ödəniş Et 💸"</b> düyməsini sıxın.
+              <b>Tez Qeyd (Avans):</b> Ödəniş modalında sürətli <b>"Avans (Məxaric) 💸"</b> düyməsinə klikləyin. Sistem avtomatik olaraq qeyd hissəsinə <i>"Avans"</i> sözünü yazacaq.
             </li>
             <li>
-              <b>Tez Qeyd (Avans):</b> Ödəniş modalında sürətli **"Avans (Məxaric) 💸"** düyməsinə klikləyin. Sistem avtomatik olaraq qeyd hissəsinə <i>"Avans"</i> yazacaq.
+              Məbləği və ödəniş üsulunu (Nağd, Kart, Köçürmə) daxil edib təsdiqləyin.
             </li>
             <li>
-              Məbləği və ödəniş üsulunu (Nağd, Kart, Köçürmə) yazıb təsdiqləyin.
-            </li>
-            <li>
-              <b>Avtomatik Hesablama:</b> Avans ödənilən kimi həmin işçinin aylıq maaş qalığı (borc) dərhal azalır və kassadan məxaric kimi qeydə alınır. Sətirdəki <b>"Tarixçə 📋"</b> düyməsindən işçinin aldığı bütün avans və yekun maaş tarixlərini şəffaf görə bilərsiniz.
+              <b>Şəffaf Tarixçə:</b> İşçinin adının yanındakı <b>"Tarixçə (History 🔍)"</b> düyməsindən onun cari ay üzrə aldığı bütün avans və yekun maaş tarixçəsini anında görə bilərsiniz.
             </li>
           </ol>
         </div>

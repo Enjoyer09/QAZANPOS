@@ -365,6 +365,7 @@ export default function Invoice({ params }: InvoiceProps) {
                 Ödəniş detalları
               </span>
               <p className="font-semibold text-gray-800">Üsul: {invoice.paymentType}</p>
+              <p className="mt-1 text-gray-500 font-bold">Satıcı: {invoice.sellerName || "Sistem"}</p>
               <p className="mt-1">
                 Status:{" "}
                 <span className={`font-bold ${invoice.paymentStatus === "paid" ? "text-green-600" : "text-red-500"}`}>

@@ -31,6 +31,7 @@ interface Sale {
   totalAmount: number;
   totalCost: number;
   paymentStatus: string;
+  sellerName?: string | null;
   items?: any[];
 }
 
@@ -100,7 +101,8 @@ export default function SalesHistory() {
       (sale.customerName && sale.customerName.toLowerCase().includes(q)) ||
       (sale.customerPhone && sale.customerPhone.toLowerCase().includes(q)) ||
       (sale.paymentType && sale.paymentType.toLowerCase().includes(q)) ||
-      (sale.notes && sale.notes.toLowerCase().includes(q))
+      (sale.notes && sale.notes.toLowerCase().includes(q)) ||
+      (sale.sellerName && sale.sellerName.toLowerCase().includes(q))
     );
   });
 
@@ -307,6 +309,7 @@ export default function SalesHistory() {
                     <th className="p-4 pl-6 text-center w-16">Qaimə №</th>
                     <th className="p-4">Müştəri</th>
                     <th className="p-4">Tarix</th>
+                    <th className="p-4 text-center">Satıcı</th>
                     <th className="p-4 text-center">Ödəniş Üsulu</th>
                     <th className="p-4 text-right">Məbləğ</th>
                     {isAdmin && <th className="p-4 text-right">Mənfəət</th>}
@@ -317,13 +320,13 @@ export default function SalesHistory() {
                 <tbody>
                   {isLoading ? (
                     <tr>
-                      <td colSpan={isAdmin ? 8 : 7} className="p-10 text-center text-xs text-gray-400">
+                      <td colSpan={isAdmin ? 9 : 8} className="p-10 text-center text-xs text-gray-400">
                         Yüklənir...
                       </td>
                     </tr>
                   ) : filteredSales.length === 0 ? (
                     <tr>
-                      <td colSpan={isAdmin ? 8 : 7} className="p-16 text-center text-xs text-gray-400">
+                      <td colSpan={isAdmin ? 9 : 8} className="p-16 text-center text-xs text-gray-400">
                         {searchQuery ? "Axtarışa uyğun satış qaiməsi tapılmadı." : "Heç bir satış tapılmadı."}
                       </td>
                     </tr>
@@ -353,6 +356,11 @@ export default function SalesHistory() {
                           <td className="p-4 text-gray-500 font-medium">
                             {new Date(sale.saleDate).toLocaleDateString("az-AZ")} |{" "}
                             {new Date(sale.saleDate).toLocaleTimeString("az-AZ", { hour: "2-digit", minute: "2-digit" })}
+                          </td>
+                          <td className="p-4 text-center">
+                            <span className="px-2.5 py-1 bg-gray-100 rounded-lg text-gray-700 text-[10.5px] font-black">
+                              {sale.sellerName || "Sistem"}
+                            </span>
                           </td>
                           <td className="p-4 text-center">
                             <span className={`px-2 py-0.5 border rounded-full text-[9px] font-bold ${paymentBadges[sale.paymentType] || "bg-gray-50 text-gray-500"}`}>
