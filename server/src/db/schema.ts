@@ -259,6 +259,11 @@ export const settings = pgTable("settings", {
   showTaxOnReceipt: integer("show_tax_on_receipt").default(1),
   showTaxOnInvoice: integer("show_tax_on_invoice").default(1),
   marketplaceCommissions: text("marketplace_commissions"),
+  staffCanViewSalesHistory: integer("staff_can_view_sales_history").notNull().default(1),
+  staffCanViewStock: integer("staff_can_view_stock").notNull().default(1),
+  staffCanViewCustomers: integer("staff_can_view_customers").notNull().default(1),
+  staffCanViewVendors: integer("staff_can_view_vendors").notNull().default(1),
+  staffCanViewExpenses: integer("staff_can_view_expenses").notNull().default(1),
 });
 
 // 9. Users Table for Authentication & Authorization

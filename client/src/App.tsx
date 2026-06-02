@@ -231,7 +231,7 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
   const isAdmin = user?.role === "Admin";
 
   // Logical Navigation Groups for structured, unbloated menus
-  const navGroups = isSuperTenant
+  const baseGroups = isSuperTenant
     ? [
         {
           label: "SaaS Panel",
@@ -260,14 +260,18 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
           label: "Tarixçə",
           icon: History,
           items: [
-            { href: "/satislar", label: "Satış Tarixçəsi", icon: History },
+            ...((isAdmin || settings?.staffCanViewSalesHistory !== 0) ? [
+              { href: "/satislar", label: "Satış Tarixçəsi", icon: History }
+            ] : [])
           ]
         },
         {
           label: "Anbar",
           icon: Boxes,
           items: [
-            { href: "/anbar", label: "Məhsul Qalıqları", icon: Boxes },
+            ...((isAdmin || settings?.staffCanViewStock !== 0) ? [
+              { href: "/anbar", label: "Məhsul Qalıqları", icon: Boxes }
+            ] : []),
             ...(isAdmin ? [
               { href: "/anbar/daxil", label: "Yeni Mədaxil", icon: PlusCircle },
               { href: "/mehsullar", label: "Məhsul Kataloqu", icon: FolderKanban },
@@ -285,7 +289,9 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
               { href: "/xercler", label: "Xərclər Modulu", icon: TrendingDown },
               { href: "/hr", label: "HR & Əməkhaqqı", icon: UserCheck }
             ] : []),
-            { href: "/musteriler", label: "Müştəri Bazası", icon: Users },
+            ...((isAdmin || settings?.staffCanViewCustomers !== 0) ? [
+              { href: "/musteriler", label: "Müştəri Bazası", icon: Users }
+            ] : [])
           ]
         },
         {
@@ -299,6 +305,8 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
           ]
         }
       ];
+
+  const navGroups = baseGroups.filter((group) => group.items.length > 0);
 
   return (
     <div className="relative min-h-screen w-screen flex flex-col overflow-x-hidden pb-12 select-none">

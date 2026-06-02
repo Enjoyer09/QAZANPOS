@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2, ArrowRight, TrendingDown, ClipboardList } from "lucide-react";
+import { Plus, Trash2, ArrowRight, TrendingDown, ClipboardList, Lock } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
 
 interface Expense {
@@ -24,6 +24,24 @@ const categoryBadges: Record<string, string> = {
 export default function Expenses() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  const user = (() => {
+    try {
+      const userStr = localStorage.getItem("qazanpos_user");
+      return userStr ? JSON.parse(userStr) : null;
+    } catch (e) {
+      return null;
+    }
+  })();
+
+  const { data: settings } = useQuery<any>({
+    queryKey: ["/api/settings"],
+    queryFn: async () => {
+      const res = await fetch("/api/settings");
+      if (!res.ok) throw new Error();
+      return res.json();
+    },
+  });
 
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -124,6 +142,28 @@ export default function Expenses() {
   };
 
   const totalExpenses = filteredList ? filteredList.reduce((sum, e) => sum + e.amount, 0) : 0;
+
+  if (user?.role !== "Admin" && settings?.staffCanViewExpenses === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[70vh] px-4 animate-in fade-in-0 duration-300">
+        <div className="bg-white border border-gray-100 p-8 rounded-2xl shadow-xl max-w-md w-full text-center space-y-6 glass-card relative overflow-hidden">
+          <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-red-500 to-amber-500"></div>
+          <div className="size-16 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto shadow-sm">
+            <Lock className="w-8 h-8" />
+          </div>
+          <div className="space-y-2">
+            <h3 className="text-lg font-black text-gray-900">Xərclər Moduluna Giriş Məhdudlaşdırılıb 🔒</h3>
+            <p className="text-xs text-gray-500 font-semibold leading-relaxed">
+              Bu bölməyə giriş mağaza administratoru tərəfindən məhdudlaşdırılmışdır. Səlahiyyət almaq üçün administratora müraciət edin.
+            </p>
+          </div>
+          <div className="border-t border-gray-100 pt-4">
+            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">QAZANPOS TƏHLÜKƏSİZLİK SİSTEMİ</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in-0">

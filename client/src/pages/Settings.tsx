@@ -86,6 +86,14 @@ export default function SettingsPage() {
   const [showReceiptFooter, setShowReceiptFooter] = useState(1);
   const [showPaymentDetails, setShowPaymentDetails] = useState(1);
 
+  // Staff Permissions State
+  const [staffCanViewSalesHistory, setStaffCanViewSalesHistory] = useState(1);
+  const [staffCanViewStock, setStaffCanViewStock] = useState(1);
+  const [staffCanViewCustomers, setStaffCanViewCustomers] = useState(1);
+  const [staffCanViewVendors, setStaffCanViewVendors] = useState(1);
+  const [staffCanViewExpenses, setStaffCanViewExpenses] = useState(1);
+
+
   // QZ Tray local state
   const [qzConnected, setQzConnected] = useState<"LOADING" | "CONNECTED" | "OFFLINE">("LOADING");
   const [availablePrinters, setAvailablePrinters] = useState<string[]>([]);
@@ -336,6 +344,13 @@ export default function SettingsPage() {
       } catch (e) {
         setMarketplaceCommissions({});
       }
+
+      // Load Staff Permissions settings
+      setStaffCanViewSalesHistory(settingsData.staffCanViewSalesHistory ?? 1);
+      setStaffCanViewStock(settingsData.staffCanViewStock ?? 1);
+      setStaffCanViewCustomers(settingsData.staffCanViewCustomers ?? 1);
+      setStaffCanViewVendors(settingsData.staffCanViewVendors ?? 1);
+      setStaffCanViewExpenses(settingsData.staffCanViewExpenses ?? 1);
     }
   }, [settingsData]);
 
@@ -618,6 +633,60 @@ export default function SettingsPage() {
 
       // Marketplace commissions
       marketplaceCommissions: JSON.stringify(marketplaceCommissions),
+
+      // Staff Permissions
+      staffCanViewSalesHistory: parseInt(staffCanViewSalesHistory as any) ?? 1,
+      staffCanViewStock: parseInt(staffCanViewStock as any) ?? 1,
+      staffCanViewCustomers: parseInt(staffCanViewCustomers as any) ?? 1,
+      staffCanViewVendors: parseInt(staffCanViewVendors as any) ?? 1,
+      staffCanViewExpenses: parseInt(staffCanViewExpenses as any) ?? 1,
+    };
+
+    updateSettingsMutation.mutate(payload);
+  };
+
+  const handleSaveStaffPermissions = () => {
+    const payload = {
+      storeName: storeName.trim(),
+      phone: phone.trim() || null,
+      address: address.trim() || null,
+      invoiceFooter: invoiceFooter.trim() || null,
+      lowStockAlertCount: parseInt(lowStockAlertCount) || 5,
+      defaultCreditDays: parseInt(defaultCreditDays) || 30,
+      
+      receiptWidth,
+      showBarcode,
+      showCustomerInfo,
+      receiptHeader: receiptHeader.trim() || null,
+      receiptFooter: receiptFooter.trim() || null,
+      showStorePhone,
+      showStoreAddress,
+      showReceiptHeader,
+      showReceiptFooter,
+      showPaymentDetails,
+      telegramBotToken: telegramBotToken.trim() || null,
+      telegramChatId: telegramChatId.trim() || null,
+      telegramNotificationsEnabled,
+      backupTime,
+      telegramBackupEnabled,
+
+      // Azerbaijan Tax fields
+      voen: voen.trim() || null,
+      taxStatus,
+      edvRate: parseFloat(edvRate) || 18.0,
+      simplifiedRate: parseFloat(simplifiedRate) || 2.0,
+      showTaxOnReceipt: parseInt(showTaxOnReceipt as any) ?? 1,
+      showTaxOnInvoice: parseInt(showTaxOnInvoice as any) ?? 1,
+
+      // Marketplace commissions
+      marketplaceCommissions: JSON.stringify(marketplaceCommissions),
+
+      // Staff Permissions
+      staffCanViewSalesHistory: parseInt(staffCanViewSalesHistory as any) ?? 1,
+      staffCanViewStock: parseInt(staffCanViewStock as any) ?? 1,
+      staffCanViewCustomers: parseInt(staffCanViewCustomers as any) ?? 1,
+      staffCanViewVendors: parseInt(staffCanViewVendors as any) ?? 1,
+      staffCanViewExpenses: parseInt(staffCanViewExpenses as any) ?? 1,
     };
 
     updateSettingsMutation.mutate(payload);
@@ -1748,7 +1817,8 @@ export default function SettingsPage() {
       )}
 
       {settingsTab === "security" && (
-        <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6 items-start animate-in fade-in-0 duration-300">
+        <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in-0 duration-300">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
           {/* User Management Card */}
           <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card space-y-5">
             <div className="flex items-center gap-2 mb-2 border-b border-gray-100/50 pb-3">
@@ -1902,6 +1972,101 @@ export default function SettingsPage() {
                   </button>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+
+          {/* Satıcı Səlahiyyətləri Modulu */}
+          <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card space-y-5">
+            <div className="flex items-center justify-between mb-2 border-b border-gray-100/50 pb-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-primary" />
+                <div>
+                  <h3 className="font-extrabold text-gray-900 text-sm">Satıcı Səlahiyyətlərinin İdarə Edilməsi</h3>
+                  <p className="text-[10px] text-gray-400 font-medium mt-0.5">Satıcıların (Staff) sistemdə hansı modulları görüb-görməyəcəyini tənzimləyin</p>
+                </div>
+              </div>
+              <span className="text-[9px] bg-primary/10 text-primary border border-primary/20 px-2 py-1 rounded-md font-extrabold uppercase tracking-wider">
+                Admin Nəzarəti 🔒
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex items-start justify-between p-4 bg-gray-50/50 border border-gray-100 rounded-xl text-xs hover:bg-gray-50 transition-all gap-4">
+                <div className="space-y-1">
+                  <p className="font-bold text-gray-800">Satış Tarixçəsi</p>
+                  <p className="text-[10px] text-gray-400 font-medium">Satıcıların satış siyahısını, çekləri və kassa dövriyyəsini görməsinə icazə ver</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={staffCanViewSalesHistory === 1}
+                  onChange={(e) => setStaffCanViewSalesHistory(e.target.checked ? 1 : 0)}
+                  className="size-5 text-primary border-gray-300 rounded focus:ring-primary cursor-pointer mt-1"
+                />
+              </div>
+
+              <div className="flex items-start justify-between p-4 bg-gray-50/50 border border-gray-100 rounded-xl text-xs hover:bg-gray-50 transition-all gap-4">
+                <div className="space-y-1">
+                  <p className="font-bold text-gray-800">Anbar Qalıqları & Məhsullar</p>
+                  <p className="text-[10px] text-gray-400 font-medium">Satıcıların əsas anbar səhifəsinə və mədaxil tarixinə girişinə icazə ver (POS terminalda məhsul axtarışı açıq qalacaq)</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={staffCanViewStock === 1}
+                  onChange={(e) => setStaffCanViewStock(e.target.checked ? 1 : 0)}
+                  className="size-5 text-primary border-gray-300 rounded focus:ring-primary cursor-pointer mt-1"
+                />
+              </div>
+
+              <div className="flex items-start justify-between p-4 bg-gray-50/50 border border-gray-100 rounded-xl text-xs hover:bg-gray-50 transition-all gap-4">
+                <div className="space-y-1">
+                  <p className="font-bold text-gray-800">Müştəri Reyestri</p>
+                  <p className="text-[10px] text-gray-400 font-medium">Satıcıların müştəri bazasını idarə etməsinə icazə ver (POS-da satış üçün müştəri seçimi yenə də mümkün olacaq)</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={staffCanViewCustomers === 1}
+                  onChange={(e) => setStaffCanViewCustomers(e.target.checked ? 1 : 0)}
+                  className="size-5 text-primary border-gray-300 rounded focus:ring-primary cursor-pointer mt-1"
+                />
+              </div>
+
+              <div className="flex items-start justify-between p-4 bg-gray-50/50 border border-gray-100 rounded-xl text-xs hover:bg-gray-50 transition-all gap-4">
+                <div className="space-y-1">
+                  <p className="font-bold text-gray-800">Tədarükçü Reyestri</p>
+                  <p className="text-[10px] text-gray-400 font-medium">Satıcıların topdan tədarükçüləri və topdan borc uçotunu görməsinə və idarə etməsinə icazə ver</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={staffCanViewVendors === 1}
+                  onChange={(e) => setStaffCanViewVendors(e.target.checked ? 1 : 0)}
+                  className="size-5 text-primary border-gray-300 rounded focus:ring-primary cursor-pointer mt-1"
+                />
+              </div>
+
+              <div className="flex items-start justify-between p-4 bg-gray-50/50 border border-gray-100 rounded-xl text-xs hover:bg-gray-50 transition-all gap-4 md:col-span-2">
+                <div className="space-y-1">
+                  <p className="font-bold text-gray-800">Xərclər Modulu</p>
+                  <p className="text-[10px] text-gray-400 font-medium">Satıcıların arenda, maaş, bonus və digər xərcləri qeyd etməsinə və görməsinə icazə ver</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={staffCanViewExpenses === 1}
+                  onChange={(e) => setStaffCanViewExpenses(e.target.checked ? 1 : 0)}
+                  className="size-5 text-primary border-gray-300 rounded focus:ring-primary cursor-pointer mt-1"
+                />
+              </div>
+            </div>
+
+            <div className="border-t border-gray-100/50 pt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={handleSaveStaffPermissions}
+                disabled={updateSettingsMutation.isPending}
+                className="px-6 py-2.5 bg-primary text-white font-extrabold rounded-xl hover:bg-primary/90 cursor-pointer shadow-md shadow-primary/10 transition-all text-xs flex items-center gap-2"
+              >
+                {updateSettingsMutation.isPending ? "Yadda saxlanılır..." : "Səlahiyyətləri Yadda Saxla 💾"}
+              </button>
             </div>
           </div>
         </div>
