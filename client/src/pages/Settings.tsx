@@ -92,6 +92,7 @@ export default function SettingsPage() {
   const [staffCanViewCustomers, setStaffCanViewCustomers] = useState(1);
   const [staffCanViewVendors, setStaffCanViewVendors] = useState(1);
   const [staffCanViewExpenses, setStaffCanViewExpenses] = useState(1);
+  const [selectedPermissionsUserId, setSelectedPermissionsUserId] = useState<number | "">("");
 
 
   // QZ Tray local state
@@ -345,14 +346,32 @@ export default function SettingsPage() {
         setMarketplaceCommissions({});
       }
 
-      // Load Staff Permissions settings
-      setStaffCanViewSalesHistory(settingsData.staffCanViewSalesHistory ?? 1);
-      setStaffCanViewStock(settingsData.staffCanViewStock ?? 1);
-      setStaffCanViewCustomers(settingsData.staffCanViewCustomers ?? 1);
-      setStaffCanViewVendors(settingsData.staffCanViewVendors ?? 1);
-      setStaffCanViewExpenses(settingsData.staffCanViewExpenses ?? 1);
     }
   }, [settingsData]);
+
+  // Set default selected user for permissions configuration
+  useEffect(() => {
+    if (usersList && usersList.length > 0 && selectedPermissionsUserId === "") {
+      const firstStaff = usersList.find((u) => u.role === "Staff") || usersList[0];
+      if (firstStaff) {
+        setSelectedPermissionsUserId(firstStaff.id);
+      }
+    }
+  }, [usersList]);
+
+  // Update permission states when selected user changes
+  useEffect(() => {
+    if (selectedPermissionsUserId && usersList) {
+      const targetUser = usersList.find((u) => u.id === selectedPermissionsUserId);
+      if (targetUser) {
+        setStaffCanViewSalesHistory(targetUser.staffCanViewSalesHistory ?? 1);
+        setStaffCanViewStock(targetUser.staffCanViewStock ?? 1);
+        setStaffCanViewCustomers(targetUser.staffCanViewCustomers ?? 1);
+        setStaffCanViewVendors(targetUser.staffCanViewVendors ?? 1);
+        setStaffCanViewExpenses(targetUser.staffCanViewExpenses ?? 1);
+      }
+    }
+  }, [selectedPermissionsUserId, usersList]);
 
   // Handle QZ Tray WebSocket handshake
   useEffect(() => {
@@ -516,6 +535,37 @@ export default function SettingsPage() {
     },
   });
 
+  const updatePermissionsMutation = useMutation({
+    mutationFn: async ({ id, permissions }: { id: number; permissions: any }) => {
+      const res = await fetch(`/api/users/${id}/permissions`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(permissions),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Səlahiyyətləri yeniləmək mümkün olmadı");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      refetchUsers();
+      queryClient.invalidateQueries({ queryKey: ["/api/users/me"] });
+      toast({
+        title: "Səlahiyyətlər yeniləndi",
+        description: "İstifadəçinin fərdi səlahiyyətləri uğurla yadda saxlanıldı.",
+        variant: "success",
+      });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Xəta!",
+        description: err.message || "Səlahiyyətlər yenilənərkən xəta baş verdi.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleTestTelegram = async () => {
     if (!telegramBotToken || !telegramChatId) {
       toast({
@@ -633,63 +683,31 @@ export default function SettingsPage() {
 
       // Marketplace commissions
       marketplaceCommissions: JSON.stringify(marketplaceCommissions),
-
-      // Staff Permissions
-      staffCanViewSalesHistory: parseInt(staffCanViewSalesHistory as any) ?? 1,
-      staffCanViewStock: parseInt(staffCanViewStock as any) ?? 1,
-      staffCanViewCustomers: parseInt(staffCanViewCustomers as any) ?? 1,
-      staffCanViewVendors: parseInt(staffCanViewVendors as any) ?? 1,
-      staffCanViewExpenses: parseInt(staffCanViewExpenses as any) ?? 1,
     };
 
     updateSettingsMutation.mutate(payload);
   };
 
   const handleSaveStaffPermissions = () => {
-    const payload = {
-      storeName: storeName.trim(),
-      phone: phone.trim() || null,
-      address: address.trim() || null,
-      invoiceFooter: invoiceFooter.trim() || null,
-      lowStockAlertCount: parseInt(lowStockAlertCount) || 5,
-      defaultCreditDays: parseInt(defaultCreditDays) || 30,
-      
-      receiptWidth,
-      showBarcode,
-      showCustomerInfo,
-      receiptHeader: receiptHeader.trim() || null,
-      receiptFooter: receiptFooter.trim() || null,
-      showStorePhone,
-      showStoreAddress,
-      showReceiptHeader,
-      showReceiptFooter,
-      showPaymentDetails,
-      telegramBotToken: telegramBotToken.trim() || null,
-      telegramChatId: telegramChatId.trim() || null,
-      telegramNotificationsEnabled,
-      backupTime,
-      telegramBackupEnabled,
+    if (!selectedPermissionsUserId) {
+      toast({
+        title: "Xəta!",
+        description: "Zəhmət olmasa səlahiyyətlərini dəyişmək istədiyiniz istifadəçini seçin.",
+        variant: "destructive",
+      });
+      return;
+    }
 
-      // Azerbaijan Tax fields
-      voen: voen.trim() || null,
-      taxStatus,
-      edvRate: parseFloat(edvRate) || 18.0,
-      simplifiedRate: parseFloat(simplifiedRate) || 2.0,
-      showTaxOnReceipt: parseInt(showTaxOnReceipt as any) ?? 1,
-      showTaxOnInvoice: parseInt(showTaxOnInvoice as any) ?? 1,
-
-      // Marketplace commissions
-      marketplaceCommissions: JSON.stringify(marketplaceCommissions),
-
-      // Staff Permissions
-      staffCanViewSalesHistory: parseInt(staffCanViewSalesHistory as any) ?? 1,
-      staffCanViewStock: parseInt(staffCanViewStock as any) ?? 1,
-      staffCanViewCustomers: parseInt(staffCanViewCustomers as any) ?? 1,
-      staffCanViewVendors: parseInt(staffCanViewVendors as any) ?? 1,
-      staffCanViewExpenses: parseInt(staffCanViewExpenses as any) ?? 1,
-    };
-
-    updateSettingsMutation.mutate(payload);
+    updatePermissionsMutation.mutate({
+      id: Number(selectedPermissionsUserId),
+      permissions: {
+        staffCanViewSalesHistory: parseInt(staffCanViewSalesHistory as any) ?? 1,
+        staffCanViewStock: parseInt(staffCanViewStock as any) ?? 1,
+        staffCanViewCustomers: parseInt(staffCanViewCustomers as any) ?? 1,
+        staffCanViewVendors: parseInt(staffCanViewVendors as any) ?? 1,
+        staffCanViewExpenses: parseInt(staffCanViewExpenses as any) ?? 1,
+      }
+    });
   };
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1991,6 +2009,22 @@ export default function SettingsPage() {
               </span>
             </div>
 
+            <div className="flex flex-col gap-1.5 text-xs font-semibold max-w-xs pb-2">
+              <label className="text-[10px] text-gray-400 font-extrabold uppercase tracking-wider">İstifadəçi Seçin</label>
+              <select
+                value={selectedPermissionsUserId}
+                onChange={(e) => setSelectedPermissionsUserId(Number(e.target.value))}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 font-bold cursor-pointer text-gray-800"
+              >
+                <option value="" disabled>İstifadəçi seçilməyib</option>
+                {usersList?.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.username} ({u.role === "Admin" ? "Admin" : "Satıcı"})
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="flex items-start justify-between p-4 bg-gray-50/50 border border-gray-100 rounded-xl text-xs hover:bg-gray-50 transition-all gap-4">
                 <div className="space-y-1">
@@ -2062,10 +2096,10 @@ export default function SettingsPage() {
               <button
                 type="button"
                 onClick={handleSaveStaffPermissions}
-                disabled={updateSettingsMutation.isPending}
+                disabled={updatePermissionsMutation.isPending}
                 className="px-6 py-2.5 bg-primary text-white font-extrabold rounded-xl hover:bg-primary/90 cursor-pointer shadow-md shadow-primary/10 transition-all text-xs flex items-center gap-2"
               >
-                {updateSettingsMutation.isPending ? "Yadda saxlanılır..." : "Səlahiyyətləri Yadda Saxla 💾"}
+                {updatePermissionsMutation.isPending ? "Yadda saxlanılır..." : "Səlahiyyətləri Yadda Saxla 💾"}
               </button>
             </div>
           </div>

@@ -279,6 +279,11 @@ export const users = pgTable("users", {
   twoFactorSecret: text("two_factor_secret"),
   twoFactorEnabled: integer("two_factor_enabled").notNull().default(0), // 0 = disabled, 1 = enabled
   twoFactorTrustedDevices: text("two_factor_trusted_devices"), // JSON array of { deviceToken, ip, expireAt }
+  staffCanViewSalesHistory: integer("staff_can_view_sales_history").notNull().default(1),
+  staffCanViewStock: integer("staff_can_view_stock").notNull().default(1),
+  staffCanViewCustomers: integer("staff_can_view_customers").notNull().default(1),
+  staffCanViewVendors: integer("staff_can_view_vendors").notNull().default(1),
+  staffCanViewExpenses: integer("staff_can_view_expenses").notNull().default(1),
 }, (table) => ({
   usersTenantUsernameIdx: uniqueIndex("users_tenant_username_idx").on(table.tenantId, table.username)
 }));

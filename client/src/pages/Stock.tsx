@@ -25,10 +25,10 @@ export default function Stock() {
     }
   })();
 
-  const { data: settings } = useQuery<any>({
-    queryKey: ["/api/settings"],
+  const { data: currentUser } = useQuery<any>({
+    queryKey: ["/api/users/me"],
     queryFn: async () => {
-      const res = await fetch("/api/settings");
+      const res = await fetch("/api/users/me");
       if (!res.ok) throw new Error();
       return res.json();
     },
@@ -76,7 +76,7 @@ export default function Stock() {
 
   const totalStockValue = list ? list.reduce((sum, item) => sum + (item.totalValue || 0), 0) : 0;
 
-  if (user?.role !== "Admin" && settings?.staffCanViewStock === 0) {
+  if (user?.role !== "Admin" && currentUser?.staffCanViewStock === 0) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[70vh] px-4 animate-in fade-in-0 duration-300">
         <div className="bg-white border border-gray-100 p-8 rounded-2xl shadow-xl max-w-md w-full text-center space-y-6 glass-card relative overflow-hidden">

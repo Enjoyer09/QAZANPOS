@@ -158,6 +158,16 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
     },
   });
 
+  const { data: currentUser } = useQuery<any>({
+    queryKey: ["/api/users/me"],
+    queryFn: async () => {
+      const res = await fetch("/api/users/me");
+      if (!res.ok) throw new Error();
+      return res.json();
+    },
+    enabled: !!user,
+  });
+
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   useEffect(() => {
@@ -260,7 +270,7 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
           label: "Tarixçə",
           icon: History,
           items: [
-            ...((isAdmin || settings?.staffCanViewSalesHistory !== 0) ? [
+            ...((isAdmin || currentUser?.staffCanViewSalesHistory !== 0) ? [
               { href: "/satislar", label: "Satış Tarixçəsi", icon: History }
             ] : [])
           ]
@@ -269,7 +279,7 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
           label: "Anbar",
           icon: Boxes,
           items: [
-            ...((isAdmin || settings?.staffCanViewStock !== 0) ? [
+            ...((isAdmin || currentUser?.staffCanViewStock !== 0) ? [
               { href: "/anbar", label: "Məhsul Qalıqları", icon: Boxes }
             ] : []),
             ...(isAdmin ? [
@@ -289,7 +299,7 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
               { href: "/xercler", label: "Xərclər Modulu", icon: TrendingDown },
               { href: "/hr", label: "HR & Əməkhaqqı", icon: UserCheck }
             ] : []),
-            ...((isAdmin || settings?.staffCanViewCustomers !== 0) ? [
+            ...((isAdmin || currentUser?.staffCanViewCustomers !== 0) ? [
               { href: "/musteriler", label: "Müştəri Bazası", icon: Users }
             ] : [])
           ]

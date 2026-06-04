@@ -76,6 +76,27 @@ function requireAdmin(req: any, res: any, next: any) {
   next();
 }
 
+async function checkUserPermission(
+  req: any,
+  permissionKey: 'staffCanViewSalesHistory' | 'staffCanViewStock' | 'staffCanViewCustomers' | 'staffCanViewVendors' | 'staffCanViewExpenses'
+): Promise<boolean> {
+  const role = req.headers["x-user-role"] as string;
+  if (role === "Admin") return true;
+
+  const username = req.headers["x-user-username"] as string;
+  if (!username) return false;
+
+  const user = await db.query.users.findFirst({
+    where: and(
+      eq(schema.users.username, username.trim().toLowerCase()),
+      eq(schema.users.tenantId, req.tenantId)
+    )
+  });
+
+  if (!user) return false;
+  return user[permissionKey] !== 0;
+}
+
 // Middleware to verify active tenant is the Super Admin control plane
 function requireSuperAdmin(req: any, res: any, next: any) {
   const role = req.headers["x-user-role"];
@@ -574,12 +595,7 @@ router.delete("/products/:id", requireAdmin, async (req, res) => {
 
 router.get("/stock/entries", async (req, res) => {
   try {
-    const role = req.headers["x-user-role"] as string;
-    const settings = await db.query.settings.findFirst({
-      where: eq(schema.settings.tenantId, req.tenantId)
-    });
-
-    if (role !== "Admin" && settings?.staffCanViewStock === 0) {
+    if (!await checkUserPermission(req, "staffCanViewStock")) {
       return res.status(403).json({ message: "Anbar mədaxil tarixçəsinə giriş administrator tərəfindən məhdudlaşdırılıb" });
     }
     const entries = await db.query.stockEntries.findMany({
@@ -918,12 +934,7 @@ router.get("/customers", async (req, res) => {
 // Create customer
 router.post("/customers", async (req, res) => {
   try {
-    const role = req.headers["x-user-role"] as string;
-    const settings = await db.query.settings.findFirst({
-      where: eq(schema.settings.tenantId, req.tenantId)
-    });
-
-    if (role !== "Admin" && settings?.staffCanViewCustomers === 0) {
+    if (!await checkUserPermission(req, "staffCanViewCustomers")) {
       return res.status(403).json({ message: "Müştəri qeydiyyatı administrator tərəfindən məhdudlaşdırılıb" });
     }
 
@@ -953,12 +964,7 @@ router.post("/customers", async (req, res) => {
 // Update customer
 router.put("/customers/:id", async (req, res) => {
   try {
-    const role = req.headers["x-user-role"] as string;
-    const settings = await db.query.settings.findFirst({
-      where: eq(schema.settings.tenantId, req.tenantId)
-    });
-
-    if (role !== "Admin" && settings?.staffCanViewCustomers === 0) {
+    if (!await checkUserPermission(req, "staffCanViewCustomers")) {
       return res.status(403).json({ message: "Müştəri məlumatlarının yenilənməsi administrator tərəfindən məhdudlaşdırılıb" });
     }
 
@@ -1011,12 +1017,7 @@ router.delete("/customers/:id", requireAdmin, async (req, res) => {
 // Get customer sales and overall debts summary
 router.get("/customers/:id/sales", async (req, res) => {
   try {
-    const role = req.headers["x-user-role"] as string;
-    const settings = await db.query.settings.findFirst({
-      where: eq(schema.settings.tenantId, req.tenantId)
-    });
-
-    if (role !== "Admin" && (settings?.staffCanViewCustomers === 0 || settings?.staffCanViewSalesHistory === 0)) {
+    if (!await checkUserPermission(req, "staffCanViewCustomers") || !await checkUserPermission(req, "staffCanViewSalesHistory")) {
       return res.status(403).json({ message: "Giriş məhdudlaşdırılıb" });
     }
 
@@ -1052,17 +1053,12 @@ router.get("/sales", async (req, res) => {
     const role = req.headers["x-user-role"] as string;
     const username = req.headers["x-user-username"] as string;
 
-    const settings = await db.query.settings.findFirst({
-      where: eq(schema.settings.tenantId, req.tenantId)
-    });
+    if (!await checkUserPermission(req, "staffCanViewSalesHistory")) {
+      return res.status(403).json({ message: "Satış tarixçəsinə giriş administrator tərəfindən məhdudlaşdırılıb" });
+    }
 
-    if (role !== "Admin") {
-      if (!settings || settings.staffCanViewSalesHistory === 0) {
-        return res.status(403).json({ message: "Satış tarixçəsinə giriş administrator tərəfindən məhdudlaşdırılıb" });
-      }
-      if (username) {
-        conditions = and(conditions, eq(schema.sales.sellerName, username)) as any;
-      }
+    if (role !== "Admin" && username) {
+      conditions = and(conditions, eq(schema.sales.sellerName, username)) as any;
     }
 
     const list = await db.query.sales.findMany({
@@ -1249,17 +1245,12 @@ router.get("/sales/:id", async (req, res) => {
     const role = req.headers["x-user-role"] as string;
     const username = req.headers["x-user-username"] as string;
 
-    const settings = await db.query.settings.findFirst({
-      where: eq(schema.settings.tenantId, req.tenantId)
-    });
+    if (!await checkUserPermission(req, "staffCanViewSalesHistory")) {
+      return res.status(403).json({ message: "Satış tarixçəsinə giriş administrator tərəfindən məhdudlaşdırılıb" });
+    }
 
-    if (role !== "Admin") {
-      if (!settings || settings.staffCanViewSalesHistory === 0) {
-        return res.status(403).json({ message: "Satış tarixçəsinə giriş administrator tərəfindən məhdudlaşdırılıb" });
-      }
-      if (username && sale.sellerName !== username) {
-        return res.status(403).json({ message: "Bu satış məlumatına baxmaq üçün səlahiyyətiniz yoxdur" });
-      }
+    if (role !== "Admin" && username && sale.sellerName !== username) {
+      return res.status(403).json({ message: "Bu satış məlumatına baxmaq üçün səlahiyyətiniz yoxdur" });
     }
 
     res.json(sale);
@@ -1282,17 +1273,12 @@ router.patch("/sales/:id/pay-credit", async (req, res) => {
     const role = req.headers["x-user-role"] as string;
     const username = req.headers["x-user-username"] as string;
 
-    const settings = await db.query.settings.findFirst({
-      where: eq(schema.settings.tenantId, req.tenantId)
-    });
+    if (!await checkUserPermission(req, "staffCanViewSalesHistory")) {
+      return res.status(403).json({ message: "Satış tarixçəsinə giriş administrator tərəfindən məhdudlaşdırılıb" });
+    }
 
-    if (role !== "Admin") {
-      if (!settings || settings.staffCanViewSalesHistory === 0) {
-        return res.status(403).json({ message: "Satış tarixçəsinə giriş administrator tərəfindən məhdudlaşdırılıb" });
-      }
-      if (username && sale.sellerName !== username) {
-        return res.status(403).json({ message: "Bu satışın borcunu ödəmək üçün səlahiyyətiniz yoxdur" });
-      }
+    if (role !== "Admin" && username && sale.sellerName !== username) {
+      return res.status(403).json({ message: "Bu satışın borcunu ödəmək üçün səlahiyyətiniz yoxdur" });
     }
 
     // Calculate total already paid
@@ -1347,17 +1333,12 @@ router.patch("/sales/:id/add-payment", async (req, res) => {
     const role = req.headers["x-user-role"] as string;
     const username = req.headers["x-user-username"] as string;
 
-    const settings = await db.query.settings.findFirst({
-      where: eq(schema.settings.tenantId, req.tenantId)
-    });
+    if (!await checkUserPermission(req, "staffCanViewSalesHistory")) {
+      return res.status(403).json({ message: "Satış tarixçəsinə giriş administrator tərəfindən məhdudlaşdırılıb" });
+    }
 
-    if (role !== "Admin") {
-      if (!settings || settings.staffCanViewSalesHistory === 0) {
-        return res.status(403).json({ message: "Satış tarixçəsinə giriş administrator tərəfindən məhdudlaşdırılıb" });
-      }
-      if (username && sale.sellerName !== username) {
-        return res.status(403).json({ message: "Bu satışın borcunu ödəmək üçün səlahiyyətiniz yoxdur" });
-      }
+    if (role !== "Admin" && username && sale.sellerName !== username) {
+      return res.status(403).json({ message: "Bu satışın borcunu ödəmək üçün səlahiyyətiniz yoxdur" });
     }
 
     // Insert payment
@@ -1733,12 +1714,7 @@ router.get("/credits/pending", async (req, res) => {
 // List expenses with category and description filters
 router.get("/expenses", async (req, res) => {
   try {
-    const role = req.headers["x-user-role"] as string;
-    const settings = await db.query.settings.findFirst({
-      where: eq(schema.settings.tenantId, req.tenantId)
-    });
-
-    if (role !== "Admin" && settings?.staffCanViewExpenses === 0) {
+    if (!await checkUserPermission(req, "staffCanViewExpenses")) {
       return res.status(403).json({ message: "Xərclər modulu məlumatlarına giriş administrator tərəfindən məhdudlaşdırılıb" });
     }
 
@@ -2567,6 +2543,40 @@ router.post("/activity-logs/archive", requireAdmin, async (req, res) => {
 // 10. USER MANAGEMENT ENDPOINTS (Admin Only)
 // ----------------------------------------------------
 
+// Get currently logged-in user profile & permissions
+router.get("/users/me", async (req, res) => {
+  try {
+    const username = req.headers["x-user-username"] as string;
+    if (!username) {
+      return res.status(401).json({ message: "Giriş edilməyib" });
+    }
+
+    const user = await db.query.users.findFirst({
+      where: and(
+        eq(schema.users.username, username.trim().toLowerCase()),
+        eq(schema.users.tenantId, req.tenantId)
+      )
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "İstifadəçi tapılmadı" });
+    }
+
+    res.json({
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      staffCanViewSalesHistory: user.staffCanViewSalesHistory,
+      staffCanViewStock: user.staffCanViewStock,
+      staffCanViewCustomers: user.staffCanViewCustomers,
+      staffCanViewVendors: user.staffCanViewVendors,
+      staffCanViewExpenses: user.staffCanViewExpenses,
+    });
+  } catch (error) {
+    res.status(500).json({ message: "İstifadəçi məlumatlarını gətirərkən xəta baş verdi" });
+  }
+});
+
 // List all users
 router.get("/users", requireAdmin, async (req, res) => {
   try {
@@ -2576,6 +2586,11 @@ router.get("/users", requireAdmin, async (req, res) => {
         username: schema.users.username,
         role: schema.users.role,
         twoFactorEnabled: schema.users.twoFactorEnabled,
+        staffCanViewSalesHistory: schema.users.staffCanViewSalesHistory,
+        staffCanViewStock: schema.users.staffCanViewStock,
+        staffCanViewCustomers: schema.users.staffCanViewCustomers,
+        staffCanViewVendors: schema.users.staffCanViewVendors,
+        staffCanViewExpenses: schema.users.staffCanViewExpenses,
       })
       .from(schema.users)
       .where(eq(schema.users.tenantId, req.tenantId))
@@ -2583,6 +2598,45 @@ router.get("/users", requireAdmin, async (req, res) => {
     res.json(list);
   } catch (error) {
     res.status(500).json({ message: "İstifadəçiləri gətirərkən xəta baş verdi" });
+  }
+});
+
+// Update specific user's individual permissions
+router.put("/users/:id/permissions", requireAdmin, async (req, res) => {
+  try {
+    const targetUserId = parseInt(req.params.id);
+    const {
+      staffCanViewSalesHistory,
+      staffCanViewStock,
+      staffCanViewCustomers,
+      staffCanViewVendors,
+      staffCanViewExpenses
+    } = req.body;
+
+    const targetUser = await db.query.users.findFirst({
+      where: and(eq(schema.users.id, targetUserId), eq(schema.users.tenantId, req.tenantId))
+    });
+    if (!targetUser) {
+      return res.status(404).json({ message: "İstifadəçi tapılmadı" });
+    }
+
+    const updated = await db
+      .update(schema.users)
+      .set({
+        staffCanViewSalesHistory: staffCanViewSalesHistory !== undefined ? parseInt(staffCanViewSalesHistory as any) : undefined,
+        staffCanViewStock: staffCanViewStock !== undefined ? parseInt(staffCanViewStock as any) : undefined,
+        staffCanViewCustomers: staffCanViewCustomers !== undefined ? parseInt(staffCanViewCustomers as any) : undefined,
+        staffCanViewVendors: staffCanViewVendors !== undefined ? parseInt(staffCanViewVendors as any) : undefined,
+        staffCanViewExpenses: staffCanViewExpenses !== undefined ? parseInt(staffCanViewExpenses as any) : undefined,
+      })
+      .where(eq(schema.users.id, targetUserId))
+      .returning();
+
+    await logActivity(req, "UPDATE_USER_PERMISSIONS", `'${targetUser.username}' istifadəçisinin individual səlahiyyətlərini yenilədi`);
+
+    res.json(updated[0]);
+  } catch (error) {
+    res.status(500).json({ message: "Səlahiyyətləri yeniləyərkən xəta baş verdi" });
   }
 });
 
@@ -3074,12 +3128,7 @@ router.get("/vendors/payments", requireAdmin, async (req, res) => {
 // List all vendors with aggregated balances
 router.get("/vendors", async (req, res) => {
   try {
-    const role = req.headers["x-user-role"] as string;
-    const settings = await db.query.settings.findFirst({
-      where: eq(schema.settings.tenantId, req.tenantId)
-    });
-
-    if (role !== "Admin" && settings?.staffCanViewVendors === 0) {
+    if (!await checkUserPermission(req, "staffCanViewVendors")) {
       return res.status(403).json({ message: "Tədarükçü məlumatlarına giriş administrator tərəfindən məhdudlaşdırılıb" });
     }
 
