@@ -78,7 +78,7 @@ function requireAdmin(req: any, res: any, next: any) {
 
 async function checkUserPermission(
   req: any,
-  permissionKey: 'staffCanViewSalesHistory' | 'staffCanViewStock' | 'staffCanViewCustomers' | 'staffCanViewVendors' | 'staffCanViewExpenses'
+  permissionKey: 'staffCanViewSalesHistory' | 'staffCanViewStock' | 'staffCanViewCustomers' | 'staffCanViewVendors' | 'staffCanViewExpenses' | 'staffCanViewStockBalances'
 ): Promise<boolean> {
   const role = req.headers["x-user-role"] as string;
   if (role === "Admin") return true;
@@ -2623,6 +2623,7 @@ router.get("/users/me", async (req, res) => {
       staffCanViewCustomers: user.staffCanViewCustomers,
       staffCanViewVendors: user.staffCanViewVendors,
       staffCanViewExpenses: user.staffCanViewExpenses,
+      staffCanViewStockBalances: user.staffCanViewStockBalances,
     });
   } catch (error) {
     res.status(500).json({ message: "İstifadəçi məlumatlarını gətirərkən xəta baş verdi" });
@@ -2643,6 +2644,7 @@ router.get("/users", requireAdmin, async (req, res) => {
         staffCanViewCustomers: schema.users.staffCanViewCustomers,
         staffCanViewVendors: schema.users.staffCanViewVendors,
         staffCanViewExpenses: schema.users.staffCanViewExpenses,
+        staffCanViewStockBalances: schema.users.staffCanViewStockBalances,
       })
       .from(schema.users)
       .where(eq(schema.users.tenantId, req.tenantId))
@@ -2662,7 +2664,8 @@ router.put("/users/:id/permissions", requireAdmin, async (req, res) => {
       staffCanViewStock,
       staffCanViewCustomers,
       staffCanViewVendors,
-      staffCanViewExpenses
+      staffCanViewExpenses,
+      staffCanViewStockBalances
     } = req.body;
 
     const targetUser = await db.query.users.findFirst({
@@ -2680,6 +2683,7 @@ router.put("/users/:id/permissions", requireAdmin, async (req, res) => {
         staffCanViewCustomers: staffCanViewCustomers !== undefined ? parseInt(staffCanViewCustomers as any) : undefined,
         staffCanViewVendors: staffCanViewVendors !== undefined ? parseInt(staffCanViewVendors as any) : undefined,
         staffCanViewExpenses: staffCanViewExpenses !== undefined ? parseInt(staffCanViewExpenses as any) : undefined,
+        staffCanViewStockBalances: staffCanViewStockBalances !== undefined ? parseInt(staffCanViewStockBalances as any) : undefined,
       })
       .where(eq(schema.users.id, targetUserId))
       .returning();

@@ -106,6 +106,15 @@ export default function POS() {
     },
   });
 
+  const { data: currentUser } = useQuery<any>({
+    queryKey: ["/api/users/me"],
+    queryFn: async () => {
+      const res = await fetch("/api/users/me");
+      if (!res.ok) throw new Error();
+      return res.json();
+    },
+  });
+
   const handleResetPOS = () => {
     setBasket([]);
     setSelectedProductId("");
@@ -198,7 +207,9 @@ export default function POS() {
     if (posMode === "sale" && currentBasketQty + qty > prod.currentQuantity) {
       toast({
         title: "Xəta!",
-        description: `Anbarda kifayət qədər yoxdur. Maksimum: ${prod.currentQuantity} ${prod.unit}`,
+        description: (isAdmin || currentUser?.staffCanViewStockBalances !== 0)
+          ? `Anbarda kifayət qədər yoxdur. Maksimum: ${prod.currentQuantity} ${prod.unit}`
+          : "Anbarda bu miqdarda məhsul yoxdur.",
         variant: "destructive",
       });
       return;
@@ -399,7 +410,9 @@ export default function POS() {
     if (posMode === "sale" && currentBasketQty + qty > prod.currentQuantity) {
       toast({
         title: "Xəta!",
-        description: `Anbarda kifayət qədər yoxdur. Maksimum: ${prod.currentQuantity} ${prod.unit}`,
+        description: (isAdmin || currentUser?.staffCanViewStockBalances !== 0)
+          ? `Anbarda kifayət qədər yoxdur. Maksimum: ${prod.currentQuantity} ${prod.unit}`
+          : "Anbarda bu miqdarda məhsul yoxdur.",
         variant: "destructive",
       });
       return;
@@ -463,7 +476,9 @@ export default function POS() {
           if (prod && value > prod.currentQuantity) {
             toast({
               title: "Xəta!",
-              description: `Anbar qalığı keçildi. Maksimum: ${prod.currentQuantity} ${prod.unit}`,
+              description: (isAdmin || currentUser?.staffCanViewStockBalances !== 0)
+                ? `Anbar qalığı keçildi. Maksimum: ${prod.currentQuantity} ${prod.unit}`
+                : "Anbarda bu miqdarda məhsul yoxdur.",
               variant: "destructive",
             });
             return item;
@@ -935,7 +950,7 @@ export default function POS() {
                         <div className="text-left">
                           <span className="block font-bold text-gray-900">{p.productName}</span>
                           <span className="block text-[10px] text-gray-400 mt-0.5">
-                            Qalıq: {p.currentQuantity} {p.unit} | Barkod: {p.barcode || "Yoxdur"}
+                            {(isAdmin || currentUser?.staffCanViewStockBalances !== 0) ? `Qalıq: ${p.currentQuantity} ${p.unit} | ` : ""}Barkod: {p.barcode || "Yoxdur"}
                           </span>
                         </div>
                         <div className="text-right flex items-center gap-3">
@@ -992,7 +1007,7 @@ export default function POS() {
                       : `(Geri Ödəniş: ${(p.lastSalePrice || p.lastPurchasePrice || 0).toFixed(2)} ₼)`;
                     return (
                       <option key={p.productId} value={p.productId}>
-                        {p.productName} — Qalıq: {p.currentQuantity} {p.unit} {priceLabel}
+                        {p.productName} {(isAdmin || currentUser?.staffCanViewStockBalances !== 0) ? `— Qalıq: ${p.currentQuantity} ${p.unit} ` : ""}{priceLabel}
                       </option>
                     );
                   })}

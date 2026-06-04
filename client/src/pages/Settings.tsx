@@ -92,6 +92,7 @@ export default function SettingsPage() {
   const [staffCanViewCustomers, setStaffCanViewCustomers] = useState(1);
   const [staffCanViewVendors, setStaffCanViewVendors] = useState(1);
   const [staffCanViewExpenses, setStaffCanViewExpenses] = useState(1);
+  const [staffCanViewStockBalances, setStaffCanViewStockBalances] = useState(1);
   const [selectedPermissionsUserId, setSelectedPermissionsUserId] = useState<number | "">("");
 
 
@@ -369,6 +370,7 @@ export default function SettingsPage() {
         setStaffCanViewCustomers(targetUser.staffCanViewCustomers ?? 1);
         setStaffCanViewVendors(targetUser.staffCanViewVendors ?? 1);
         setStaffCanViewExpenses(targetUser.staffCanViewExpenses ?? 1);
+        setStaffCanViewStockBalances(targetUser.staffCanViewStockBalances ?? 1);
       }
     }
   }, [selectedPermissionsUserId, usersList]);
@@ -706,6 +708,7 @@ export default function SettingsPage() {
         staffCanViewCustomers: parseInt(staffCanViewCustomers as any) ?? 1,
         staffCanViewVendors: parseInt(staffCanViewVendors as any) ?? 1,
         staffCanViewExpenses: parseInt(staffCanViewExpenses as any) ?? 1,
+        staffCanViewStockBalances: parseInt(staffCanViewStockBalances as any) ?? 1,
       }
     });
   };
@@ -2048,6 +2051,19 @@ export default function SettingsPage() {
                   type="checkbox"
                   checked={staffCanViewStock === 1}
                   onChange={(e) => setStaffCanViewStock(e.target.checked ? 1 : 0)}
+                  className="size-5 text-primary border-gray-300 rounded focus:ring-primary cursor-pointer mt-1"
+                />
+              </div>
+
+              <div className="flex items-start justify-between p-4 bg-gray-50/50 border border-gray-100 rounded-xl text-xs hover:bg-gray-50 transition-all gap-4">
+                <div className="space-y-1">
+                  <p className="font-bold text-gray-800">Məhsul Qalıqlarını Görmək (POS)</p>
+                  <p className="text-[10px] text-gray-400 font-medium">Satıcıların POS ekranında və axtarış zamanı məhsulların qalıq miqdarını görməsinə icazə ver</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={staffCanViewStockBalances === 1}
+                  onChange={(e) => setStaffCanViewStockBalances(e.target.checked ? 1 : 0)}
                   className="size-5 text-primary border-gray-300 rounded focus:ring-primary cursor-pointer mt-1"
                 />
               </div>

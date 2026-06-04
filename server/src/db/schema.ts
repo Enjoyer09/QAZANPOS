@@ -285,6 +285,8 @@ export const users = pgTable("users", {
   staffCanViewCustomers: integer("staff_can_view_customers").notNull().default(1),
   staffCanViewVendors: integer("staff_can_view_vendors").notNull().default(1),
   staffCanViewExpenses: integer("staff_can_view_expenses").notNull().default(1),
+  staffCanViewStockBalances: integer("staff_can_view_stock_balances").notNull().default(1),
+  staffCanViewDebts: integer("staff_can_view_debts").notNull().default(1),
 }, (table) => ({
   usersTenantUsernameIdx: uniqueIndex("users_tenant_username_idx").on(table.tenantId, table.username)
 }));
