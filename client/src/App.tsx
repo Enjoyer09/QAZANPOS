@@ -283,7 +283,9 @@ function AppLayout({ children, user, currentUser, onLogout }: { children: React.
           label: "Maliyyə & HR",
           icon: TrendingDown,
           items: [
-            { href: "/nisye", label: "Nisyə & Borclar", icon: AlertTriangle },
+            ...((isAdmin || currentUser?.staffCanViewDebts !== 0) ? [
+              { href: "/nisye", label: "Nisyə & Borclar", icon: AlertTriangle }
+            ] : []),
             ...(isAdmin ? [
               { href: "/tedarukculer", label: "Tədarükçülər", icon: Truck },
               { href: "/xercler", label: "Xərclər Modulu", icon: TrendingDown },
@@ -876,7 +878,7 @@ function MainRoutes({ user, onLogout }: { user: any; onLogout: () => void }) {
         <Switch>
           {isAdmin && <Route path="/" component={Dashboard} />}
           <Route path="/pos" component={POS} />
-          <Route path="/nisye" component={Debts} />
+          {(isAdmin || currentUser?.staffCanViewDebts !== 0) && <Route path="/nisye" component={Debts} />}
            <Route path="/musteriler" component={Customers} />
            {isAdmin && <Route path="/tedarukculer" component={Vendors} />}
            {isAdmin && <Route path="/hr" component={Payroll} />}

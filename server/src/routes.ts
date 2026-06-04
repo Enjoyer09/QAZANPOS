@@ -78,7 +78,7 @@ function requireAdmin(req: any, res: any, next: any) {
 
 async function checkUserPermission(
   req: any,
-  permissionKey: 'staffCanViewSalesHistory' | 'staffCanViewStock' | 'staffCanViewCustomers' | 'staffCanViewVendors' | 'staffCanViewExpenses' | 'staffCanViewStockBalances'
+  permissionKey: 'staffCanViewSalesHistory' | 'staffCanViewStock' | 'staffCanViewCustomers' | 'staffCanViewVendors' | 'staffCanViewExpenses' | 'staffCanViewStockBalances' | 'staffCanViewDebts'
 ): Promise<boolean> {
   const role = req.headers["x-user-role"] as string;
   if (role === "Admin") return true;
@@ -1692,6 +1692,9 @@ router.get("/serials/lookup", async (req, res) => {
 // List overdue customer credits
 router.get("/credits/overdue", async (req, res) => {
   try {
+    if (!await checkUserPermission(req, "staffCanViewDebts")) {
+      return res.status(403).json({ message: "Bu məlumatı görmək üçün səlahiyyətiniz yoxdur." });
+    }
     const today = new Date().toISOString().split("T")[0];
     const overdueSales = await db.query.sales.findMany({
       where: and(
@@ -1727,6 +1730,9 @@ router.get("/credits/overdue", async (req, res) => {
 // List pending (non-overdue) customer credits
 router.get("/credits/pending", async (req, res) => {
   try {
+    if (!await checkUserPermission(req, "staffCanViewDebts")) {
+      return res.status(403).json({ message: "Bu məlumatı görmək üçün səlahiyyətiniz yoxdur." });
+    }
     const today = new Date().toISOString().split("T")[0];
     const pendingSales = await db.query.sales.findMany({
       where: and(
@@ -2624,6 +2630,7 @@ router.get("/users/me", async (req, res) => {
       staffCanViewVendors: user.staffCanViewVendors,
       staffCanViewExpenses: user.staffCanViewExpenses,
       staffCanViewStockBalances: user.staffCanViewStockBalances,
+      staffCanViewDebts: user.staffCanViewDebts,
     });
   } catch (error) {
     res.status(500).json({ message: "İstifadəçi məlumatlarını gətirərkən xəta baş verdi" });
@@ -2645,6 +2652,7 @@ router.get("/users", requireAdmin, async (req, res) => {
         staffCanViewVendors: schema.users.staffCanViewVendors,
         staffCanViewExpenses: schema.users.staffCanViewExpenses,
         staffCanViewStockBalances: schema.users.staffCanViewStockBalances,
+        staffCanViewDebts: schema.users.staffCanViewDebts,
       })
       .from(schema.users)
       .where(eq(schema.users.tenantId, req.tenantId))
@@ -2665,7 +2673,8 @@ router.put("/users/:id/permissions", requireAdmin, async (req, res) => {
       staffCanViewCustomers,
       staffCanViewVendors,
       staffCanViewExpenses,
-      staffCanViewStockBalances
+      staffCanViewStockBalances,
+      staffCanViewDebts
     } = req.body;
 
     const targetUser = await db.query.users.findFirst({
@@ -2684,6 +2693,7 @@ router.put("/users/:id/permissions", requireAdmin, async (req, res) => {
         staffCanViewVendors: staffCanViewVendors !== undefined ? parseInt(staffCanViewVendors as any) : undefined,
         staffCanViewExpenses: staffCanViewExpenses !== undefined ? parseInt(staffCanViewExpenses as any) : undefined,
         staffCanViewStockBalances: staffCanViewStockBalances !== undefined ? parseInt(staffCanViewStockBalances as any) : undefined,
+        staffCanViewDebts: staffCanViewDebts !== undefined ? parseInt(staffCanViewDebts as any) : undefined,
       })
       .where(eq(schema.users.id, targetUserId))
       .returning();

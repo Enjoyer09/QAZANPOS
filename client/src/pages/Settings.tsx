@@ -93,6 +93,7 @@ export default function SettingsPage() {
   const [staffCanViewVendors, setStaffCanViewVendors] = useState(1);
   const [staffCanViewExpenses, setStaffCanViewExpenses] = useState(1);
   const [staffCanViewStockBalances, setStaffCanViewStockBalances] = useState(1);
+  const [staffCanViewDebts, setStaffCanViewDebts] = useState(1);
   const [selectedPermissionsUserId, setSelectedPermissionsUserId] = useState<number | "">("");
 
 
@@ -371,6 +372,7 @@ export default function SettingsPage() {
         setStaffCanViewVendors(targetUser.staffCanViewVendors ?? 1);
         setStaffCanViewExpenses(targetUser.staffCanViewExpenses ?? 1);
         setStaffCanViewStockBalances(targetUser.staffCanViewStockBalances ?? 1);
+        setStaffCanViewDebts(targetUser.staffCanViewDebts ?? 1);
       }
     }
   }, [selectedPermissionsUserId, usersList]);
@@ -709,6 +711,7 @@ export default function SettingsPage() {
         staffCanViewVendors: parseInt(staffCanViewVendors as any) ?? 1,
         staffCanViewExpenses: parseInt(staffCanViewExpenses as any) ?? 1,
         staffCanViewStockBalances: parseInt(staffCanViewStockBalances as any) ?? 1,
+        staffCanViewDebts: parseInt(staffCanViewDebts as any) ?? 1,
       }
     });
   };
@@ -2090,6 +2093,19 @@ export default function SettingsPage() {
                   type="checkbox"
                   checked={staffCanViewVendors === 1}
                   onChange={(e) => setStaffCanViewVendors(e.target.checked ? 1 : 0)}
+                  className="size-5 text-primary border-gray-300 rounded focus:ring-primary cursor-pointer mt-1"
+                />
+              </div>
+
+              <div className="flex items-start justify-between p-4 bg-gray-50/50 border border-gray-100 rounded-xl text-xs hover:bg-gray-50 transition-all gap-4">
+                <div className="space-y-1">
+                  <p className="font-bold text-gray-800">Nisyə & Borc İdarəetməsi</p>
+                  <p className="text-[10px] text-gray-400 font-medium">Satıcıların müştəri nisyə borclarını, gecikmiş ödənişləri və borc tarixçəsini görməsinə icazə ver</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={staffCanViewDebts === 1}
+                  onChange={(e) => setStaffCanViewDebts(e.target.checked ? 1 : 0)}
                   className="size-5 text-primary border-gray-300 rounded focus:ring-primary cursor-pointer mt-1"
                 />
               </div>
