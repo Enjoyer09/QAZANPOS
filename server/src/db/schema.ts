@@ -149,6 +149,7 @@ export const customers = pgTable("customers", {
   email: text("email"),
   address: text("address"),
   notes: text("notes"),
+  createdByName: text("created_by_name").notNull().default("Sistem"),
 });
 
 // 4. Sales Table

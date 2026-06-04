@@ -14,10 +14,10 @@ const DEFAULT_PRODUCTS = [
 ];
 
 const DEFAULT_CUSTOMERS = [
-  { id: 1, name: "Abbas Bağırov", phone: "+994 50 200 11 22", email: "abbas@bagirov.az", address: "Bakı, Nərimanov", notes: "Daimi VIP Müştəri" },
-  { id: 2, name: "Nərmin Məmmədova", phone: "+994 70 300 44 55", email: "nermin@mammadova.az", address: "Bakı, Gənclik", notes: "Kartla ödəniş edir" },
-  { id: 3, name: "Tural Əliyev", phone: "+994 55 400 77 88", email: "tural@aliyev.az", address: "Xırdalan", notes: "Nisyə limiti: 1500 AZN" },
-  { id: 4, name: "Samir Qasımov", phone: "+994 50 500 99 00", email: "samir@qasimov.az", address: "Sumqayıt", notes: "Yalnız nağd" },
+  { id: 1, name: "Abbas Bağırov", phone: "+994 50 200 11 22", email: "abbas@bagirov.az", address: "Bakı, Nərimanov", notes: "Daimi VIP Müştəri", createdByName: "admin" },
+  { id: 2, name: "Nərmin Məmmədova", phone: "+994 70 300 44 55", email: "nermin@mammadova.az", address: "Bakı, Gənclik", notes: "Kartla ödəniş edir", createdByName: "admin" },
+  { id: 3, name: "Tural Əliyev", phone: "+994 55 400 77 88", email: "tural@aliyev.az", address: "Xırdalan", notes: "Nisyə limiti: 1500 AZN", createdByName: "admin" },
+  { id: 4, name: "Samir Qasımov", phone: "+994 50 500 99 00", email: "samir@qasimov.az", address: "Sumqayıt", notes: "Yalnız nağd", createdByName: "admin" },
 ];
 
 const getPastIsoDate = (daysAgo: number) => {
@@ -285,7 +285,12 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
   // 4. Customers Endpoints
   if (path === "/api/customers") {
     if (method === "GET") {
-      return jsonResponse(getDb("customers"));
+      const customers = getDb("customers");
+      if (userRole !== "Admin") {
+        const normalized = userUsername ? userUsername.trim().toLowerCase() : "";
+        return jsonResponse(customers.filter(c => (c.createdByName || "").trim().toLowerCase() === normalized));
+      }
+      return jsonResponse(customers);
     }
     if (method === "POST") {
       const body = getBody();
@@ -297,7 +302,8 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
         phone: body.phone || "",
         email: body.email || "",
         address: body.address || "",
-        notes: body.notes || ""
+        notes: body.notes || "",
+        createdByName: userUsername ? userUsername.trim().toLowerCase() : (userRole === "Admin" ? "admin" : "satici")
       };
       customers.push(newCustomer);
       saveDb("customers", customers);
@@ -314,6 +320,12 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
       const body = getBody();
       const idx = customers.findIndex(c => c.id === id);
       if (idx !== -1) {
+        if (userRole !== "Admin") {
+          const normalized = userUsername ? userUsername.trim().toLowerCase() : "";
+          if ((customers[idx].createdByName || "").trim().toLowerCase() !== normalized) {
+            return jsonResponse({ message: "Bu müştəri profilini yeniləmək üçün səlahiyyətiniz yoxdur" }, 403);
+          }
+        }
         customers[idx] = { ...customers[idx], ...body };
         saveDb("customers", customers);
         logActivity(`Müştəri yeniləndi: ${customers[idx].name}`);

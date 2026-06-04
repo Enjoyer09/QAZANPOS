@@ -921,10 +921,19 @@ router.patch("/stock/entries/:id/pay", requireAdmin, async (req, res) => {
 // List all customers
 router.get("/customers", async (req, res) => {
   try {
+    const role = req.headers["x-user-role"] as string;
+    const username = req.headers["x-user-username"] as string;
+
+    let conditions = eq(schema.customers.tenantId, req.tenantId);
+    if (role !== "Admin") {
+      const normalizedUsername = username ? username.trim().toLowerCase() : "";
+      conditions = and(conditions, eq(schema.customers.createdByName, normalizedUsername)) as any;
+    }
+
     const list = await db
       .select()
       .from(schema.customers)
-      .where(eq(schema.customers.tenantId, req.tenantId));
+      .where(conditions);
     res.json(list);
   } catch (error) {
     res.status(500).json({ message: "Müştəriləri gətirərkən xəta baş verdi" });
@@ -941,6 +950,9 @@ router.post("/customers", async (req, res) => {
     const { name, phone, email, address, notes } = req.body;
     if (!name) return res.status(400).json({ message: "Müştəri adı tələb olunur" });
 
+    const rawCreator = req.headers["x-user-username"] as string;
+    const createdByName = rawCreator ? rawCreator.trim().toLowerCase() : (req.headers["x-user-role"] === "Admin" ? "admin" : "satici");
+
     const newCustomer = await db
       .insert(schema.customers)
       .values({
@@ -950,6 +962,7 @@ router.post("/customers", async (req, res) => {
         email: email || null,
         address: address || null,
         notes: notes || null,
+        createdByName,
       })
       .returning();
 
@@ -970,6 +983,21 @@ router.put("/customers/:id", async (req, res) => {
 
     const id = parseInt(req.params.id);
     const { name, phone, email, address, notes } = req.body;
+
+    const customer = await db.query.customers.findFirst({
+      where: and(eq(schema.customers.id, id), eq(schema.customers.tenantId, req.tenantId))
+    });
+    if (!customer) return res.status(404).json({ message: "Müştəri tapılmadı" });
+
+    const role = req.headers["x-user-role"] as string;
+    const username = req.headers["x-user-username"] as string;
+
+    if (role !== "Admin") {
+      const normalizedUsername = username ? username.trim().toLowerCase() : "";
+      if (customer.createdByName !== normalizedUsername) {
+        return res.status(403).json({ message: "Bu müştəri profilini yeniləmək üçün səlahiyyətiniz yoxdur" });
+      }
+    }
 
     const updated = await db
       .update(schema.customers)
