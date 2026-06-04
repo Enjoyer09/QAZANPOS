@@ -485,16 +485,6 @@ export default function POS() {
           }
         }
 
-        // If updating price, prevent staff (non-admin) from selling below purchase price (cost price)
-        if (field === "salePrice" && value < item.minPrice && !isAdmin) {
-          toast({
-            title: "Məhdudiyyət! 🔒",
-            description: `Kassir və satıcı heyəti malları maya dəyərindən (${item.minPrice.toFixed(2)} ₼) ucuz sata bilməz!`,
-            variant: "destructive",
-          });
-          return item;
-        }
-
         return { ...item, [field]: value };
       })
     );

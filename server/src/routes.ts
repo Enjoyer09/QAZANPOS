@@ -78,7 +78,7 @@ function requireAdmin(req: any, res: any, next: any) {
 
 async function checkUserPermission(
   req: any,
-  permissionKey: 'staffCanViewSalesHistory' | 'staffCanViewStock' | 'staffCanViewCustomers' | 'staffCanViewVendors' | 'staffCanViewExpenses' | 'staffCanViewStockBalances' | 'staffCanViewDebts'
+  permissionKey: 'staffCanViewSalesHistory' | 'staffCanViewStock' | 'staffCanViewCustomers' | 'staffCanViewVendors' | 'staffCanViewExpenses' | 'staffCanViewStockBalances' | 'staffCanViewDebts' | 'staffCanManageCatalog'
 ): Promise<boolean> {
   const role = req.headers["x-user-role"] as string;
   if (role === "Admin") return true;
@@ -478,8 +478,11 @@ router.get("/products", async (req, res) => {
 });
 
 // Create product
-router.post("/products", requireAdmin, async (req, res) => {
+router.post("/products", async (req, res) => {
   try {
+    if (!await checkUserPermission(req, "staffCanManageCatalog")) {
+      return res.status(403).json({ message: "Bu əməliyyat üçün səlahiyyətiniz yoxdur." });
+    }
     const { name, category, unit, description, barcode } = req.body;
     if (!name) return res.status(400).json({ message: "Ad tələb olunur" });
 
@@ -527,8 +530,11 @@ router.post("/products", requireAdmin, async (req, res) => {
 });
 
 // Update product
-router.put("/products/:id", requireAdmin, async (req, res) => {
+router.put("/products/:id", async (req, res) => {
   try {
+    if (!await checkUserPermission(req, "staffCanManageCatalog")) {
+      return res.status(403).json({ message: "Bu əməliyyat üçün səlahiyyətiniz yoxdur." });
+    }
     const id = parseInt(req.params.id);
     const { name, category, unit, description, barcode } = req.body;
 
@@ -570,8 +576,11 @@ router.put("/products/:id", requireAdmin, async (req, res) => {
 });
 
 // Delete product
-router.delete("/products/:id", requireAdmin, async (req, res) => {
+router.delete("/products/:id", async (req, res) => {
   try {
+    if (!await checkUserPermission(req, "staffCanManageCatalog")) {
+      return res.status(403).json({ message: "Bu əməliyyat üçün səlahiyyətiniz yoxdur." });
+    }
     const id = parseInt(req.params.id);
     const deleted = await db
       .delete(schema.products)
@@ -2631,6 +2640,7 @@ router.get("/users/me", async (req, res) => {
       staffCanViewExpenses: user.staffCanViewExpenses,
       staffCanViewStockBalances: user.staffCanViewStockBalances,
       staffCanViewDebts: user.staffCanViewDebts,
+      staffCanManageCatalog: user.staffCanManageCatalog,
     });
   } catch (error) {
     res.status(500).json({ message: "İstifadəçi məlumatlarını gətirərkən xəta baş verdi" });
@@ -2653,6 +2663,7 @@ router.get("/users", requireAdmin, async (req, res) => {
         staffCanViewExpenses: schema.users.staffCanViewExpenses,
         staffCanViewStockBalances: schema.users.staffCanViewStockBalances,
         staffCanViewDebts: schema.users.staffCanViewDebts,
+        staffCanManageCatalog: schema.users.staffCanManageCatalog,
       })
       .from(schema.users)
       .where(eq(schema.users.tenantId, req.tenantId))
@@ -2674,7 +2685,8 @@ router.put("/users/:id/permissions", requireAdmin, async (req, res) => {
       staffCanViewVendors,
       staffCanViewExpenses,
       staffCanViewStockBalances,
-      staffCanViewDebts
+      staffCanViewDebts,
+      staffCanManageCatalog
     } = req.body;
 
     const targetUser = await db.query.users.findFirst({
@@ -2694,6 +2706,7 @@ router.put("/users/:id/permissions", requireAdmin, async (req, res) => {
         staffCanViewExpenses: staffCanViewExpenses !== undefined ? parseInt(staffCanViewExpenses as any) : undefined,
         staffCanViewStockBalances: staffCanViewStockBalances !== undefined ? parseInt(staffCanViewStockBalances as any) : undefined,
         staffCanViewDebts: staffCanViewDebts !== undefined ? parseInt(staffCanViewDebts as any) : undefined,
+        staffCanManageCatalog: staffCanManageCatalog !== undefined ? parseInt(staffCanManageCatalog as any) : undefined,
       })
       .where(eq(schema.users.id, targetUserId))
       .returning();

@@ -94,6 +94,7 @@ export default function SettingsPage() {
   const [staffCanViewExpenses, setStaffCanViewExpenses] = useState(1);
   const [staffCanViewStockBalances, setStaffCanViewStockBalances] = useState(1);
   const [staffCanViewDebts, setStaffCanViewDebts] = useState(1);
+  const [staffCanManageCatalog, setStaffCanManageCatalog] = useState(1);
   const [selectedPermissionsUserId, setSelectedPermissionsUserId] = useState<number | "">("");
 
 
@@ -373,6 +374,7 @@ export default function SettingsPage() {
         setStaffCanViewExpenses(targetUser.staffCanViewExpenses ?? 1);
         setStaffCanViewStockBalances(targetUser.staffCanViewStockBalances ?? 1);
         setStaffCanViewDebts(targetUser.staffCanViewDebts ?? 1);
+        setStaffCanManageCatalog(targetUser.staffCanManageCatalog ?? 1);
       }
     }
   }, [selectedPermissionsUserId, usersList]);
@@ -712,6 +714,7 @@ export default function SettingsPage() {
         staffCanViewExpenses: parseInt(staffCanViewExpenses as any) ?? 1,
         staffCanViewStockBalances: parseInt(staffCanViewStockBalances as any) ?? 1,
         staffCanViewDebts: parseInt(staffCanViewDebts as any) ?? 1,
+        staffCanManageCatalog: parseInt(staffCanManageCatalog as any) ?? 1,
       }
     });
   };
@@ -2047,13 +2050,26 @@ export default function SettingsPage() {
 
               <div className="flex items-start justify-between p-4 bg-gray-50/50 border border-gray-100 rounded-xl text-xs hover:bg-gray-50 transition-all gap-4">
                 <div className="space-y-1">
-                  <p className="font-bold text-gray-800">Anbar Qalıqları & Məhsullar</p>
-                  <p className="text-[10px] text-gray-400 font-medium">Satıcıların əsas anbar səhifəsinə və mədaxil tarixinə girişinə icazə ver (POS terminalda məhsul axtarışı açıq qalacaq)</p>
+                  <p className="font-bold text-gray-800">Anbar Qalıqları & Mədaxil</p>
+                  <p className="text-[10px] text-gray-400 font-medium">Satıcıların anbarda qalıqlara baxmasına və yeni mədaxil etməsinə (restock) icazə ver (POS terminalda məhsul axtarışı açıq qalacaq)</p>
                 </div>
                 <input
                   type="checkbox"
                   checked={staffCanViewStock === 1}
                   onChange={(e) => setStaffCanViewStock(e.target.checked ? 1 : 0)}
+                  className="size-5 text-primary border-gray-300 rounded focus:ring-primary cursor-pointer mt-1"
+                />
+              </div>
+
+              <div className="flex items-start justify-between p-4 bg-gray-50/50 border border-gray-100 rounded-xl text-xs hover:bg-gray-50 transition-all gap-4">
+                <div className="space-y-1">
+                  <p className="font-bold text-gray-800">Məhsul Kataloqu</p>
+                  <p className="text-[10px] text-gray-400 font-medium">Satıcıların yeni məhsul yaratmasına, redaktə etməsinə, silməsinə və məhsul kataloquna girişinə icazə ver</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={staffCanManageCatalog === 1}
+                  onChange={(e) => setStaffCanManageCatalog(e.target.checked ? 1 : 0)}
                   className="size-5 text-primary border-gray-300 rounded focus:ring-primary cursor-pointer mt-1"
                 />
               </div>
