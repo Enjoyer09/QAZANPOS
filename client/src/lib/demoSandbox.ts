@@ -167,6 +167,25 @@ const logActivity = (action: string) => {
 export async function mockDemoFetch(url: string | URL, options?: RequestInit): Promise<Response> {
   const urlStr = typeof url === "string" ? url : url.pathname + url.search;
   const method = options?.method?.toUpperCase() || "GET";
+
+  let userRole = "Staff";
+  let userUsername = "";
+
+  if (options?.headers) {
+    if (options.headers instanceof Headers) {
+      userRole = options.headers.get("x-user-role") || "Staff";
+      userUsername = options.headers.get("x-user-username") || "";
+    } else if (Array.isArray(options.headers)) {
+      const r = options.headers.find(([k]) => k.toLowerCase() === "x-user-role");
+      const u = options.headers.find(([k]) => k.toLowerCase() === "x-user-username");
+      if (r) userRole = r[1];
+      if (u) userUsername = u[1];
+    } else {
+      const headersObj = options.headers as Record<string, string>;
+      userRole = headersObj["x-user-role"] || headersObj["X-User-Role"] || "Staff";
+      userUsername = headersObj["x-user-username"] || headersObj["X-User-Username"] || "";
+    }
+  }
   
   console.log(`[Demo Sandbox Mock API] ${method} ${urlStr}`);
 
@@ -314,10 +333,14 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
     }
   }
 
-  // 5. Sales Endpoints
   if (path === "/api/sales") {
     if (method === "GET") {
-      return jsonResponse(getDb("sales"));
+      const sales = getDb("sales");
+      if (userRole !== "Admin") {
+        const normalized = userUsername ? userUsername.trim().toLowerCase() : "";
+        return jsonResponse(sales.filter(s => (s.sellerName || "").trim().toLowerCase() === normalized));
+      }
+      return jsonResponse(sales);
     }
     if (method === "POST") {
       const body = getBody();
@@ -358,7 +381,8 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
         notes: body.notes || "",
         creditDueDate: body.creditDueDate || null,
         items: enrichedItems,
-        payments: body.paymentType === "credit" ? [] : [{ id: 1, amount: totalAmount, paymentDate: new Date().toISOString(), paymentType: body.paymentType }]
+        payments: body.paymentType === "credit" ? [] : [{ id: 1, amount: totalAmount, paymentDate: new Date().toISOString(), paymentType: body.paymentType }],
+        sellerName: userUsername ? userUsername.trim().toLowerCase() : (userRole === "Admin" ? "admin" : "satici")
       };
 
       sales.unshift(newSale);
@@ -389,6 +413,12 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
     if (method === "GET") {
       const sale = sales.find(s => s.id === id);
       if (sale) {
+        if (userRole !== "Admin") {
+          const normalized = userUsername ? userUsername.trim().toLowerCase() : "";
+          if ((sale.sellerName || "").trim().toLowerCase() !== normalized) {
+            return jsonResponse({ message: "Bu satış məlumatına baxmaq üçün səlahiyyətiniz yoxdur" }, 403);
+          }
+        }
         // Find associated returns
         const returns = getDb("returns").filter(r => r.saleId === id);
         return jsonResponse({ ...sale, returns });

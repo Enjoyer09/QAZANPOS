@@ -1022,8 +1022,17 @@ router.get("/customers/:id/sales", async (req, res) => {
     }
 
     const customerId = parseInt(req.params.id);
+    const role = req.headers["x-user-role"] as string;
+    const username = req.headers["x-user-username"] as string;
+
+    let conditions = and(eq(schema.sales.customerId, customerId), eq(schema.sales.tenantId, req.tenantId));
+    if (role !== "Admin") {
+      const normalizedUsername = username ? username.trim().toLowerCase() : "";
+      conditions = and(conditions, eq(schema.sales.sellerName, normalizedUsername)) as any;
+    }
+
     const customerSales = await db.query.sales.findMany({
-      where: and(eq(schema.sales.customerId, customerId), eq(schema.sales.tenantId, req.tenantId)),
+      where: conditions,
       with: { items: { with: { product: true } }, payments: true },
       orderBy: [desc(schema.sales.saleDate)],
     });
@@ -1057,8 +1066,9 @@ router.get("/sales", async (req, res) => {
       return res.status(403).json({ message: "Satış tarixçəsinə giriş administrator tərəfindən məhdudlaşdırılıb" });
     }
 
-    if (role !== "Admin" && username) {
-      conditions = and(conditions, eq(schema.sales.sellerName, username)) as any;
+    if (role !== "Admin") {
+      const normalizedUsername = username ? username.trim().toLowerCase() : "";
+      conditions = and(conditions, eq(schema.sales.sellerName, normalizedUsername)) as any;
     }
 
     const list = await db.query.sales.findMany({
@@ -1126,7 +1136,8 @@ router.post("/sales", async (req, res) => {
       }
     }
 
-    const sellerName = (req.headers["x-user-username"] as string) || (req.headers["x-user-role"] === "Admin" ? "admin" : "satici") || "Sistem";
+    const rawSeller = req.headers["x-user-username"] as string;
+    const sellerName = rawSeller ? rawSeller.trim().toLowerCase() : (req.headers["x-user-role"] === "Admin" ? "admin" : "satici");
 
     // Execute database operations in a transaction
     const saleResult = await db.transaction(async (tx) => {
@@ -1249,8 +1260,11 @@ router.get("/sales/:id", async (req, res) => {
       return res.status(403).json({ message: "Satış tarixçəsinə giriş administrator tərəfindən məhdudlaşdırılıb" });
     }
 
-    if (role !== "Admin" && username && sale.sellerName !== username) {
-      return res.status(403).json({ message: "Bu satış məlumatına baxmaq üçün səlahiyyətiniz yoxdur" });
+    if (role !== "Admin") {
+      const normalizedUsername = username ? username.trim().toLowerCase() : "";
+      if (sale.sellerName !== normalizedUsername) {
+        return res.status(403).json({ message: "Bu satış məlumatına baxmaq üçün səlahiyyətiniz yoxdur" });
+      }
     }
 
     res.json(sale);
@@ -1277,8 +1291,11 @@ router.patch("/sales/:id/pay-credit", async (req, res) => {
       return res.status(403).json({ message: "Satış tarixçəsinə giriş administrator tərəfindən məhdudlaşdırılıb" });
     }
 
-    if (role !== "Admin" && username && sale.sellerName !== username) {
-      return res.status(403).json({ message: "Bu satışın borcunu ödəmək üçün səlahiyyətiniz yoxdur" });
+    if (role !== "Admin") {
+      const normalizedUsername = username ? username.trim().toLowerCase() : "";
+      if (sale.sellerName !== normalizedUsername) {
+        return res.status(403).json({ message: "Bu satışın borcunu ödəmək üçün səlahiyyətiniz yoxdur" });
+      }
     }
 
     // Calculate total already paid
@@ -1337,8 +1354,11 @@ router.patch("/sales/:id/add-payment", async (req, res) => {
       return res.status(403).json({ message: "Satış tarixçəsinə giriş administrator tərəfindən məhdudlaşdırılıb" });
     }
 
-    if (role !== "Admin" && username && sale.sellerName !== username) {
-      return res.status(403).json({ message: "Bu satışın borcunu ödəmək üçün səlahiyyətiniz yoxdur" });
+    if (role !== "Admin") {
+      const normalizedUsername = username ? username.trim().toLowerCase() : "";
+      if (sale.sellerName !== normalizedUsername) {
+        return res.status(403).json({ message: "Bu satışın borcunu ödəmək üçün səlahiyyətiniz yoxdur" });
+      }
     }
 
     // Insert payment
