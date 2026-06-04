@@ -134,7 +134,7 @@ const queryClient = new QueryClient({
   },
 });
 
-function AppLayout({ children, user, onLogout }: { children: React.ReactNode; user: any; onLogout: () => void }) {
+function AppLayout({ children, user, currentUser, onLogout }: { children: React.ReactNode; user: any; currentUser: any; onLogout: () => void }) {
   const [location, setLocation] = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
@@ -156,16 +156,6 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
       if (!res.ok) return { storeName: "BirSaaS" };
       return res.json();
     },
-  });
-
-  const { data: currentUser } = useQuery<any>({
-    queryKey: ["/api/users/me"],
-    queryFn: async () => {
-      const res = await fetch("/api/users/me");
-      if (!res.ok) throw new Error();
-      return res.json();
-    },
-    enabled: !!user,
   });
 
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -280,10 +270,10 @@ function AppLayout({ children, user, onLogout }: { children: React.ReactNode; us
           icon: Boxes,
           items: [
             ...((isAdmin || currentUser?.staffCanViewStock !== 0) ? [
-              { href: "/anbar", label: "Məhsul Qalıqları", icon: Boxes }
+              { href: "/anbar", label: "Məhsul Qalıqları", icon: Boxes },
+              { href: "/anbar/daxil", label: "Yeni Mədaxil", icon: PlusCircle }
             ] : []),
             ...(isAdmin ? [
-              { href: "/anbar/daxil", label: "Yeni Mədaxil", icon: PlusCircle },
               { href: "/mehsullar", label: "Məhsul Kataloqu", icon: FolderKanban },
               { href: "/etiketler", label: "Etiket Generatoru", icon: Tag }
             ] : [])
@@ -852,12 +842,22 @@ function OverdueDebtCheck() {
 function MainRoutes({ user, onLogout }: { user: any; onLogout: () => void }) {
   const isAdmin = user?.role === "Admin";
   
+  const { data: currentUser } = useQuery<any>({
+    queryKey: ["/api/users/me"],
+    queryFn: async () => {
+      const res = await fetch("/api/users/me");
+      if (!res.ok) throw new Error();
+      return res.json();
+    },
+    enabled: !!user,
+  });
+
   const host = window.location.hostname;
   const parts = host.split(".");
   const isSuperTenant = parts.length > 1 && parts[0].toLowerCase() === "super";
 
   return (
-    <AppLayout user={user} onLogout={onLogout}>
+    <AppLayout user={user} currentUser={currentUser} onLogout={onLogout}>
       {isSuperTenant ? (
         <Switch>
           <Route path="/" component={SuperDashboard} />
@@ -881,7 +881,7 @@ function MainRoutes({ user, onLogout }: { user: any; onLogout: () => void }) {
            {isAdmin && <Route path="/tedarukculer" component={Vendors} />}
            {isAdmin && <Route path="/hr" component={Payroll} />}
            <Route path="/anbar" component={Stock} />
-          {isAdmin && <Route path="/anbar/daxil" component={StockIn} />}
+          {(isAdmin || currentUser?.staffCanViewStock !== 0) && <Route path="/anbar/daxil" component={StockIn} />}
           {isAdmin && <Route path="/mehsullar" component={Products} />}
           {isAdmin && <Route path="/etiketler" component={Labels} />}
           <Route path="/satislar" component={SalesHistory} />

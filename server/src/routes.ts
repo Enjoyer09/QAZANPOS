@@ -626,8 +626,12 @@ router.get("/stock/entries", async (req, res) => {
 });
 
 // Create stock entry
-router.post("/stock/entries", requireAdmin, async (req, res) => {
+router.post("/stock/entries", async (req, res) => {
   try {
+    if (!await checkUserPermission(req, "staffCanViewStock")) {
+      return res.status(403).json({ message: "Anbara mədaxil etmək səlahiyyətiniz yoxdur" });
+    }
+
     const { productId, quantity, purchasePrice, supplier, notes, paymentType, creditDueDate, vendorId, serialNumbers } = req.body;
 
     if (!productId || !quantity || !purchasePrice || !paymentType) {
