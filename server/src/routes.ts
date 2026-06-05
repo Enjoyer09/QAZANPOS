@@ -956,10 +956,6 @@ router.get("/customers", async (req, res) => {
 // Create customer
 router.post("/customers", async (req, res) => {
   try {
-    if (!await checkUserPermission(req, "staffCanViewCustomers")) {
-      return res.status(403).json({ message: "Müştəri qeydiyyatı administrator tərəfindən məhdudlaşdırılıb" });
-    }
-
     const { name, phone, email, address, notes } = req.body;
     if (!name) return res.status(400).json({ message: "Müştəri adı tələb olunur" });
 
@@ -990,10 +986,6 @@ router.post("/customers", async (req, res) => {
 // Update customer
 router.put("/customers/:id", async (req, res) => {
   try {
-    if (!await checkUserPermission(req, "staffCanViewCustomers")) {
-      return res.status(403).json({ message: "Müştəri məlumatlarının yenilənməsi administrator tərəfindən məhdudlaşdırılıb" });
-    }
-
     const id = parseInt(req.params.id);
     const { name, phone, email, address, notes } = req.body;
 
