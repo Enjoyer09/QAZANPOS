@@ -162,6 +162,130 @@ async function computeFIFOMetrics(productId: number, tenantId: number) {
   };
 }
 
+async function fetchTenantStockMetrics(tenantId: number) {
+  // 1. Fetch all products
+  const allProducts = await db.select().from(schema.products).where(eq(schema.products.tenantId, tenantId));
+
+  // 2. Fetch bulk sums
+  const restockedGroup = await db
+    .select({
+      productId: schema.stockEntries.productId,
+      totalRestocked: sql`SUM(${schema.stockEntries.quantity})`
+    })
+    .from(schema.stockEntries)
+    .where(eq(schema.stockEntries.tenantId, tenantId))
+    .groupBy(schema.stockEntries.productId);
+
+  const soldGroup = await db
+    .select({
+      productId: schema.saleItems.productId,
+      totalSold: sql`SUM(${schema.saleItems.quantity})`
+    })
+    .from(schema.saleItems)
+    .where(eq(schema.saleItems.tenantId, tenantId))
+    .groupBy(schema.saleItems.productId);
+
+  const returnedGroup = await db
+    .select({
+      productId: schema.returnItems.productId,
+      totalReturned: sql`SUM(${schema.returnItems.quantity})`
+    })
+    .from(schema.returnItems)
+    .where(
+      and(
+        eq(schema.returnItems.tenantId, tenantId),
+        eq(schema.returnItems.status, "returned_to_stock")
+      )
+    )
+    .groupBy(schema.returnItems.productId);
+
+  const allEntries = await db
+    .select({
+      id: schema.stockEntries.id,
+      productId: schema.stockEntries.productId,
+      quantity: schema.stockEntries.quantity,
+      purchasePrice: schema.stockEntries.purchasePrice,
+      entryDate: schema.stockEntries.entryDate,
+    })
+    .from(schema.stockEntries)
+    .where(eq(schema.stockEntries.tenantId, tenantId))
+    .orderBy(asc(schema.stockEntries.productId), asc(schema.stockEntries.entryDate), asc(schema.stockEntries.id));
+
+  // Map groups
+  const restockedMap = new Map<number, number>();
+  restockedGroup.forEach(g => restockedMap.set(g.productId, parseFloat((g.totalRestocked as string) || "0")));
+
+  const soldMap = new Map<number, number>();
+  soldGroup.forEach(g => soldMap.set(g.productId, parseFloat((g.totalSold as string) || "0")));
+
+  const returnedMap = new Map<number, number>();
+  returnedGroup.forEach(g => returnedMap.set(g.productId, parseFloat((g.totalReturned as string) || "0")));
+
+  const entriesMap = new Map<number, typeof allEntries>();
+  allEntries.forEach(entry => {
+    if (!entriesMap.has(entry.productId)) {
+      entriesMap.set(entry.productId, []);
+    }
+    entriesMap.get(entry.productId)!.push(entry);
+  });
+
+  // Calculate metrics per product
+  const metrics = new Map<number, {
+    currentQuantity: number;
+    totalValue: number;
+    nextUnitCost: number;
+    lastPurchaseDate: string | null;
+  }>();
+
+  for (const product of allProducts) {
+    const productId = product.id;
+    const totalRestocked = restockedMap.get(productId) || 0;
+    const totalSold = soldMap.get(productId) || 0;
+    const totalReturned = returnedMap.get(productId) || 0;
+    const currentQuantity = totalRestocked - totalSold + totalReturned;
+
+    const productEntries = entriesMap.get(productId) || [];
+    const netSold = Math.max(0, totalSold - totalReturned);
+
+    let soldRemaining = netSold;
+    let totalValue = 0;
+    let nextUnitCost = 0;
+    let foundNextUnit = false;
+
+    for (const entry of productEntries) {
+      if (soldRemaining >= entry.quantity) {
+        soldRemaining -= entry.quantity;
+      } else {
+        const qtyLeft = entry.quantity - soldRemaining;
+        soldRemaining = 0;
+        totalValue += qtyLeft * entry.purchasePrice;
+        if (!foundNextUnit) {
+          nextUnitCost = entry.purchasePrice;
+          foundNextUnit = true;
+        }
+      }
+    }
+
+    if (!foundNextUnit && productEntries.length > 0) {
+      nextUnitCost = productEntries[productEntries.length - 1].purchasePrice;
+    }
+
+    const lastPurchaseDate = productEntries.length > 0 ? productEntries[productEntries.length - 1].entryDate : null;
+
+    metrics.set(productId, {
+      currentQuantity,
+      totalValue,
+      nextUnitCost,
+      lastPurchaseDate,
+    });
+  }
+
+  return {
+    allProducts,
+    metrics
+  };
+}
+
 async function computeFIFOSaleCost(productId: number, tenantId: number, quantityToSell: number): Promise<number> {
   const entries = await db
     .select({
@@ -911,94 +1035,77 @@ router.post("/stock/entries", async (req, res) => {
 // Fetch stock levels (current quantities, latest purchase prices, total value)
 router.get("/stock/levels", async (req, res) => {
   try {
-    const allProducts = await db.select().from(schema.products).where(eq(schema.products.tenantId, req.tenantId));
+    const { allProducts, metrics } = await fetchTenantStockMetrics(req.tenantId);
+
+    // Get latest sale prices in bulk
+    const maxSaleIds = db
+      .select({
+        productId: schema.saleItems.productId,
+        maxId: sql`max(${schema.saleItems.id})`.as("max_id")
+      })
+      .from(schema.saleItems)
+      .where(eq(schema.saleItems.tenantId, req.tenantId))
+      .groupBy(schema.saleItems.productId)
+      .as("max_sale_ids");
+
+    const latestSales = await db
+      .select({
+        productId: schema.saleItems.productId,
+        price: schema.saleItems.salePrice
+      })
+      .from(schema.saleItems)
+      .innerJoin(maxSaleIds, eq(schema.saleItems.id, maxSaleIds.maxId));
+
+    const latestSalesMap = new Map<number, number>();
+    latestSales.forEach(s => latestSalesMap.set(s.productId, s.price));
+
+    // Get active serials in bulk
+    const allSerials = await db
+      .select({
+        productId: schema.productSerials.productId,
+        serialNumber: schema.productSerials.serialNumber
+      })
+      .from(schema.productSerials)
+      .where(
+        and(
+          eq(schema.productSerials.tenantId, req.tenantId),
+          eq(schema.productSerials.status, "in_stock")
+        )
+      );
+
+    const serialsMap = new Map<number, string[]>();
+    allSerials.forEach(s => {
+      if (!serialsMap.has(s.productId)) {
+        serialsMap.set(s.productId, []);
+      }
+      serialsMap.get(s.productId)!.push(s.serialNumber);
+    });
+
     const stockLevels = [];
-
     for (const product of allProducts) {
-      // 1. Calculate total restocked
-      const restockedResult = await db
-        .select({ total: sql`SUM(quantity)` })
-        .from(schema.stockEntries)
-        .where(and(eq(schema.stockEntries.productId, product.id), eq(schema.stockEntries.tenantId, req.tenantId)));
-      const totalRestocked = parseFloat((restockedResult[0]?.total as string) || "0");
-
-      // 2. Calculate total sold
-      const soldResult = await db
-        .select({ total: sql`SUM(quantity)` })
-        .from(schema.saleItems)
-        .where(and(eq(schema.saleItems.productId, product.id), eq(schema.saleItems.tenantId, req.tenantId)));
-      const totalSold = parseFloat((soldResult[0]?.total as string) || "0");
-
-      // 3. Calculate total returned back to stock
-      const returnedResult = await db
-        .select({ total: sql`SUM(quantity)` })
-        .from(schema.returnItems)
-        .where(
-          and(
-            eq(schema.returnItems.productId, product.id),
-            eq(schema.returnItems.tenantId, req.tenantId),
-            eq(schema.returnItems.status, "returned_to_stock")
-          )
-        );
-      const totalReturned = parseFloat((returnedResult[0]?.total as string) || "0");
-
-      const currentQuantity = totalRestocked - totalSold + totalReturned;
-
-      // 4. Get latest purchase price metadata (for date display)
-      const latestEntry = await db
-        .select({ 
-          price: schema.stockEntries.purchasePrice,
-          entryDate: schema.stockEntries.entryDate
-        })
-        .from(schema.stockEntries)
-        .where(and(eq(schema.stockEntries.productId, product.id), eq(schema.stockEntries.tenantId, req.tenantId)))
-        .orderBy(desc(schema.stockEntries.entryDate))
-        .limit(1);
-      const lastPurchaseDate = latestEntry[0]?.entryDate || null;
-
-      // Compute FIFO Metrics
-      const fifoMetrics = await computeFIFOMetrics(product.id, req.tenantId);
-      const lastPurchasePrice = fifoMetrics.nextUnitCost;
-
-      // 5. Get latest sale price (last retail selling price)
-      const latestSaleItem = await db
-        .select({ price: schema.saleItems.salePrice })
-        .from(schema.saleItems)
-        .where(and(eq(schema.saleItems.productId, product.id), eq(schema.saleItems.tenantId, req.tenantId)))
-        .orderBy(desc(schema.saleItems.id))
-        .limit(1);
-      const lastSalePrice = latestSaleItem[0]?.price || lastPurchasePrice;
-
-      // 5.5. Fetch active serial numbers if tracked
-      const activeSerialsList = await db
-        .select({ serialNumber: schema.productSerials.serialNumber })
-        .from(schema.productSerials)
-        .where(
-          and(
-            eq(schema.productSerials.productId, product.id),
-            eq(schema.productSerials.tenantId, req.tenantId),
-            eq(schema.productSerials.status, "in_stock")
-          )
-        );
-      const activeSerials = activeSerialsList.map(s => s.serialNumber);
+      const metric = metrics.get(product.id)!;
+      const lastPurchasePrice = metric.nextUnitCost;
+      const lastSalePrice = latestSalesMap.get(product.id) ?? lastPurchasePrice;
+      const activeSerials = serialsMap.get(product.id) || [];
 
       stockLevels.push({
         productId: product.id,
         productName: product.name,
         category: product.category,
         unit: product.unit,
-        currentQuantity,
+        currentQuantity: metric.currentQuantity,
         lastPurchasePrice,
         lastSalePrice,
-        totalValue: fifoMetrics.totalValue,
+        totalValue: metric.totalValue,
         trackingType: product.trackingType,
         activeSerials,
-        lastPurchaseDate,
+        lastPurchaseDate: metric.lastPurchaseDate,
       });
     }
 
     res.json(stockLevels);
-  } catch (error) {
+  } catch (error: any) {
+    console.error("Stock levels calculation error:", error);
     res.status(500).json({ message: "Anbar qalıqlarını hesablayarkən xəta baş verdi" });
   }
 });
@@ -2277,7 +2384,7 @@ router.get("/dashboard/summary", requireAdmin, async (req, res) => {
     const monthNetProfit = monthProfit - monthExpenses;
 
     // 3. Dynamic stock valuation & low stock count
-    const allProducts = await db.select().from(schema.products).where(eq(schema.products.tenantId, req.tenantId));
+    const { allProducts, metrics } = await fetchTenantStockMetrics(req.tenantId);
     let totalStockValue = 0;
     let lowStockCount = 0;
 
@@ -2286,37 +2393,10 @@ router.get("/dashboard/summary", requireAdmin, async (req, res) => {
     const lowStockAlertCount = settingsList[0]?.lowStockAlertCount || 5;
 
     for (const product of allProducts) {
-      const restockedResult = await db
-        .select({ total: sql`SUM(quantity)` })
-        .from(schema.stockEntries)
-        .where(and(eq(schema.stockEntries.productId, product.id), eq(schema.stockEntries.tenantId, req.tenantId)));
-      const totalRestocked = parseFloat((restockedResult[0]?.total as string) || "0");
+      const metric = metrics.get(product.id)!;
+      totalStockValue += metric.totalValue;
 
-      const soldResult = await db
-        .select({ total: sql`SUM(quantity)` })
-        .from(schema.saleItems)
-        .where(and(eq(schema.saleItems.productId, product.id), eq(schema.saleItems.tenantId, req.tenantId)));
-      const totalSold = parseFloat((soldResult[0]?.total as string) || "0");
-
-      // Calculate total returned back to stock
-      const returnedResult = await db
-        .select({ total: sql`SUM(quantity)` })
-        .from(schema.returnItems)
-        .where(
-          and(
-            eq(schema.returnItems.productId, product.id),
-            eq(schema.returnItems.tenantId, req.tenantId),
-            eq(schema.returnItems.status, "returned_to_stock")
-          )
-        );
-      const totalReturned = parseFloat((returnedResult[0]?.total as string) || "0");
-
-      const currentQty = totalRestocked - totalSold + totalReturned;
-
-      const fifoMetrics = await computeFIFOMetrics(product.id, req.tenantId);
-      totalStockValue += fifoMetrics.totalValue;
-
-      if (currentQty < lowStockAlertCount) {
+      if (metric.currentQuantity < lowStockAlertCount) {
         lowStockCount++;
       }
     }
@@ -2595,29 +2675,16 @@ router.get("/dashboard/low-stock", async (req, res) => {
     const settingsList = await db.select().from(schema.settings).where(eq(schema.settings.tenantId, req.tenantId)).limit(1);
     const limitCount = settingsList[0]?.lowStockAlertCount || 5;
 
-    const allProducts = await db.select().from(schema.products).where(eq(schema.products.tenantId, req.tenantId));
+    const { allProducts, metrics } = await fetchTenantStockMetrics(req.tenantId);
     const lowStockAlerts = [];
 
     for (const product of allProducts) {
-      const restockedResult = await db
-        .select({ total: sql`SUM(quantity)` })
-        .from(schema.stockEntries)
-        .where(and(eq(schema.stockEntries.productId, product.id), eq(schema.stockEntries.tenantId, req.tenantId)));
-      const totalRestocked = parseFloat((restockedResult[0]?.total as string) || "0");
-
-      const soldResult = await db
-        .select({ total: sql`SUM(quantity)` })
-        .from(schema.saleItems)
-        .where(and(eq(schema.saleItems.productId, product.id), eq(schema.saleItems.tenantId, req.tenantId)));
-      const totalSold = parseFloat((soldResult[0]?.total as string) || "0");
-
-      const currentQty = totalRestocked - totalSold;
-
-      if (currentQty <= limitCount) {
+      const metric = metrics.get(product.id)!;
+      if (metric.currentQuantity <= limitCount) {
         lowStockAlerts.push({
           productId: product.id,
           productName: product.name,
-          currentQuantity: currentQty,
+          currentQuantity: metric.currentQuantity,
           unit: product.unit,
         });
       }
