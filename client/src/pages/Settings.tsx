@@ -789,7 +789,9 @@ export default function SettingsPage() {
       description: `${title} backup yüklənir.`,
       variant: "success",
     });
-    window.location.href = `/api/backup/export/${table}`;
+    const userRole = activeUser?.role || "Staff";
+    const userUsername = activeUser?.username || "";
+    window.location.href = `/api/backup/export/${table}?role=${encodeURIComponent(userRole)}&username=${encodeURIComponent(userUsername)}`;
   };
 
   if (isLoading) {
@@ -1496,7 +1498,9 @@ export default function SettingsPage() {
                         description: "Ehtiyat nüsxə faylı hazırlanır.",
                         variant: "success",
                       });
-                      window.location.href = "/api/settings/backup/export";
+                      const userRole = activeUser?.role || "Staff";
+                      const userUsername = activeUser?.username || "";
+                      window.location.href = `/api/settings/backup/export?role=${encodeURIComponent(userRole)}&username=${encodeURIComponent(userUsername)}`;
                     }}
                     className="flex-1 px-5 py-3 bg-gray-900 text-white hover:bg-gray-800 font-extrabold text-xs rounded-xl cursor-pointer flex items-center justify-center gap-1.5 transition-all text-center"
                   >

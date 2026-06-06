@@ -69,7 +69,7 @@ router.use(resolveTenant);
 
 // Middleware to verify user role is Admin
 function requireAdmin(req: any, res: any, next: any) {
-  const role = req.headers["x-user-role"];
+  const role = req.headers["x-user-role"] || req.query.role;
   if (role !== "Admin") {
     return res.status(403).json({ message: "Bu əməliyyat üçün yalnız Administrator səlahiyyəti tələb olunur." });
   }
@@ -351,7 +351,7 @@ async function computeFIFOSaleCost(productId: number, tenantId: number, quantity
 
 // Middleware to verify active tenant is the Super Admin control plane
 function requireSuperAdmin(req: any, res: any, next: any) {
-  const role = req.headers["x-user-role"];
+  const role = req.headers["x-user-role"] || req.query.role;
   if (req.tenantSlug !== "super" || role !== "Admin") {
     return res.status(403).json({ message: "Bu əməliyyat üçün yalnız Platforma Administratoru səlahiyyəti tələb olunur." });
   }
@@ -361,7 +361,8 @@ function requireSuperAdmin(req: any, res: any, next: any) {
 // Helper to log user activities with tenant scope
 async function logActivity(req: any, action: string, description: string) {
   try {
-    const username = req.headers["x-user-username"] || (req.headers["x-user-role"] === "Admin" ? "admin" : "satici") || "Sistem";
+    const role = req.headers["x-user-role"] || req.query.role;
+    const username = req.headers["x-user-username"] || req.query.username || (role === "Admin" ? "admin" : "satici") || "Sistem";
     await db.insert(schema.activityLogs).values({
       tenantId: req.tenantId,
       username,

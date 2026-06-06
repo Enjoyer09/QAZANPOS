@@ -427,7 +427,11 @@ export default function SuperDashboard() {
                 description: "Bütün platformanın ehtiyat nüsxəsi yüklənir.",
                 variant: "success",
               });
-              window.location.href = "/api/super/backup/export";
+              const userStr = localStorage.getItem("qazanpos_user");
+              const user = userStr ? JSON.parse(userStr) : null;
+              const role = user?.role || "Admin";
+              const username = user?.username || "superadmin";
+              window.location.href = `/api/super/backup/export?role=${encodeURIComponent(role)}&username=${encodeURIComponent(username)}`;
             }}
             className="px-4 py-2.5 bg-gray-900 text-white hover:bg-gray-800 cursor-pointer shadow-xs transition-all text-xs flex items-center justify-center gap-2 rounded-xl font-bold border border-gray-900"
           >
