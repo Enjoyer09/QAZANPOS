@@ -486,6 +486,18 @@ router.post("/products", async (req, res) => {
     const { name, category, unit, description, barcode } = req.body;
     if (!name) return res.status(400).json({ message: "Ad tələb olunur" });
 
+    // Validate product name uniqueness (case-insensitive, trimmed)
+    const normalizedName = name.trim().toLowerCase();
+    const existingByName = await db.query.products.findFirst({
+      where: and(
+        sql`LOWER(TRIM(${schema.products.name})) = ${normalizedName}`,
+        eq(schema.products.tenantId, req.tenantId)
+      )
+    });
+    if (existingByName) {
+      return res.status(400).json({ message: "Bu adda məhsul artıq kataloqda mövcuddur. Təkrarlanmanın qarşısını almaq üçün eyni adda yeni məhsul yaratmaq əvəzinə mövcud məhsulu istifadə edin və ya redaktə edin." });
+    }
+
     // Validate barcode uniqueness
     if (barcode) {
       const existingProduct = await db.query.products.findFirst({
@@ -537,6 +549,21 @@ router.put("/products/:id", async (req, res) => {
     }
     const id = parseInt(req.params.id);
     const { name, category, unit, description, barcode } = req.body;
+
+    // Validate product name uniqueness (case-insensitive, trimmed)
+    if (name) {
+      const normalizedName = name.trim().toLowerCase();
+      const existingByName = await db.query.products.findFirst({
+        where: and(
+          sql`LOWER(TRIM(${schema.products.name})) = ${normalizedName}`,
+          eq(schema.products.tenantId, req.tenantId),
+          sql`${schema.products.id} != ${id}`
+        )
+      });
+      if (existingByName) {
+        return res.status(400).json({ message: "Bu adda məhsul artıq kataloqda mövcuddur. Təkrarlanmanın qarşısını almaq üçün fərqli bir ad daxil edin." });
+      }
+    }
 
     // Validate barcode uniqueness
     if (barcode) {
