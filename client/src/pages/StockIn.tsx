@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { ArrowLeft, PlusCircle, CheckCircle, Info, Lock } from "lucide-react";
+import { ArrowLeft, PlusCircle, CheckCircle, Info, Lock, Edit2, X } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
 import { sanitizeQtyInput } from "../lib/utils.ts";
 
@@ -54,6 +54,49 @@ export default function StockIn() {
   const [isSuccess, setIsSuccess] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [serialNumbersText, setSerialNumbersText] = useState("");
+
+  // Edit Modal States
+  const [editingEntry, setEditingEntry] = useState<any>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editFormData, setEditFormData] = useState<any>(null);
+  const [adminPassword, setAdminPassword] = useState("");
+
+  // Update Mutation
+  const updateMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await fetch(`/api/stock/entries/${data.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.message || "Düzəliş qeydə alınmadı");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/stock/entries"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stock/levels"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/summary"] });
+      toast({
+        title: "Düzəliş edildi!",
+        description: "Mədaxil məlumatları uğurla yeniləndi.",
+        variant: "success",
+      });
+      setIsEditModalOpen(false);
+      setEditingEntry(null);
+      setEditFormData(null);
+      setAdminPassword("");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Xəta!",
+        description: error.message || "Mədaxil qeydə alınarkən xəta baş verdi.",
+        variant: "destructive",
+      });
+    },
+  });
 
   // Queries
   const { data: products } = useQuery<any[]>({
@@ -486,19 +529,20 @@ export default function StockIn() {
                   <th className="py-3 px-2 text-right">Miqdar</th>
                   <th className="py-3 px-2 text-right">Alış ₼</th>
                   <th className="py-3 px-2 text-center">Ödəniş</th>
-                  <th className="py-3 px-2 text-right pr-4">Tarix</th>
+                  <th className="py-3 px-2 text-right">Tarix</th>
+                  <th className="py-3 px-2 text-center pr-4">Düzəliş</th>
                 </tr>
               </thead>
               <tbody>
                 {isEntriesLoading ? (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-xs text-gray-400">
+                    <td colSpan={6} className="py-8 text-center text-xs text-gray-400">
                       Yüklənir...
                     </td>
                   </tr>
                 ) : filteredEntries.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-12 text-center text-xs text-gray-400">
+                    <td colSpan={6} className="py-12 text-center text-xs text-gray-400">
                       {searchQuery ? "Axtarışa uyğun mədaxil tapılmadı." : "Hələ mədaxil qeydə alınmayıb."}
                     </td>
                   </tr>
@@ -517,8 +561,32 @@ export default function StockIn() {
                           {entry.paymentType}
                         </span>
                       </td>
-                      <td className="py-3 px-2 text-right text-gray-400 pr-4">
+                      <td className="py-3 px-2 text-right text-gray-400">
                         {new Date(entry.entryDate).toLocaleDateString("az-AZ")}
+                      </td>
+                      <td className="py-3 px-2 text-center pr-4">
+                        <button
+                          onClick={() => {
+                            setEditingEntry(entry);
+                            setEditFormData({
+                              id: entry.id,
+                              productId: String(entry.productId),
+                              quantity: String(entry.quantity),
+                              purchasePrice: String(entry.purchasePrice),
+                              paymentType: entry.paymentType,
+                              creditDueDate: entry.creditDueDate || "",
+                              supplier: entry.supplier || "",
+                              notes: entry.notes || "",
+                              vendorId: entry.vendorId ? String(entry.vendorId) : "",
+                            });
+                            setAdminPassword("");
+                            setIsEditModalOpen(true);
+                          }}
+                          className="p-1.5 hover:bg-gray-100 text-gray-500 hover:text-primary rounded-lg cursor-pointer transition-all inline-flex items-center justify-center"
+                          title="Düzəliş et"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
                       </td>
                     </tr>
                   ))
@@ -528,6 +596,252 @@ export default function StockIn() {
           </div>
         </div>
       </div>
+
+      {/* Edit Restocking Modal */}
+      {isEditModalOpen && editingEntry && editFormData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-xs animate-in fade-in-0 duration-200">
+          <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xl max-w-md w-full relative overflow-hidden glass-card space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-primary to-blue-500"></div>
+            
+            <div className="flex justify-between items-center pb-2 border-b border-gray-50">
+              <div>
+                <h3 className="text-sm font-black text-gray-900">Mədaxil Düzəlişi №{editingEntry.id}</h3>
+                <p className="text-[10px] text-gray-400 mt-0.5">Admin şifrəsi ilə redaktə edin</p>
+              </div>
+              <button 
+                onClick={() => {
+                  setIsEditModalOpen(false);
+                  setEditingEntry(null);
+                  setEditFormData(null);
+                  setAdminPassword("");
+                }}
+                className="p-1 hover:bg-gray-100 text-gray-400 hover:text-gray-700 rounded-lg transition-all cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!editFormData.quantity || !editFormData.purchasePrice) {
+                  toast({ title: "Xəta!", description: "Məcburi sahələri doldurun.", variant: "destructive" });
+                  return;
+                }
+                const isEditCredit = editFormData.paymentType === "Nisyə";
+                if (isEditCredit && !editFormData.creditDueDate) {
+                  toast({ title: "Xəta!", description: "Nisyə üçün ödəmə tarixi daxil edilməlidir.", variant: "destructive" });
+                  return;
+                }
+                if (!adminPassword.trim()) {
+                  toast({ title: "Xəta!", description: "Təsdiq üçün admin şifrəsini yazın.", variant: "destructive" });
+                  return;
+                }
+
+                const payload = {
+                  id: editFormData.id,
+                  quantity: parseFloat(editFormData.quantity),
+                  purchasePrice: parseFloat(editFormData.purchasePrice),
+                  paymentType: editFormData.paymentType,
+                  creditDueDate: isEditCredit ? editFormData.creditDueDate : null,
+                  supplier: editFormData.supplier || null,
+                  notes: editFormData.notes || null,
+                  vendorId: editFormData.vendorId ? parseInt(editFormData.vendorId) : null,
+                  adminPassword: adminPassword.trim(),
+                };
+
+                updateMutation.mutate(payload);
+              }}
+              className="space-y-4 text-xs font-semibold"
+            >
+              {/* Product Info (Read-Only) */}
+              <div className="space-y-1">
+                <label className="text-gray-400 uppercase tracking-wider block text-[9px]">Məhsul</label>
+                <input
+                  type="text"
+                  value={editingEntry.productName}
+                  disabled
+                  className="w-full px-3 py-2 border border-gray-100 rounded-xl bg-gray-50 text-gray-500 cursor-not-allowed font-bold"
+                />
+              </div>
+
+              {/* Quantity & Price */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-gray-400 uppercase tracking-wider block text-[9px]">Miqdar *</label>
+                  {products?.find(p => String(p.id) === editFormData.productId)?.trackingType === "serialized" ? (
+                    <div>
+                      <input
+                        type="number"
+                        value={editFormData.quantity}
+                        disabled
+                        className="w-full px-3 py-2 border border-gray-100 rounded-xl bg-gray-50 text-gray-400 cursor-not-allowed font-mono"
+                      />
+                      <span className="text-[9px] text-amber-600 block mt-0.5 leading-tight">
+                        Serial nömrəli məhsul miqdarı dəyişdirilə bilməz.
+                      </span>
+                    </div>
+                  ) : (
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      value={editFormData.quantity}
+                      onChange={(e) => {
+                        const sanitized = sanitizeQtyInput(e.target.value);
+                        setEditFormData((prev: any) => ({ ...prev, quantity: sanitized }));
+                      }}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-white"
+                      required
+                    />
+                  )}
+                </div>
+                <div className="space-y-1">
+                  <label className="text-gray-400 uppercase tracking-wider block text-[9px]">Alış Qiyməti (₼) *</label>
+                  <input
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={editFormData.purchasePrice}
+                    onChange={(e) => setEditFormData((prev: any) => ({ ...prev, purchasePrice: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-white"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Total display */}
+              {parseFloat(editFormData.quantity || "0") * parseFloat(editFormData.purchasePrice || "0") > 0 && (
+                <div className="p-2.5 bg-gray-50 border border-gray-100 rounded-xl flex items-center justify-between">
+                  <span className="text-gray-400 text-[10px] uppercase tracking-wider font-bold">Yeni Ümumi Dəyəri:</span>
+                  <span className="font-bold text-gray-900 font-mono">
+                    {(parseFloat(editFormData.quantity || "0") * parseFloat(editFormData.purchasePrice || "0")).toFixed(2)} ₼
+                  </span>
+                </div>
+              )}
+
+              {/* Payment Type */}
+              <div className="space-y-1">
+                <label className="text-gray-400 uppercase tracking-wider block text-[9px]">Ödəniş Üsulu *</label>
+                <select
+                  value={editFormData.paymentType}
+                  onChange={(e) => setEditFormData((prev: any) => ({ ...prev, paymentType: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-white cursor-pointer"
+                >
+                  {paymentTypes.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Due Date for Credit */}
+              {editFormData.paymentType === "Nisyə" && (
+                <div className="space-y-1 border border-amber-100 bg-amber-50/20 p-2.5 rounded-xl">
+                  <label className="text-amber-700 uppercase tracking-wider block text-[9px]">
+                    Nisyə Ödəmə Tarixi *
+                  </label>
+                  <input
+                    type="date"
+                    value={editFormData.creditDueDate}
+                    onChange={(e) => setEditFormData((prev: any) => ({ ...prev, creditDueDate: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 bg-white"
+                    required
+                  />
+                </div>
+              )}
+
+              {/* Registered Vendor */}
+              <div className="space-y-1">
+                <label className="text-gray-400 uppercase tracking-wider block text-[9px]">Qeydiyyatlı Tədarükçü</label>
+                <select
+                  value={editFormData.vendorId || ""}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const found = vendors?.find((v) => String(v.id) === val);
+                    setEditFormData((prev: any) => ({
+                      ...prev,
+                      vendorId: val,
+                      supplier: found ? found.name : "",
+                    }));
+                  }}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-white cursor-pointer"
+                >
+                  <option value="">Sərbəst / Yoxdur</option>
+                  {vendors?.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Free-form Supplier & Notes */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-gray-400 uppercase tracking-wider block text-[9px]">Tədarükçü (Sərbəst)</label>
+                  <input
+                    type="text"
+                    placeholder="Şirkət / şəxs adı"
+                    value={editFormData.supplier}
+                    onChange={(e) => setEditFormData((prev: any) => ({ ...prev, supplier: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-white"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-gray-400 uppercase tracking-wider block text-[9px]">Qeyd</label>
+                  <input
+                    type="text"
+                    placeholder="Əlavə məlumat"
+                    value={editFormData.notes}
+                    onChange={(e) => setEditFormData((prev: any) => ({ ...prev, notes: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-white"
+                  />
+                </div>
+              </div>
+
+              {/* Admin Password Input */}
+              <div className="space-y-1.5 pt-2 border-t border-gray-50 relative">
+                <label className="text-red-700 uppercase tracking-wider block text-[9px] font-extrabold flex items-center gap-1">
+                  <Lock className="w-3 h-3 text-red-500" /> Admin Şifrəsi *
+                </label>
+                <input
+                  type="password"
+                  placeholder="Düzəlişi təsdiqləmək üçün şifrə yazın..."
+                  value={adminPassword}
+                  onChange={(e) => setAdminPassword(e.target.value)}
+                  className="w-full px-3 py-2 border border-red-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-red-500 bg-red-50/10 font-bold"
+                  required
+                />
+              </div>
+
+              {/* Buttons */}
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditModalOpen(false);
+                    setEditingEntry(null);
+                    setEditFormData(null);
+                    setAdminPassword("");
+                  }}
+                  className="w-1/2 py-2.5 border border-gray-200 text-gray-500 rounded-xl hover:bg-gray-50 transition-all font-bold cursor-pointer text-center"
+                >
+                  Ləğv et
+                </button>
+                <button
+                  type="submit"
+                  disabled={updateMutation.isPending}
+                  className="w-1/2 py-2.5 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 transition-all cursor-pointer text-center disabled:opacity-50"
+                >
+                  {updateMutation.isPending ? "Yenilənir..." : "Təsdiqlə və Saxla"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

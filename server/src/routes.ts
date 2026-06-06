@@ -1085,6 +1085,143 @@ router.patch("/stock/entries/:id/pay", requireAdmin, async (req, res) => {
   }
 });
 
+// Edit stock entry with admin password verification
+router.put("/stock/entries/:id", async (req, res) => {
+  try {
+    if (!await checkUserPermission(req, "staffCanViewStock")) {
+      return res.status(403).json({ message: "Anbar mədaxilini redaktə etmək səlahiyyətiniz yoxdur" });
+    }
+
+    const id = parseInt(req.params.id);
+    const { quantity, purchasePrice, paymentType, creditDueDate, supplier, notes, vendorId, adminPassword } = req.body;
+
+    if (quantity === undefined || purchasePrice === undefined || !paymentType) {
+      return res.status(400).json({ message: "Məcburi sahələri doldurun" });
+    }
+
+    if (!adminPassword) {
+      return res.status(400).json({ message: "Düzəliş üçün Admin şifrəsi tələb olunur" });
+    }
+
+    // Verify admin password
+    const correctAdmin = await db.query.users.findFirst({
+      where: and(
+        eq(schema.users.tenantId, req.tenantId),
+        eq(schema.users.role, "Admin"),
+        eq(schema.users.password, adminPassword.trim())
+      )
+    });
+
+    if (!correctAdmin) {
+      return res.status(401).json({ message: "Daxil etdiyiniz Admin şifrəsi yanlışdır" });
+    }
+
+    // Fetch the existing entry
+    const entry = await db.query.stockEntries.findFirst({
+      where: and(eq(schema.stockEntries.id, id), eq(schema.stockEntries.tenantId, req.tenantId))
+    });
+
+    if (!entry) {
+      return res.status(404).json({ message: "Mədaxil tapılmadı" });
+    }
+
+    // Fetch the product
+    const productList = await db
+      .select()
+      .from(schema.products)
+      .where(and(eq(schema.products.id, entry.productId), eq(schema.products.tenantId, req.tenantId)))
+      .limit(1);
+
+    if (productList.length === 0) {
+      return res.status(404).json({ message: "Məhsul tapılmadı" });
+    }
+
+    const product = productList[0];
+    const isSerialized = product.trackingType === "serialized";
+
+    const parsedQty = parseFloat(quantity);
+    const parsedPrice = parseFloat(purchasePrice);
+
+    if (isSerialized && parsedQty !== entry.quantity) {
+      return res.status(400).json({ message: "Serial nömrəli məhsulun miqdarını birbaşa dəyişmək olmaz" });
+    }
+
+    // Calculate current stock to prevent negative stock level
+    if (parsedQty < entry.quantity) {
+      // 1. Calculate total restocked
+      const restockedResult = await db
+        .select({ total: sql`SUM(quantity)` })
+        .from(schema.stockEntries)
+        .where(and(eq(schema.stockEntries.productId, product.id), eq(schema.stockEntries.tenantId, req.tenantId)));
+      const totalRestocked = parseFloat((restockedResult[0]?.total as string) || "0");
+
+      // 2. Calculate total sold
+      const soldResult = await db
+        .select({ total: sql`SUM(quantity)` })
+        .from(schema.saleItems)
+        .where(and(eq(schema.saleItems.productId, product.id), eq(schema.saleItems.tenantId, req.tenantId)));
+      const totalSold = parseFloat((soldResult[0]?.total as string) || "0");
+
+      // 3. Calculate total returned
+      const returnedResult = await db
+        .select({ total: sql`SUM(quantity)` })
+        .from(schema.returnItems)
+        .where(
+          and(
+            eq(schema.returnItems.productId, product.id),
+            eq(schema.returnItems.tenantId, req.tenantId),
+            eq(schema.returnItems.status, "returned_to_stock")
+          )
+        );
+      const totalReturned = parseFloat((returnedResult[0]?.total as string) || "0");
+
+      const currentQuantity = totalRestocked - totalSold + totalReturned;
+      const difference = parsedQty - entry.quantity; // will be negative
+      if (currentQuantity + difference < 0) {
+        return res.status(400).json({ 
+          message: `Düzəliş mümkün deyil: Qalıq miqdar mənfi ola bilməz (Mövcud qalıq: ${currentQuantity} ${product.unit}, Azaldılan miqdar: ${Math.abs(difference)} ${product.unit})` 
+        });
+      }
+    }
+
+    let newPaidStatus = entry.paidStatus;
+    if (paymentType === "Nisyə") {
+      if (entry.paymentType !== "Nisyə") {
+        newPaidStatus = "credit";
+      }
+    } else {
+      newPaidStatus = "paid";
+    }
+
+    // Update entry
+    const updated = await db
+      .update(schema.stockEntries)
+      .set({
+        quantity: parsedQty,
+        purchasePrice: parsedPrice,
+        paymentType,
+        creditDueDate: paymentType === "Nisyə" ? creditDueDate : null,
+        paidStatus: newPaidStatus,
+        supplier: supplier || null,
+        notes: notes || null,
+        vendorId: vendorId ? parseInt(vendorId) : null,
+      })
+      .where(eq(schema.stockEntries.id, id))
+      .returning();
+
+    await logActivity(
+      req,
+      "UPDATE_STOCK_ENTRY",
+      `Mədaxil №${id} düzəliş edildi: Miqdar: ${entry.quantity} -> ${parsedQty}, Alış: ${entry.purchasePrice} -> ${parsedPrice}, Ödəniş: ${entry.paymentType} -> ${paymentType}`
+    );
+
+    res.json(updated[0]);
+  } catch (error: any) {
+    console.error("Update stock entry error:", error);
+    res.status(500).json({ message: "Mədaxil düzəlişi zamanı xəta baş verdi: " + error.message });
+  }
+});
+
 // ----------------------------------------------------
 // 3. CUSTOMERS ENDPOINTS
 // ----------------------------------------------------
