@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { ArrowLeft, PlusCircle, CheckCircle, Info, Lock } from "lucide-react";
@@ -49,6 +49,8 @@ export default function StockIn() {
   });
 
   const [formData, setFormData] = useState(emptyEntry);
+  const [productSearch, setProductSearch] = useState("");
+  const [showProductDropdown, setShowProductDropdown] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [serialNumbersText, setSerialNumbersText] = useState("");
@@ -79,6 +81,27 @@ export default function StockIn() {
       if (!res.ok) throw new Error();
       return res.json();
     },
+  });
+
+  useEffect(() => {
+    if (formData.productId && products) {
+      const selected = products.find((p) => String(p.id) === formData.productId);
+      if (selected) {
+        setProductSearch(selected.name);
+      }
+    } else {
+      setProductSearch("");
+    }
+  }, [formData.productId, products]);
+
+  const filteredProducts = (products || []).filter((p) => {
+    const q = productSearch.toLowerCase().trim();
+    if (!q) return true;
+    return (
+      p.name.toLowerCase().includes(q) ||
+      (p.barcode && p.barcode.toLowerCase().includes(q)) ||
+      (p.category && p.category.toLowerCase().includes(q))
+    );
   });
 
   const filteredEntries = (entries || []).filter((entry) => {
@@ -117,6 +140,7 @@ export default function StockIn() {
       });
       setIsSuccess(true);
       setFormData(emptyEntry);
+      setProductSearch("");
       setSerialNumbersText("");
       setTimeout(() => setIsSuccess(false), 3000);
     },
@@ -227,21 +251,53 @@ export default function StockIn() {
           <h3 className="font-extrabold text-gray-900 text-sm mb-4">Mal Daxil Et</h3>
           <form onSubmit={handleSubmit} className="space-y-4 text-xs font-semibold">
             {/* Product selection */}
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 relative">
               <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Məhsul *</label>
-              <select
-                value={formData.productId}
-                onChange={(e) => setFormData((prev) => ({ ...prev, productId: e.target.value }))}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 cursor-pointer"
-                required
-              >
-                <option value="">Məhsul seçin...</option>
-                {products?.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({p.unit})
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Məhsul adı və ya barkod..."
+                  value={productSearch}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setProductSearch(val);
+                    if (!val.trim()) {
+                      setFormData((prev) => ({ ...prev, productId: "" }));
+                    }
+                    setShowProductDropdown(true);
+                  }}
+                  onFocus={() => setShowProductDropdown(true)}
+                  onBlur={() => setTimeout(() => setShowProductDropdown(false), 200)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50"
+                  required
+                />
+                {showProductDropdown && (
+                  <div className="absolute z-50 w-full mt-1 bg-white border border-gray-100 rounded-xl shadow-lg max-h-60 overflow-y-auto">
+                    {filteredProducts.length === 0 ? (
+                      <div className="p-3 text-center text-xs text-gray-400">Məhsul tapılmadı</div>
+                    ) : (
+                      filteredProducts.map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onMouseDown={() => {
+                            setFormData((prev) => ({ ...prev, productId: String(p.id) }));
+                            setProductSearch(p.name);
+                            setShowProductDropdown(false);
+                          }}
+                          className="w-full text-left px-4 py-2.5 text-xs hover:bg-gray-50 transition-all font-semibold flex justify-between items-center border-b border-gray-50 last:border-b-0"
+                        >
+                          <div className="flex flex-col">
+                            <span className="text-gray-900 font-bold">{p.name}</span>
+                            {p.barcode && <span className="text-[10px] text-gray-400 font-mono">Barkod: {p.barcode}</span>}
+                          </div>
+                          <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-0.5 rounded-md font-bold shrink-0">{p.unit}</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Quantity and Purchase Price */}

@@ -97,6 +97,134 @@ async function checkUserPermission(
   return user[permissionKey] !== 0;
 }
 
+// FIFO Inventory Valuation Helper Functions
+async function computeFIFOMetrics(productId: number, tenantId: number) {
+  // Fetch all stock entries ordered by entryDate and ID ascending (oldest first)
+  const entries = await db
+    .select({
+      id: schema.stockEntries.id,
+      quantity: schema.stockEntries.quantity,
+      purchasePrice: schema.stockEntries.purchasePrice
+    })
+    .from(schema.stockEntries)
+    .where(and(eq(schema.stockEntries.productId, productId), eq(schema.stockEntries.tenantId, tenantId)))
+    .orderBy(asc(schema.stockEntries.entryDate), asc(schema.stockEntries.id));
+
+  // Fetch total net quantity sold (totalSold - totalReturned)
+  const soldResult = await db
+    .select({ total: sql`SUM(quantity)` })
+    .from(schema.saleItems)
+    .where(and(eq(schema.saleItems.productId, productId), eq(schema.saleItems.tenantId, tenantId)));
+  const totalSold = parseFloat((soldResult[0]?.total as string) || "0");
+
+  const returnedResult = await db
+    .select({ total: sql`SUM(quantity)` })
+    .from(schema.returnItems)
+    .where(
+      and(
+        eq(schema.returnItems.productId, productId),
+        eq(schema.returnItems.tenantId, tenantId),
+        eq(schema.returnItems.status, "returned_to_stock")
+      )
+    );
+  const totalReturned = parseFloat((returnedResult[0]?.total as string) || "0");
+
+  const netSold = Math.max(0, totalSold - totalReturned);
+
+  // Consume netSold from the oldest entries to find remaining batches
+  let soldRemaining = netSold;
+  let totalValue = 0;
+  let nextUnitCost = 0;
+  let foundNextUnit = false;
+
+  for (const entry of entries) {
+    if (soldRemaining >= entry.quantity) {
+      soldRemaining -= entry.quantity;
+    } else {
+      const qtyLeft = entry.quantity - soldRemaining;
+      soldRemaining = 0;
+      totalValue += qtyLeft * entry.purchasePrice;
+      if (!foundNextUnit) {
+        nextUnitCost = entry.purchasePrice;
+        foundNextUnit = true;
+      }
+    }
+  }
+
+  // Fallback nextUnitCost to last entry's price or 0 if all consumed
+  if (!foundNextUnit && entries.length > 0) {
+    nextUnitCost = entries[entries.length - 1].purchasePrice;
+  }
+
+  return {
+    totalValue,
+    nextUnitCost
+  };
+}
+
+async function computeFIFOSaleCost(productId: number, tenantId: number, quantityToSell: number): Promise<number> {
+  const entries = await db
+    .select({
+      id: schema.stockEntries.id,
+      quantity: schema.stockEntries.quantity,
+      purchasePrice: schema.stockEntries.purchasePrice
+    })
+    .from(schema.stockEntries)
+    .where(and(eq(schema.stockEntries.productId, productId), eq(schema.stockEntries.tenantId, tenantId)))
+    .orderBy(asc(schema.stockEntries.entryDate), asc(schema.stockEntries.id));
+
+  const soldResult = await db
+    .select({ total: sql`SUM(quantity)` })
+    .from(schema.saleItems)
+    .where(and(eq(schema.saleItems.productId, productId), eq(schema.saleItems.tenantId, tenantId)));
+  const totalSold = parseFloat((soldResult[0]?.total as string) || "0");
+
+  const returnedResult = await db
+    .select({ total: sql`SUM(quantity)` })
+    .from(schema.returnItems)
+    .where(
+      and(
+        eq(schema.returnItems.productId, productId),
+        eq(schema.returnItems.tenantId, tenantId),
+        eq(schema.returnItems.status, "returned_to_stock")
+      )
+    );
+  const totalReturned = parseFloat((returnedResult[0]?.total as string) || "0");
+
+  const netSold = Math.max(0, totalSold - totalReturned);
+
+  let soldRemaining = netSold;
+  const activeEntries = [];
+  for (const entry of entries) {
+    if (soldRemaining >= entry.quantity) {
+      soldRemaining -= entry.quantity;
+    } else {
+      const qtyLeft = entry.quantity - soldRemaining;
+      soldRemaining = 0;
+      activeEntries.push({
+        ...entry,
+        quantityLeft: qtyLeft
+      });
+    }
+  }
+
+  let sellRemaining = quantityToSell;
+  let totalCost = 0;
+  for (const entry of activeEntries) {
+    if (sellRemaining <= 0) break;
+    const take = Math.min(sellRemaining, entry.quantityLeft);
+    totalCost += take * entry.purchasePrice;
+    sellRemaining -= take;
+  }
+
+  if (sellRemaining > 0 && entries.length > 0) {
+    const lastEntryPrice = entries[entries.length - 1].purchasePrice;
+    totalCost += sellRemaining * lastEntryPrice;
+  }
+
+  return quantityToSell > 0 ? (totalCost / quantityToSell) : 0;
+}
+
 // Middleware to verify active tenant is the Super Admin control plane
 function requireSuperAdmin(req: any, res: any, next: any) {
   const role = req.headers["x-user-role"];
@@ -816,7 +944,7 @@ router.get("/stock/levels", async (req, res) => {
 
       const currentQuantity = totalRestocked - totalSold + totalReturned;
 
-      // 4. Get latest purchase price
+      // 4. Get latest purchase price metadata (for date display)
       const latestEntry = await db
         .select({ 
           price: schema.stockEntries.purchasePrice,
@@ -826,8 +954,11 @@ router.get("/stock/levels", async (req, res) => {
         .where(and(eq(schema.stockEntries.productId, product.id), eq(schema.stockEntries.tenantId, req.tenantId)))
         .orderBy(desc(schema.stockEntries.entryDate))
         .limit(1);
-      const lastPurchasePrice = latestEntry[0]?.price || 0;
       const lastPurchaseDate = latestEntry[0]?.entryDate || null;
+
+      // Compute FIFO Metrics
+      const fifoMetrics = await computeFIFOMetrics(product.id, req.tenantId);
+      const lastPurchasePrice = fifoMetrics.nextUnitCost;
 
       // 5. Get latest sale price (last retail selling price)
       const latestSaleItem = await db
@@ -859,7 +990,7 @@ router.get("/stock/levels", async (req, res) => {
         currentQuantity,
         lastPurchasePrice,
         lastSalePrice,
-        totalValue: currentQuantity * lastPurchasePrice,
+        totalValue: fifoMetrics.totalValue,
         trackingType: product.trackingType,
         activeSerials,
         lastPurchaseDate,
@@ -1199,6 +1330,28 @@ router.post("/sales", async (req, res) => {
     const rawSeller = req.headers["x-user-username"] as string;
     const sellerName = rawSeller ? rawSeller.trim().toLowerCase() : (req.headers["x-user-role"] === "Admin" ? "admin" : "satici");
 
+    // Calculate FIFO costs for all items
+    const processedItems: {
+      productId: number;
+      quantity: number;
+      salePrice: number;
+      purchasePrice: number;
+      serialNumbers?: string[];
+    }[] = [];
+    let calculatedTotalCost = 0;
+    for (const item of items) {
+      const qty = parseFloat(item.quantity);
+      const fifoCost = await computeFIFOSaleCost(item.productId, req.tenantId, qty);
+      calculatedTotalCost += qty * fifoCost;
+      processedItems.push({
+        productId: item.productId,
+        quantity: qty,
+        salePrice: parseFloat(item.salePrice),
+        purchasePrice: fifoCost,
+        serialNumbers: item.serialNumbers
+      });
+    }
+
     // Execute database operations in a transaction
     const saleResult = await db.transaction(async (tx) => {
       // Insert sale
@@ -1214,7 +1367,7 @@ router.post("/sales", async (req, res) => {
           notes: notes || null,
           saleDate: new Date().toISOString(),
           totalAmount: parseFloat(totalAmount),
-          totalCost: parseFloat(totalCost),
+          totalCost: parseFloat(calculatedTotalCost.toFixed(2)),
           paymentStatus: isCredit ? "credit" : "paid",
           offlineId: offlineId || null,
           salesChannel: salesChannel || "Mağaza",
@@ -1226,14 +1379,14 @@ router.post("/sales", async (req, res) => {
       const saleId = newSale[0].id;
 
       // Insert items
-      for (const item of items) {
+      for (const item of processedItems) {
         await tx.insert(schema.saleItems).values({
           tenantId: req.tenantId,
           saleId,
           productId: item.productId,
-          quantity: parseFloat(item.quantity),
-          salePrice: parseFloat(item.salePrice),
-          purchasePrice: parseFloat(item.purchasePrice || "0"),
+          quantity: item.quantity,
+          salePrice: item.salePrice,
+          purchasePrice: item.purchasePrice,
         });
 
         // Link serial numbers if provided
@@ -2023,15 +2176,8 @@ router.get("/dashboard/summary", requireAdmin, async (req, res) => {
 
       const currentQty = totalRestocked - totalSold + totalReturned;
 
-      const latestEntry = await db
-        .select({ price: schema.stockEntries.purchasePrice })
-        .from(schema.stockEntries)
-        .where(and(eq(schema.stockEntries.productId, product.id), eq(schema.stockEntries.tenantId, req.tenantId)))
-        .orderBy(desc(schema.stockEntries.entryDate))
-        .limit(1);
-      const lastPurchasePrice = latestEntry[0]?.price || 0;
-
-      totalStockValue += Math.max(0, currentQty) * lastPurchasePrice;
+      const fifoMetrics = await computeFIFOMetrics(product.id, req.tenantId);
+      totalStockValue += fifoMetrics.totalValue;
 
       if (currentQty < lowStockAlertCount) {
         lowStockCount++;
