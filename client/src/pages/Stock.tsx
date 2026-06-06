@@ -43,12 +43,26 @@ export default function Stock() {
     },
   });
 
+  const normalizeSearchText = (text: string): string => {
+    if (!text) return "";
+    return text
+      .toLocaleLowerCase("az-AZ")
+      .replace(/ı/g, "i")
+      .replace(/ə/g, "e")
+      .replace(/ö/g, "o")
+      .replace(/ü/g, "u")
+      .replace(/ş/g, "s")
+      .replace(/ç/g, "c")
+      .replace(/ğ/g, "g");
+  };
+
   const filteredList = (list || []).filter((item) => {
-    const q = searchQuery.trim().toLowerCase();
+    const q = searchQuery.trim();
     if (!q) return true;
+    const qNorm = normalizeSearchText(q);
     return (
-      item.productName.toLowerCase().includes(q) ||
-      (item.category && item.category.toLowerCase().includes(q))
+      normalizeSearchText(item.productName).includes(qNorm) ||
+      (item.category && normalizeSearchText(item.category).includes(qNorm))
     );
   });
 

@@ -230,12 +230,29 @@ export default function Labels() {
     "a4": { width: "380px", height: "270px", label: "A4 Vərəq (Çap Toru)" }
   };
 
+  const normalizeSearchText = (text: string): string => {
+    if (!text) return "";
+    return text
+      .toLocaleLowerCase("az-AZ")
+      .replace(/ı/g, "i")
+      .replace(/ə/g, "e")
+      .replace(/ö/g, "o")
+      .replace(/ü/g, "u")
+      .replace(/ş/g, "s")
+      .replace(/ç/g, "c")
+      .replace(/ğ/g, "g");
+  };
+
   // Search filter catalog
-  const filteredProducts = products.filter(
-    (p) =>
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (p.barcode && p.barcode.includes(searchTerm))
-  );
+  const filteredProducts = products.filter((p) => {
+    const q = searchTerm.trim();
+    if (!q) return true;
+    const qNorm = normalizeSearchText(q);
+    return (
+      normalizeSearchText(p.name).includes(qNorm) ||
+      (p.barcode && normalizeSearchText(p.barcode).includes(qNorm))
+    );
+  });
 
   // Trigger browser print dialog for designed labels
   const handlePrint = () => {

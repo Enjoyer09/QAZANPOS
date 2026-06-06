@@ -137,24 +137,39 @@ export default function StockIn() {
     }
   }, [formData.productId, products]);
 
+  const normalizeSearchText = (text: string): string => {
+    if (!text) return "";
+    return text
+      .toLocaleLowerCase("az-AZ")
+      .replace(/ı/g, "i")
+      .replace(/ə/g, "e")
+      .replace(/ö/g, "o")
+      .replace(/ü/g, "u")
+      .replace(/ş/g, "s")
+      .replace(/ç/g, "c")
+      .replace(/ğ/g, "g");
+  };
+
   const filteredProducts = (products || []).filter((p) => {
-    const q = productSearch.toLowerCase().trim();
+    const q = productSearch.trim();
     if (!q) return true;
+    const qNorm = normalizeSearchText(q);
     return (
-      p.name.toLowerCase().includes(q) ||
-      (p.barcode && p.barcode.toLowerCase().includes(q)) ||
-      (p.category && p.category.toLowerCase().includes(q))
+      normalizeSearchText(p.name).includes(qNorm) ||
+      (p.barcode && normalizeSearchText(p.barcode).includes(qNorm)) ||
+      (p.category && normalizeSearchText(p.category).includes(qNorm))
     );
   });
 
   const filteredEntries = (entries || []).filter((entry) => {
-    const q = searchQuery.trim().toLowerCase();
+    const q = searchQuery.trim();
     if (!q) return true;
+    const qNorm = normalizeSearchText(q);
     return (
-      entry.productName?.toLowerCase().includes(q) ||
-      (entry.supplier && entry.supplier.toLowerCase().includes(q)) ||
-      (entry.notes && entry.notes.toLowerCase().includes(q)) ||
-      (entry.paymentType && entry.paymentType.toLowerCase().includes(q))
+      (entry.productName && normalizeSearchText(entry.productName).includes(qNorm)) ||
+      (entry.supplier && normalizeSearchText(entry.supplier).includes(qNorm)) ||
+      (entry.notes && normalizeSearchText(entry.notes).includes(qNorm)) ||
+      (entry.paymentType && normalizeSearchText(entry.paymentType).includes(qNorm))
     );
   });
 

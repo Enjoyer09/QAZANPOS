@@ -184,13 +184,27 @@ export default function POS() {
     ? (activeStockLevels?.filter((p) => parseFloat(p.currentQuantity) > 0) || [])
     : (activeStockLevels || []);
 
+  const normalizeSearchText = (text: string): string => {
+    if (!text) return "";
+    return text
+      .toLocaleLowerCase("az-AZ")
+      .replace(/ı/g, "i")
+      .replace(/ə/g, "e")
+      .replace(/ö/g, "o")
+      .replace(/ü/g, "u")
+      .replace(/ş/g, "s")
+      .replace(/ç/g, "c")
+      .replace(/ğ/g, "g");
+  };
+
   // Filter products by manual search input
   const searchedProducts = sellableProducts.filter((p) => {
-    const q = productSearchQuery.trim().toLowerCase();
+    const q = productSearchQuery.trim();
     if (!q) return true;
+    const qNorm = normalizeSearchText(q);
     return (
-      p.productName.toLowerCase().includes(q) ||
-      (p.barcode && p.barcode.toLowerCase().includes(q))
+      normalizeSearchText(p.productName).includes(qNorm) ||
+      (p.barcode && normalizeSearchText(p.barcode).includes(qNorm))
     );
   });
 
