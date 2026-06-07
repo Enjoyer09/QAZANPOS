@@ -570,7 +570,7 @@ export default function StockIn() {
                         {entry.quantity}
                       </td>
                       <td className="py-3 px-2 text-right font-bold text-gray-950 font-mono">
-                        {(entry.purchasePrice || 0).toFixed(2)} ₼
+                        {Number(entry.purchasePrice || 0).toFixed(2)} ₼
                       </td>
                       <td className="py-3 px-2 text-center">
                         <span className={`px-2 py-0.5 border rounded-full text-[9px] font-bold ${paymentBadges[entry.paymentType] || "bg-gray-50 text-gray-500"}`}>
@@ -578,7 +578,11 @@ export default function StockIn() {
                         </span>
                       </td>
                       <td className="py-3 px-2 text-right text-gray-400">
-                        {new Date(entry.entryDate).toLocaleDateString("az-AZ")}
+                        {(() => {
+                          if (!entry.entryDate) return "-";
+                          const d = new Date(entry.entryDate);
+                          return isNaN(d.getTime()) ? "-" : d.toLocaleDateString("az-AZ");
+                        })()}
                       </td>
                       <td className="py-3 px-2 text-center pr-4">
                         <button

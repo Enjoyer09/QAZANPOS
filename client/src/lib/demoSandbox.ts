@@ -3,14 +3,14 @@
 
 // 1. Pre-seeded Demo Dataset
 const DEFAULT_PRODUCTS = [
-  { productId: 1, id: 1, productName: "iPhone 15 Pro", barcode: "190198765432", category: "Telefonlar", unit: "ədəd", currentQuantity: 12, salePrice: 2200, purchasePrice: 1800, supplierName: "Apple Azerbaijan", notes: "128GB Black Titanium" },
-  { productId: 2, id: 2, productName: "MacBook Air M3", barcode: "190198765449", category: "Kompüterlər", unit: "ədəd", currentQuantity: 8, salePrice: 2400, purchasePrice: 1900, supplierName: "Apple Azerbaijan", notes: "13-inch 8GB/256GB" },
-  { productId: 3, id: 3, productName: "AirPods Pro 2", barcode: "190198765456", category: "Aksesuarlar", unit: "ədəd", currentQuantity: 25, salePrice: 400, purchasePrice: 280, supplierName: "Apple Azerbaijan", notes: "USB-C Case" },
-  { productId: 4, id: 4, productName: "Samsung Galaxy S24 Ultra", barcode: "880609876543", category: "Telefonlar", unit: "ədəd", currentQuantity: 10, salePrice: 2100, purchasePrice: 1700, supplierName: "Samsung Baku", notes: "512GB Titanium Gray" },
-  { productId: 5, id: 5, productName: "Xiaomi 14 Pro", barcode: "697060987654", category: "Telefonlar", unit: "ədəd", currentQuantity: 15, salePrice: 1450, purchasePrice: 1100, supplierName: "Mi Azerbaijan", notes: "256GB Black" },
-  { productId: 6, id: 6, productName: "Barkod Oxuyucu Honeywell", barcode: "4006381333931", category: "Avadanlıq", unit: "ədəd", currentQuantity: 40, salePrice: 150, purchasePrice: 80, supplierName: "Honeywell Ltd", notes: "Simsiz 2D Scanner" },
-  { productId: 7, id: 7, productName: "Termal Printer 80mm", barcode: "4006381333948", category: "Avadanlıq", unit: "ədəd", currentQuantity: 18, salePrice: 220, purchasePrice: 120, supplierName: "Epson Baku", notes: "Qəbz çapı üçün" },
-  { productId: 8, id: 8, productName: "Samsung Smart Saat 6", barcode: "880609876599", category: "Aksesuarlar", unit: "ədəd", currentQuantity: 30, salePrice: 550, purchasePrice: 350, supplierName: "Samsung Baku", notes: "Classic LTE Edition" },
+  { productId: 1, id: 1, name: "iPhone 15 Pro", productName: "iPhone 15 Pro", barcode: "190198765432", category: "Telefonlar", unit: "ədəd", currentQuantity: 12, salePrice: 2200, purchasePrice: 1800, supplierName: "Apple Azerbaijan", notes: "128GB Black Titanium" },
+  { productId: 2, id: 2, name: "MacBook Air M3", productName: "MacBook Air M3", barcode: "190198765449", category: "Kompüterlər", unit: "ədəd", currentQuantity: 8, salePrice: 2400, purchasePrice: 1900, supplierName: "Apple Azerbaijan", notes: "13-inch 8GB/256GB" },
+  { productId: 3, id: 3, name: "AirPods Pro 2", productName: "AirPods Pro 2", barcode: "190198765456", category: "Aksesuarlar", unit: "ədəd", currentQuantity: 25, salePrice: 400, purchasePrice: 280, supplierName: "Apple Azerbaijan", notes: "USB-C Case" },
+  { productId: 4, id: 4, name: "Samsung Galaxy S24 Ultra", productName: "Samsung Galaxy S24 Ultra", barcode: "880609876543", category: "Telefonlar", unit: "ədəd", currentQuantity: 10, salePrice: 2100, purchasePrice: 1700, supplierName: "Samsung Baku", notes: "512GB Titanium Gray" },
+  { productId: 5, id: 5, name: "Xiaomi 14 Pro", productName: "Xiaomi 14 Pro", barcode: "697060987654", category: "Telefonlar", unit: "ədəd", currentQuantity: 15, salePrice: 1450, purchasePrice: 1100, supplierName: "Mi Azerbaijan", notes: "256GB Black" },
+  { productId: 6, id: 6, name: "Barkod Oxuyucu Honeywell", productName: "Barkod Oxuyucu Honeywell", barcode: "4006381333931", category: "Avadanlıq", unit: "ədəd", currentQuantity: 40, salePrice: 150, purchasePrice: 80, supplierName: "Honeywell Ltd", notes: "Simsiz 2D Scanner" },
+  { productId: 7, id: 7, name: "Termal Printer 80mm", productName: "Termal Printer 80mm", barcode: "4006381333948", category: "Avadanlıq", unit: "ədəd", currentQuantity: 18, salePrice: 220, purchasePrice: 120, supplierName: "Epson Baku", notes: "Qəbz çapı üçün" },
+  { productId: 8, id: 8, name: "Samsung Smart Saat 6", productName: "Samsung Smart Saat 6", barcode: "880609876599", category: "Aksesuarlar", unit: "ədəd", currentQuantity: 30, salePrice: 550, purchasePrice: 350, supplierName: "Samsung Baku", notes: "Classic LTE Edition" },
 ];
 
 const DEFAULT_CUSTOMERS = [
@@ -20,11 +20,22 @@ const DEFAULT_CUSTOMERS = [
   { id: 4, name: "Samir Qasımov", phone: "+994 50 500 99 00", email: "samir@qasimov.az", address: "Sumqayıt", notes: "Yalnız nağd", createdByName: "admin" },
 ];
 
+const DEFAULT_VENDORS = [
+  { id: 1, name: "Apple Azerbaijan", phone: "+994 50 111 22 33", email: "info@apple.az", address: "Bakı, Port Baku", notes: "Apple rəsmi distribyutoru", totalPurchases: 25000, totalPaid: 25000, balance: 0 },
+  { id: 2, name: "Samsung Baku", phone: "+994 55 222 33 44", email: "sales@samsung.az", address: "Bakı, Azadlıq prospekti", notes: "Samsung məhsulları", totalPurchases: 18000, totalPaid: 15000, balance: 3000 },
+  { id: 3, name: "Mi Azerbaijan", phone: "+994 70 333 44 55", email: "mi@xiaomi.az", address: "Bakı, 28 May", notes: "Xiaomi smartfonları", totalPurchases: 11000, totalPaid: 11000, balance: 0 },
+];
+
 const getPastIsoDate = (daysAgo: number) => {
   const d = new Date();
   d.setDate(d.getDate() - daysAgo);
   return d.toISOString();
 };
+
+const DEFAULT_STOCK_ENTRIES = [
+  { id: 1, productId: 1, productName: "iPhone 15 Pro", vendorId: 1, quantity: 10, purchasePrice: 1800, supplier: "Apple Azerbaijan", notes: "İlk partiya", paymentType: "Nəğd", creditDueDate: null, entryDate: getPastIsoDate(5), paidStatus: "paid" },
+  { id: 2, productId: 4, productName: "Samsung Galaxy S24 Ultra", vendorId: 2, quantity: 5, purchasePrice: 1700, supplier: "Samsung Baku", notes: "Nisyə alış", paymentType: "Nisyə", creditDueDate: getPastIsoDate(-10), entryDate: getPastIsoDate(3), paidStatus: "credit" }
+];
 
 const DEFAULT_SALES = [
   {
@@ -132,12 +143,13 @@ const DEFAULT_LOGS = [
   { id: 3, username: "admin", action: "Yeni satış tamamlandı: #00001 (Kartla)", timestamp: getPastIsoDate(2) }
 ];
 
-// Helper to initialize session storage database
 export function initDemoDatabase() {
   if (sessionStorage.getItem("birsaas_demo_db_initialized") === "true") return;
 
   sessionStorage.setItem("birsaas_demo_products", JSON.stringify(DEFAULT_PRODUCTS));
   sessionStorage.setItem("birsaas_demo_customers", JSON.stringify(DEFAULT_CUSTOMERS));
+  sessionStorage.setItem("birsaas_demo_vendors", JSON.stringify(DEFAULT_VENDORS));
+  sessionStorage.setItem("birsaas_demo_stock_entries", JSON.stringify(DEFAULT_STOCK_ENTRIES));
   sessionStorage.setItem("birsaas_demo_sales", JSON.stringify(DEFAULT_SALES));
   sessionStorage.setItem("birsaas_demo_returns", JSON.stringify(DEFAULT_RETURNS));
   sessionStorage.setItem("birsaas_demo_expenses", JSON.stringify(DEFAULT_EXPENSES));
@@ -229,16 +241,24 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
   // 3. Products Endpoints
   if (path === "/api/products") {
     if (method === "GET") {
-      return jsonResponse(getDb("products"));
+      const rawProducts = getDb("products");
+      const mapped = rawProducts.map(p => ({
+        ...p,
+        name: p.name || p.productName || "",
+        productName: p.productName || p.name || ""
+      }));
+      return jsonResponse(mapped);
     }
     if (method === "POST") {
       const body = getBody();
       const products = getDb("products");
       const nextId = products.length > 0 ? Math.max(...products.map(p => p.id)) + 1 : 1;
+      const nameVal = body.name || body.productName || "";
       const newProduct = {
         id: nextId,
         productId: nextId,
-        productName: body.productName,
+        name: nameVal,
+        productName: nameVal,
         barcode: body.barcode || "",
         category: body.category || "",
         unit: body.unit || "ədəd",
@@ -263,7 +283,13 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
       const body = getBody();
       const idx = products.findIndex(p => p.id === id);
       if (idx !== -1) {
-        products[idx] = { ...products[idx], ...body };
+        const nameVal = body.name || body.productName || products[idx].productName || products[idx].name || "";
+        products[idx] = { 
+          ...products[idx], 
+          ...body,
+          name: nameVal,
+          productName: nameVal
+        };
         saveDb("products", products);
         logActivity(`Məhsul yeniləndi: ${products[idx].productName}`);
         return jsonResponse(products[idx]);
@@ -275,7 +301,7 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
       if (idx !== -1) {
         const deleted = products.splice(idx, 1)[0];
         saveDb("products", products);
-        logActivity(`Məhsul silindi: ${deleted.productName}`);
+        logActivity(`Məhsul silindi: ${deleted.productName || deleted.name}`);
         return jsonResponse({ success: true });
       }
       return jsonResponse({ message: "Məhsul tapılmadı" }, 404);
@@ -656,6 +682,260 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
       overdueCreditsCount,
       myTotalDebt: 0
     });
+  }
+
+  // 11. User Profile Endpoint
+  if (path === "/api/users/me") {
+    return jsonResponse({
+      id: 9999,
+      username: userUsername || "demo_admin",
+      role: userRole || "Admin",
+      staffCanViewSalesHistory: 1,
+      staffCanViewStock: 1,
+      staffCanViewCustomers: 1,
+      staffCanViewVendors: 1,
+      staffCanViewExpenses: 1,
+      staffCanViewStockBalances: 1,
+      staffCanViewDebts: 1,
+      staffCanManageCatalog: 1,
+    });
+  }
+
+  // 12. Vendors Endpoints
+  if (path === "/api/vendors") {
+    if (method === "GET") {
+      return jsonResponse(getDb("vendors"));
+    }
+    if (method === "POST") {
+      const body = getBody();
+      const vendorsList = getDb("vendors");
+      const nextId = vendorsList.length > 0 ? Math.max(...vendorsList.map(v => v.id)) + 1 : 1;
+      const newVendor = {
+        id: nextId,
+        name: body.name,
+        phone: body.phone || "",
+        email: body.email || "",
+        address: body.address || "",
+        notes: body.notes || "",
+        createdAt: new Date().toISOString(),
+        totalPurchases: 0,
+        totalPaid: 0,
+        balance: 0,
+      };
+      vendorsList.push(newVendor);
+      saveDb("vendors", vendorsList);
+      logActivity(`Tədarükçü əlavə edildi: ${newVendor.name}`);
+      return jsonResponse(newVendor);
+    }
+  }
+
+  // 13. Stock Entries Endpoints
+  if (path === "/api/stock/entries") {
+    if (method === "GET") {
+      return jsonResponse(getDb("stock_entries"));
+    }
+    if (method === "POST") {
+      const body = getBody();
+      const entriesList = getDb("stock_entries");
+      const nextId = entriesList.length > 0 ? Math.max(...entriesList.map(e => e.id)) + 1 : 1;
+      
+      const productsList = getDb("products");
+      const p = productsList.find(prod => prod.id === body.productId);
+      const productName = p ? (p.productName || p.name) : "Məhsul";
+      
+      const newEntry = {
+        id: nextId,
+        productId: body.productId,
+        productName,
+        vendorId: body.vendorId || null,
+        quantity: parseFloat(body.quantity),
+        purchasePrice: parseFloat(body.purchasePrice),
+        supplier: body.supplier || "",
+        notes: body.notes || "",
+        paymentType: body.paymentType,
+        creditDueDate: body.creditDueDate || null,
+        entryDate: new Date().toISOString(),
+        paidStatus: body.paymentType === "Nisyə" ? "credit" : "paid"
+      };
+      
+      entriesList.unshift(newEntry);
+      saveDb("stock_entries", entriesList);
+      
+      // Update product quantity and purchase price in DB
+      if (p) {
+        p.currentQuantity = (p.currentQuantity || 0) + newEntry.quantity;
+        p.purchasePrice = newEntry.purchasePrice;
+        saveDb("products", productsList);
+      }
+      
+      logActivity(`Anbara mədaxil edildi: ${newEntry.productName} (${newEntry.quantity} ədəd)`);
+      return jsonResponse(newEntry);
+    }
+  }
+
+  if (path.startsWith("/api/stock/entries/")) {
+    const parts = path.split("/");
+    const id = parseInt(parts[4] || "0");
+    const entriesList = getDb("stock_entries");
+    const idx = entriesList.findIndex(e => e.id === id);
+
+    if (path.endsWith("/pay")) {
+      if (idx !== -1) {
+        entriesList[idx].paidStatus = "paid";
+        entriesList[idx].paymentType = "Nəğd";
+        saveDb("stock_entries", entriesList);
+        logActivity(`Tədarükçü borcu ödənildi: Mədaxil №${id}`);
+        return jsonResponse({ success: true, entry: entriesList[idx] });
+      }
+      return jsonResponse({ message: "Mədaxil tapılmadı" }, 404);
+    }
+
+    if (method === "PUT") {
+      const body = getBody();
+      if (idx !== -1) {
+        const entryObj = entriesList[idx];
+        const oldQty = entryObj.quantity;
+        const newQty = parseFloat(body.quantity);
+        
+        entriesList[idx] = {
+          ...entryObj,
+          quantity: newQty,
+          purchasePrice: parseFloat(body.purchasePrice),
+          paymentType: body.paymentType,
+          creditDueDate: body.creditDueDate || null,
+          supplier: body.supplier || "",
+          notes: body.notes || "",
+          vendorId: body.vendorId || null,
+        };
+        saveDb("stock_entries", entriesList);
+        
+        const productsList = getDb("products");
+        const pObj = productsList.find(p => p.id === entryObj.productId);
+        if (pObj) {
+          pObj.currentQuantity = (pObj.currentQuantity || 0) - oldQty + newQty;
+          saveDb("products", productsList);
+        }
+        
+        logActivity(`Mədaxil redaktə edildi: ${entryObj.productName} (ID: ${id})`);
+        return jsonResponse(entriesList[idx]);
+      }
+      return jsonResponse({ message: "Mədaxil tapılmadı" }, 404);
+    }
+  }
+
+  // 14. Stock Levels & Debts
+  if (path === "/api/stock/levels") {
+    const productsList = getDb("products");
+    const entriesList = getDb("stock_entries");
+    const salesList = getDb("sales");
+    
+    const stockLevels = productsList.map(product => {
+      const productEntries = entriesList.filter(e => e.productId === product.id);
+      const lastPurchasePrice = productEntries.length > 0 ? productEntries[0].purchasePrice : (product.purchasePrice || 0);
+      const lastPurchaseDate = productEntries.length > 0 ? productEntries[0].entryDate : null;
+
+      let lastSalePrice = product.salePrice || 0;
+      for (const sale of salesList) {
+        const item = sale.items?.find((it: any) => it.productId === product.id);
+        if (item) {
+          lastSalePrice = item.salePrice;
+          break;
+        }
+      }
+
+      const currentQuantity = product.currentQuantity !== undefined ? product.currentQuantity : 0;
+
+      return {
+        productId: product.id,
+        productName: product.productName || product.name || "",
+        category: product.category || "",
+        unit: product.unit || "ədəd",
+        currentQuantity,
+        lastPurchasePrice,
+        lastSalePrice,
+        totalValue: currentQuantity * lastPurchasePrice,
+        trackingType: product.trackingType || "none",
+        activeSerials: [],
+        lastPurchaseDate,
+      };
+    });
+    
+    return jsonResponse(stockLevels);
+  }
+
+  if (path === "/api/stock/my-debts") {
+    const entriesList = getDb("stock_entries");
+    const myDebts = entriesList
+      .filter(e => e.paidStatus === "credit" || e.paymentType === "Nisyə")
+      .map(e => ({
+        id: e.id,
+        productId: e.productId,
+        productName: e.productName,
+        quantity: e.quantity,
+        purchasePrice: e.purchasePrice,
+        totalAmount: e.quantity * e.purchasePrice,
+        supplier: e.supplier,
+        creditDueDate: e.creditDueDate,
+        entryDate: e.entryDate,
+      }));
+    return jsonResponse(myDebts);
+  }
+
+  // 15. Credit Sales
+  if (path === "/api/credits/overdue") {
+    const sales = getDb("sales");
+    const todayStr = new Date().toISOString().split("T")[0];
+    const overdue = sales.filter(s => s.paymentStatus === "unpaid" && s.creditDueDate && s.creditDueDate <= todayStr);
+    return jsonResponse(overdue);
+  }
+
+  if (path === "/api/credits/pending") {
+    const sales = getDb("sales");
+    const pending = sales.filter(s => s.paymentStatus === "unpaid");
+    return jsonResponse(pending);
+  }
+
+  // 16. Dashboard Analytics Mock
+  if (path === "/api/dashboard/analytics") {
+    return jsonResponse({
+      monthlyTrend: [
+        { month: "Yan", revenue: 12000, expenses: 3000, profit: 9000 },
+        { month: "Fev", revenue: 15000, expenses: 4000, profit: 11000 },
+        { month: "Mar", revenue: 18000, expenses: 3500, profit: 14500 },
+        { month: "Apr", revenue: 22000, expenses: 5000, profit: 17000 },
+        { month: "May", revenue: 25000, expenses: 6000, profit: 19000 },
+        { month: "İyun", revenue: 30000, expenses: 5500, profit: 24500 }
+      ],
+      weeklyDistribution: [
+        { day: "Bazar ertəsi", sales: 15, revenue: 3500 },
+        { day: "Çərşənbə axşamı", sales: 12, revenue: 2800 },
+        { day: "Çərşənbə", sales: 18, revenue: 4200 },
+        { day: "Cümə axşamı", sales: 14, revenue: 3100 },
+        { day: "Cümə", sales: 25, revenue: 6500 },
+        { day: "Şənbə", sales: 30, revenue: 8000 },
+        { day: "Bazar", sales: 20, revenue: 5000 }
+      ],
+      topCategories: [
+        { category: "Telefonlar", salesCount: 45, revenue: 99000 },
+        { category: "Kompüterlər", salesCount: 22, revenue: 52800 },
+        { category: "Aksesuarlar", salesCount: 80, revenue: 32000 },
+        { category: "Avadanlıq", salesCount: 58, revenue: 8700 }
+      ],
+      cogsAudit: {
+        totalRevenue: 192500,
+        totalCost: 144375,
+        totalExpenses: 27000,
+        grossProfit: 48125,
+        netProfit: 21125,
+        grossMargin: 25,
+        netMargin: 11
+      }
+    });
+  }
+
+  // 17. HR Employees Mock
+  if (path === "/api/employees") {
+    return jsonResponse([]);
   }
 
   // Default Fallback
