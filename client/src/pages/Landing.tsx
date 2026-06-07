@@ -210,10 +210,10 @@ export default function Landing() {
       `}</style>
 
       {/* Dynamic Background Blobs */}
-      <div className="absolute inset-0 z-0 pointer-events-none">
-        <div className="absolute top-[-10%] left-[10%] size-[50vw] bg-emerald-500/5 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute top-[30%] right-[-10%] size-[40vw] bg-primary/5 rounded-full blur-3xl animate-pulse duration-5000"></div>
-        <div className="absolute bottom-[-10%] left-[-5%] size-[45vw] bg-blue-500/5 rounded-full blur-3xl animate-pulse duration-4000"></div>
+      <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
+        <div className="absolute top-[-10%] left-[10%] size-[50vw] bg-emerald-500/[0.03] rounded-full blur-3xl" style={{ transform: "translate3d(0,0,0)", willChange: "transform" }}></div>
+        <div className="absolute top-[30%] right-[-10%] size-[40vw] bg-primary/[0.03] rounded-full blur-3xl" style={{ transform: "translate3d(0,0,0)", willChange: "transform" }}></div>
+        <div className="absolute bottom-[-10%] left-[-5%] size-[45vw] bg-blue-500/[0.03] rounded-full blur-3xl" style={{ transform: "translate3d(0,0,0)", willChange: "transform" }}></div>
       </div>
 
       {/* 1. Header / Navbar */}
