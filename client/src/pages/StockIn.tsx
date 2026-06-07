@@ -137,9 +137,10 @@ export default function StockIn() {
     }
   }, [formData.productId, products]);
 
-  const normalizeSearchText = (text: string): string => {
-    if (!text) return "";
-    return text
+  const normalizeSearchText = (text: any): string => {
+    if (text === null || text === undefined) return "";
+    const str = String(text);
+    return str
       .toLocaleLowerCase("az-AZ")
       .replace(/ı/g, "i")
       .replace(/ə/g, "e")
@@ -569,7 +570,7 @@ export default function StockIn() {
                         {entry.quantity}
                       </td>
                       <td className="py-3 px-2 text-right font-bold text-gray-950 font-mono">
-                        {entry.purchasePrice.toFixed(2)} ₼
+                        {(entry.purchasePrice || 0).toFixed(2)} ₼
                       </td>
                       <td className="py-3 px-2 text-center">
                         <span className={`px-2 py-0.5 border rounded-full text-[9px] font-bold ${paymentBadges[entry.paymentType] || "bg-gray-50 text-gray-500"}`}>

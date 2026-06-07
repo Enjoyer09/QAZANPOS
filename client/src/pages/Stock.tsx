@@ -43,9 +43,10 @@ export default function Stock() {
     },
   });
 
-  const normalizeSearchText = (text: string): string => {
-    if (!text) return "";
-    return text
+  const normalizeSearchText = (text: any): string => {
+    if (text === null || text === undefined) return "";
+    const str = String(text);
+    return str
       .toLocaleLowerCase("az-AZ")
       .replace(/ı/g, "i")
       .replace(/ə/g, "e")
