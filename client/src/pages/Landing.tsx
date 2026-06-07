@@ -219,9 +219,7 @@ export default function Landing() {
       {/* 1. Header / Navbar */}
       <header className="w-full max-w-7xl mx-auto px-6 py-6 flex items-center justify-between z-10">
         <div className="flex items-center gap-3">
-          <div className="size-10 rounded-xl bg-primary flex items-center justify-center text-white font-black text-xl shadow-lg shadow-primary/25 border border-white/20">
-            B
-          </div>
+          <img src="/assets/logo.jpg" alt="BirSaaS Logo" className="size-10 rounded-xl object-cover shadow-lg border border-white/20" />
           <div>
             <span className="font-extrabold text-gray-900 tracking-tight text-base block leading-none">BirSaaS</span>
             <span className="text-[9px] font-bold text-gray-400 mt-1.5 block tracking-wider uppercase">Çox-Biznesli Bulud POS Terminalı</span>
@@ -641,7 +639,7 @@ export default function Landing() {
       {/* 8. Footer */}
       <footer className="w-full max-w-7xl mx-auto px-6 py-6 border-t border-gray-200/50 flex flex-col sm:flex-row items-center justify-between text-[9px] font-bold text-gray-400 tracking-wider z-10">
         <div className="flex items-center gap-1.5">
-          <span className="size-4.5 rounded-md bg-primary/10 text-primary flex items-center justify-center font-black text-[8px]">B</span>
+          <img src="/assets/logo.jpg" alt="BirSaaS Logo" className="size-4.5 rounded-md object-cover" />
           <span>BirSaaS Platformu © {new Date().getFullYear()}</span>
         </div>
         <div className="flex items-center gap-4 mt-2 sm:mt-0">

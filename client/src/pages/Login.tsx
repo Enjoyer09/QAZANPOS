@@ -205,9 +205,13 @@ export default function Login({ onLoginSuccess, tenantConfig }: LoginProps) {
       <div className="w-full max-w-md px-6 z-10">
         {/* Logo and Brand */}
         <div className="flex flex-col items-center gap-3.5 mb-8 text-center">
-          <div className="size-16 rounded-2xl bg-primary flex items-center justify-center text-white font-black text-3xl shadow-xl shadow-primary/25 border border-white/20">
-            {tenantConfig?.storeName ? tenantConfig.storeName[0].toUpperCase() : "B"}
-          </div>
+          {tenantConfig?.storeName && tenantConfig.storeName !== "BirSaaS" ? (
+            <div className="size-16 rounded-2xl bg-primary flex items-center justify-center text-white font-black text-3xl shadow-xl shadow-primary/25 border border-white/20">
+              {tenantConfig.storeName[0].toUpperCase()}
+            </div>
+          ) : (
+            <img src="/assets/logo.jpg" alt="BirSaaS Logo" className="size-16 rounded-2xl object-cover shadow-xl border border-white/20" />
+          )}
           <div>
             <h1 className="font-extrabold text-gray-900 tracking-tight text-2xl leading-none">
               {tenantConfig?.storeName || "BirSaaS"}

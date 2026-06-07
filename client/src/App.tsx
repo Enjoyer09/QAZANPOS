@@ -341,9 +341,13 @@ function AppLayout({ children, user, currentUser, onLogout }: { children: React.
         {/* Brand Logo & Name */}
         <Link href={isSuperTenant ? "/" : (isAdmin ? "/" : "/pos")}>
           <div className="flex items-center gap-3 cursor-pointer group">
-            <div className="size-9 rounded-xl bg-primary flex items-center justify-center text-white font-black text-lg shadow-md shadow-primary/20 transition-transform group-hover:scale-105">
-              B
-            </div>
+            {settings?.storeName && settings.storeName !== "BirSaaS" ? (
+              <div className="size-9 rounded-xl bg-primary flex items-center justify-center text-white font-black text-lg shadow-md shadow-primary/20 transition-transform group-hover:scale-105">
+                {settings.storeName[0].toUpperCase()}
+              </div>
+            ) : (
+              <img src="/assets/logo.jpg" alt="BirSaaS Logo" className="size-9 rounded-xl object-cover shadow-md transition-transform group-hover:scale-105" />
+            )}
             <div>
               <h1 className="font-extrabold text-gray-900 tracking-tight text-sm leading-none transition-colors group-hover:text-primary">
                 {isSuperTenant ? "BirSaaS Platform" : (settings?.storeName || "BirSaaS")}
@@ -551,11 +555,14 @@ function AppLayout({ children, user, currentUser, onLogout }: { children: React.
             onClick={(e) => e.stopPropagation()}
           >
             <div className="space-y-6">
-              {/* Brand Logo */}
               <div className="flex items-center gap-3">
-                <div className="size-9 rounded-xl bg-primary flex items-center justify-center text-white font-black text-lg">
-                  B
-                </div>
+                {settings?.storeName && settings.storeName !== "BirSaaS" ? (
+                  <div className="size-9 rounded-xl bg-primary flex items-center justify-center text-white font-black text-lg">
+                    {settings.storeName[0].toUpperCase()}
+                  </div>
+                ) : (
+                  <img src="/assets/logo.jpg" alt="BirSaaS Logo" className="size-9 rounded-xl object-cover" />
+                )}
                 <div>
                   <h1 className="font-extrabold text-gray-900 text-sm leading-none">
                     {isSuperTenant ? "BirSaaS Platform" : (settings?.storeName || "BirSaaS")}
@@ -741,7 +748,7 @@ function AppLayout({ children, user, currentUser, onLogout }: { children: React.
       {/* 3. Premium Watermark & Version Footer */}
       <footer className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-6 mt-8 border-t border-gray-200/50 flex flex-col sm:flex-row items-center justify-between text-[10px] font-bold text-gray-400 tracking-wider no-print">
         <div className="flex items-center gap-2">
-          <span className="size-4 rounded-md bg-primary/10 text-primary flex items-center justify-center font-black text-[9px]">B</span>
+          <img src="/assets/logo.jpg" alt="BirSaaS Logo" className="size-4.5 rounded-md object-cover" />
           <span>BirSaaS Platformu © {new Date().getFullYear()}</span>
         </div>
         <div className="flex items-center gap-4 mt-2 sm:mt-0">
