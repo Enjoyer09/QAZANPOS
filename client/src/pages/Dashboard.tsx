@@ -863,7 +863,7 @@ export default function Dashboard() {
                 </Link>
               </div>
 
-              <div className="space-y-3.5">
+              <div className="space-y-3.5 max-h-[300px] overflow-y-auto pr-2">
                 {isLowStockLoading ? (
                   <p className="text-xs text-gray-400">Yüklənir...</p>
                 ) : !lowStock || lowStock.length === 0 ? (
