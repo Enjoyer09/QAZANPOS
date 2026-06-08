@@ -90,14 +90,16 @@ export default function Products() {
   const filteredList = (list || []).filter((item) => {
     const q = searchQuery.trim();
     if (!q) return true;
-    const qNorm = normalizeSearchText(q);
-
-    return (
-      normalizeSearchText(item.name).includes(qNorm) ||
-      (item.category && normalizeSearchText(item.category).includes(qNorm)) ||
-      (item.description && normalizeSearchText(item.description).includes(qNorm)) ||
-      (item.barcode && normalizeSearchText(item.barcode).includes(qNorm))
-    );
+    const words = normalizeSearchText(q).split(/\s+/).filter(Boolean);
+    if (words.length === 0) return true;
+    return words.every((word) => {
+      return (
+        normalizeSearchText(item.name).includes(word) ||
+        (item.category && normalizeSearchText(item.category).includes(word)) ||
+        (item.description && normalizeSearchText(item.description).includes(word)) ||
+        (item.barcode && normalizeSearchText(item.barcode).includes(word))
+      );
+    });
   });
 
   const createMutation = useMutation({

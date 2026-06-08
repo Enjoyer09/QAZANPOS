@@ -60,11 +60,14 @@ export default function Stock() {
   const filteredList = (list || []).filter((item) => {
     const q = searchQuery.trim();
     if (!q) return true;
-    const qNorm = normalizeSearchText(q);
-    return (
-      normalizeSearchText(item.productName).includes(qNorm) ||
-      (item.category && normalizeSearchText(item.category).includes(qNorm))
-    );
+    const words = normalizeSearchText(q).split(/\s+/).filter(Boolean);
+    if (words.length === 0) return true;
+    return words.every((word) => {
+      return (
+        normalizeSearchText(item.productName).includes(word) ||
+        (item.category && normalizeSearchText(item.category).includes(word))
+      );
+    });
   });
 
   const getStatusBadge = (qty: number) => {

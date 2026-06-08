@@ -202,11 +202,14 @@ export default function POS() {
   const searchedProducts = sellableProducts.filter((p) => {
     const q = productSearchQuery.trim();
     if (!q) return true;
-    const qNorm = normalizeSearchText(q);
-    return (
-      normalizeSearchText(p.productName).includes(qNorm) ||
-      (p.barcode && normalizeSearchText(p.barcode).includes(qNorm))
-    );
+    const words = normalizeSearchText(q).split(/\s+/).filter(Boolean);
+    if (words.length === 0) return true;
+    return words.every((word) => {
+      return (
+        normalizeSearchText(p.productName).includes(word) ||
+        (p.barcode && normalizeSearchText(p.barcode).includes(word))
+      );
+    });
   });
 
   // Scanning State & Helpers

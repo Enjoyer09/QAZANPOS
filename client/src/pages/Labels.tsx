@@ -248,11 +248,14 @@ export default function Labels() {
   const filteredProducts = products.filter((p) => {
     const q = searchTerm.trim();
     if (!q) return true;
-    const qNorm = normalizeSearchText(q);
-    return (
-      normalizeSearchText(p.name).includes(qNorm) ||
-      (p.barcode && normalizeSearchText(p.barcode).includes(qNorm))
-    );
+    const words = normalizeSearchText(q).split(/\s+/).filter(Boolean);
+    if (words.length === 0) return true;
+    return words.every((word) => {
+      return (
+        normalizeSearchText(p.name).includes(word) ||
+        (p.barcode && normalizeSearchText(p.barcode).includes(word))
+      );
+    });
   });
 
   // Trigger browser print dialog for designed labels

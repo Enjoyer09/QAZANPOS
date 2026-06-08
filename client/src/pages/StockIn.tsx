@@ -154,24 +154,30 @@ export default function StockIn() {
   const filteredProducts = (products || []).filter((p) => {
     const q = productSearch.trim();
     if (!q) return true;
-    const qNorm = normalizeSearchText(q);
-    return (
-      normalizeSearchText(p.name).includes(qNorm) ||
-      (p.barcode && normalizeSearchText(p.barcode).includes(qNorm)) ||
-      (p.category && normalizeSearchText(p.category).includes(qNorm))
-    );
+    const words = normalizeSearchText(q).split(/\s+/).filter(Boolean);
+    if (words.length === 0) return true;
+    return words.every((word) => {
+      return (
+        normalizeSearchText(p.name).includes(word) ||
+        (p.barcode && normalizeSearchText(p.barcode).includes(word)) ||
+        (p.category && normalizeSearchText(p.category).includes(word))
+      );
+    });
   });
 
   const filteredEntries = (entries || []).filter((entry) => {
     const q = searchQuery.trim();
     if (!q) return true;
-    const qNorm = normalizeSearchText(q);
-    return (
-      (entry.productName && normalizeSearchText(entry.productName).includes(qNorm)) ||
-      (entry.supplier && normalizeSearchText(entry.supplier).includes(qNorm)) ||
-      (entry.notes && normalizeSearchText(entry.notes).includes(qNorm)) ||
-      (entry.paymentType && normalizeSearchText(entry.paymentType).includes(qNorm))
-    );
+    const words = normalizeSearchText(q).split(/\s+/).filter(Boolean);
+    if (words.length === 0) return true;
+    return words.every((word) => {
+      return (
+        (entry.productName && normalizeSearchText(entry.productName).includes(word)) ||
+        (entry.supplier && normalizeSearchText(entry.supplier).includes(word)) ||
+        (entry.notes && normalizeSearchText(entry.notes).includes(word)) ||
+        (entry.paymentType && normalizeSearchText(entry.paymentType).includes(word))
+      );
+    });
   });
 
   // Mutation
