@@ -93,6 +93,7 @@ export default function Stock() {
   };
 
   const totalStockValue = list ? list.reduce((sum, item) => sum + (item.totalValue || 0), 0) : 0;
+  const filteredStockValue = filteredList.reduce((sum, item) => sum + (item.totalValue || 0), 0);
 
   if (user?.role !== "Admin" && currentUser?.staffCanViewStock === 0) {
     return (
@@ -210,7 +211,17 @@ export default function Stock() {
 
       {/* Stock summaries */}
       {!isLoading && list && list.length > 0 && (
-        <div className="flex justify-end pt-2">
+        <div className="flex flex-col sm:flex-row justify-end gap-4 pt-2">
+          {searchQuery.trim() !== "" && (
+            <div className="bg-amber-500/5 border border-amber-500/10 rounded-2xl px-6 py-4 text-right glass animate-in slide-in-from-right-1.5 duration-200">
+              <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">Axtarış üzrə Dəyər</span>
+              <span className="text-3xl font-black text-amber-600 font-mono block mt-1.5">
+                {filteredStockValue.toFixed(2)} ₼
+              </span>
+              <span className="text-[10px] text-gray-400 block mt-1">filtrlənmiş {filteredList.length} məhsulun maya dəyəri</span>
+            </div>
+          )}
+
           <div className="bg-primary/5 border border-primary/10 rounded-2xl px-6 py-4 text-right glass">
             <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">Ümumi Anbar Dəyəri</span>
             <span className="text-3xl font-black text-primary font-mono block mt-1.5">
