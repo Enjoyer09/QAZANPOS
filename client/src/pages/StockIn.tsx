@@ -173,7 +173,6 @@ export default function StockIn() {
       .replace(/ç/g, "c")
       .replace(/ğ/g, "g");
   };
-
   const filteredProducts = (products || []).filter((p) => {
     const q = productSearch.trim();
     if (!q) return true;
@@ -183,11 +182,11 @@ export default function StockIn() {
       return (
         normalizeSearchText(p.name).includes(word) ||
         (p.barcode && normalizeSearchText(p.barcode).includes(word)) ||
-        (p.category && normalizeSearchText(p.category).includes(word))
+        (p.category && normalizeSearchText(p.category).includes(word)) ||
+        (p.description && normalizeSearchText(p.description).includes(word))
       );
     });
   });
-
   const filteredEntries = (entries || []).filter((entry) => {
     const q = searchQuery.trim();
     if (!q) return true;

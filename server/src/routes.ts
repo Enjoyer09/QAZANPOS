@@ -25,6 +25,19 @@ declare global {
 
 const router = Router();
 
+const normalizeName = (text: string): string => {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/ı/g, "i")
+    .replace(/ə/g, "e")
+    .replace(/ö/g, "o")
+    .replace(/ü/g, "u")
+    .replace(/ş/g, "s")
+    .replace(/ç/g, "c")
+    .replace(/ğ/g, "g");
+};
+
 // ----------------------------------------------------
 // MIDDLEWARES
 // ----------------------------------------------------
@@ -739,16 +752,40 @@ router.post("/products", async (req, res) => {
     const { name, category, unit, description, barcode, trackingType, serialNumber, warrantyMonths } = req.body;
     if (!name) return res.status(400).json({ message: "Ad tələb olunur" });
 
-    // Validate product name uniqueness (case-insensitive, trimmed)
-    const normalizedName = name.trim().toLowerCase();
-    const existingByName = await db.query.products.findFirst({
-      where: and(
-        sql`LOWER(TRIM(${schema.products.name})) = ${normalizedName}`,
-        eq(schema.products.tenantId, req.tenantId)
-      )
+    // Validate product name uniqueness and keyword collision (case-insensitive, normalized)
+    const normalizedNewName = normalizeName(name);
+    const newKeywords = description ? description.split(/[,;]+/).map((k: string) => normalizeName(k)).filter(Boolean) : [];
+
+    const allProducts = await db.query.products.findMany({
+      where: eq(schema.products.tenantId, req.tenantId)
     });
-    if (existingByName) {
-      return res.status(400).json({ message: "Bu adda məhsul artıq kataloqda mövcuddur. Təkrarlanmanın qarşısını almaq üçün eyni adda yeni məhsul yaratmaq əvəzinə mövcud məhsulu istifadə edin və ya redaktə edin." });
+
+    for (const p of allProducts) {
+      const existingNameNormalized = normalizeName(p.name);
+      const existingKeywords = p.description ? p.description.split(/[,;]+/).map((k: string) => normalizeName(k)).filter(Boolean) : [];
+
+      // 1. Does the new name match an existing product's name?
+      if (existingNameNormalized === normalizedNewName) {
+        return res.status(400).json({ 
+          message: `Bu adda məhsul artıq kataloqda mövcuddur: '${p.name}'. Təkrarlanmanın qarşısını almaq üçün mövcud məhsulu istifadə edin və ya redaktə edin.` 
+        });
+      }
+
+      // 2. Does the new name match an existing product's keywords?
+      if (existingKeywords.includes(normalizedNewName)) {
+        return res.status(400).json({ 
+          message: `Bu məhsul artıq mövcuddur (Açar sözlər ilə eşləşdi: '${p.name}'). Təkrarlanmanın qarşısını almaq üçün mövcud məhsulu istifadə edin.` 
+        });
+      }
+
+      // 3. Do any of the new keywords collide with an existing product's name or keywords?
+      for (const newKw of newKeywords) {
+        if (existingNameNormalized === newKw || existingKeywords.includes(newKw)) {
+          return res.status(400).json({
+            message: `Daxil etdiyiniz '${newKw}' təsvir/açar sözü artıq '${p.name}' məhsulunda istifadə olunub. Təkrarlanan açar sözlərdən istifadə etmək olmaz.`
+          });
+        }
+      }
     }
 
     // Validate barcode uniqueness
@@ -863,18 +900,54 @@ router.put("/products/:id", async (req, res) => {
     const id = parseInt(req.params.id);
     const { name, category, unit, description, barcode, trackingType, warrantyMonths } = req.body;
 
-    // Validate product name uniqueness (case-insensitive, trimmed)
-    if (name) {
-      const normalizedName = name.trim().toLowerCase();
-      const existingByName = await db.query.products.findFirst({
+    // Fetch existing product to resolve current name/description if missing in req.body
+    const currentProduct = await db.query.products.findFirst({
+      where: and(eq(schema.products.id, id), eq(schema.products.tenantId, req.tenantId))
+    });
+    if (!currentProduct) {
+      return res.status(404).json({ message: "Məhsul tapılmadı" });
+    }
+
+    const resolvedName = name !== undefined ? name : currentProduct.name;
+    const resolvedDescription = description !== undefined ? description : currentProduct.description;
+
+    if (resolvedName) {
+      const normalizedNewName = normalizeName(resolvedName);
+      const newKeywords = resolvedDescription ? resolvedDescription.split(/[,;]+/).map((k: string) => normalizeName(k)).filter(Boolean) : [];
+
+      const allProducts = await db.query.products.findMany({
         where: and(
-          sql`LOWER(TRIM(${schema.products.name})) = ${normalizedName}`,
           eq(schema.products.tenantId, req.tenantId),
           sql`${schema.products.id} != ${id}`
         )
       });
-      if (existingByName) {
-        return res.status(400).json({ message: "Bu adda məhsul artıq kataloqda mövcuddur. Təkrarlanmanın qarşısını almaq üçün fərqli bir ad daxil edin." });
+
+      for (const p of allProducts) {
+        const existingNameNormalized = normalizeName(p.name);
+        const existingKeywords = p.description ? p.description.split(/[,;]+/).map((k: string) => normalizeName(k)).filter(Boolean) : [];
+
+        // 1. Does the new name match another product's name?
+        if (existingNameNormalized === normalizedNewName) {
+          return res.status(400).json({ 
+            message: `Bu adda məhsul artıq kataloqda mövcuddur: '${p.name}'. Təkrarlanmanın qarşısını almaq üçün fərqli bir ad seçin.` 
+          });
+        }
+
+        // 2. Does the new name match another product's keywords?
+        if (existingKeywords.includes(normalizedNewName)) {
+          return res.status(400).json({ 
+            message: `Bu məhsul artıq mövcuddur (Açar sözlər ilə eşləşdi: '${p.name}'). Təkrarlanmanın qarşısını almaq üçün fərqli bir ad seçin.` 
+          });
+        }
+
+        // 3. Do any of the new keywords collide with another product's name or keywords?
+        for (const newKw of newKeywords) {
+          if (existingNameNormalized === newKw || existingKeywords.includes(newKw)) {
+            return res.status(400).json({
+              message: `Daxil etdiyiniz '${newKw}' təsvir/açar sözü artıq '${p.name}' məhsulunda istifadə olunub. Təkrarlanan açar sözlərdən istifadə etmək olmaz.`
+            });
+          }
+        }
       }
     }
 
@@ -1167,6 +1240,7 @@ router.get("/stock/levels", async (req, res) => {
         activeSerials,
         lastPurchaseDate: metric.lastPurchaseDate,
         barcode: product.barcode,
+        description: product.description,
       });
     }
 

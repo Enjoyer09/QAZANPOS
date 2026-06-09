@@ -473,6 +473,37 @@ export default function Help() {
           </ol>
         </div>
       )
+    },
+    {
+      id: "product-keywords",
+      title: "🔑 Məhsul Kataloqunda Açar Sözlər (Keywords) və Oxşar Məhsul Məhdudiyyəti",
+      category: "anbar",
+      icon: HelpCircle,
+      content: (
+        <div className="space-y-3 leading-relaxed text-gray-700">
+          <p>
+            Mağaza əməkdaşlarının eyni məhsulu müxtəlif adlarla (və ya hərf xətaları ilə) təkrar-təkrar qeydiyyatdan keçirib anbar hesabatlarını korlamasının qarşısını almaq üçün sistemdə <b>ağıllı açar sözlər (keyword mapping)</b> tətbiq olunmuşdur.
+          </p>
+          <div className="bg-primary/5 border border-primary/10 rounded-xl p-3.5 space-y-1">
+            <span className="text-[10px] font-black text-primary uppercase block tracking-wider">İşləmə Mexanizmi</span>
+            <span className="text-xs text-primary/90 font-semibold block">
+              Məhsul Kataloqunda yeni məhsul yaradarkən və ya redaktə edərkən <b>\"Təsvir (Qeyd)\"</b> sahəsinə vergüllə ayrılmış alternativ adları (açar sözləri) yazın (məselen: <code>ayfon 11, ip11, iphone 11</code>). Sistem avtomatik olaraq bu adları yadda saxlayır və qoruyur.
+            </span>
+          </div>
+          <h4 className="font-extrabold text-gray-900 text-xs mt-3 uppercase tracking-wider">Bu Modul Hansı İmkanları Təqdim Edir?</h4>
+          <ol className="list-decimal pl-4 space-y-2 text-xs font-semibold">
+            <li>
+              <b>Axtarış Zamanı Tapılma:</b> Kassir POS satışında və ya anbara yeni mədaxil edərkən axtarış sahəsinə həmin açar sözlərdən birini (məs. <code>ip11</code>) yazarsa, sistem əsas məhsulu (məs. <code>iPhone 11</code>) dərhal tapıb siyahıda göstərir. Bu, təkrar məhsul yaradılmasının qarşısını alır.
+            </li>
+            <li>
+              <b>Təkrarlanmanın Tam Bloklanması:</b> Hər hansı işçi kataloqa daxil olub adını <code>Ayfon 11</code> və ya <code>ip11</code> yazaraq yeni bir məhsul kartı açmağa çalışsa, sistem dərhal xəbərdarlıq edib əməliyyatı bloklayır: <i>\"Bu məhsul artıq mövcuddur (Açar sözlər ilə eşləşdi: 'iPhone 11').\"</i>
+            </li>
+            <li>
+              <b>Açar Söz Toqquşmasının Qarşısının Alınması:</b> Yeni yaradılan məhsulun açar sözlərindən biri mövcud olan digər məhsulun adı və ya açar sözü ilə eyni ola bilməz.
+            </li>
+          </ol>
+        </div>
+      )
     }
   ];
 

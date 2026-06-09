@@ -144,6 +144,19 @@ const DEFAULT_LOGS = [
   { id: 3, username: "admin", action: "Yeni satış tamamlandı: #00001 (Kartla)", timestamp: getPastIsoDate(2) }
 ];
 
+const normalizeName = (text: string): string => {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/ı/g, "i")
+    .replace(/ə/g, "e")
+    .replace(/ö/g, "o")
+    .replace(/ü/g, "u")
+    .replace(/ş/g, "s")
+    .replace(/ç/g, "c")
+    .replace(/ğ/g, "g");
+};
+
 export function initDemoDatabase() {
   if (sessionStorage.getItem("birsaas_demo_db_initialized") === "true") return;
 
@@ -257,8 +270,32 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
     if (method === "POST") {
       const body = getBody();
       const products = getDb("products");
-      const nextId = products.length > 0 ? Math.max(...products.map(p => p.id)) + 1 : 1;
       const nameVal = body.name || body.productName || "";
+
+      // Validate product name uniqueness and keyword collision (case-insensitive, normalized)
+      const normalizedNewName = normalizeName(nameVal);
+      const newKeywords = (body.description || "").split(/[,;]+/).map((k: string) => normalizeName(k)).filter(Boolean);
+
+      for (const p of products) {
+        const existingNameNormalized = normalizeName(p.name || p.productName || "");
+        const existingKeywords = (p.description || p.notes || "").split(/[,;]+/).map((k: string) => normalizeName(k)).filter(Boolean);
+
+        if (existingNameNormalized === normalizedNewName) {
+          return jsonResponse({ message: `Bu adda məhsul artıq kataloqda mövcuddur: '${p.productName || p.name}'. Təkrarlanmanın qarşısını almaq üçün mövcud məhsulu istifadə edin.` }, 400);
+        }
+
+        if (existingKeywords.includes(normalizedNewName)) {
+          return jsonResponse({ message: `Bu məhsul artıq mövcuddur (Açar sözlər ilə eşləşdi: '${p.productName || p.name}').` }, 400);
+        }
+
+        for (const newKw of newKeywords) {
+          if (existingNameNormalized === newKw || existingKeywords.includes(newKw)) {
+            return jsonResponse({ message: `Daxil etdiyiniz '${newKw}' təsvir/açar sözü artıq '${p.productName || p.name}' məhsulunda istifadə olunub.` }, 400);
+          }
+        }
+      }
+
+      const nextId = products.length > 0 ? Math.max(...products.map(p => p.id)) + 1 : 1;
       const trackingType = body.trackingType || "none";
       const serialNumber = body.serialNumber ? body.serialNumber.trim().toUpperCase() : null;
       const warrantyMonths = body.warrantyMonths ? parseInt(String(body.warrantyMonths)) : null;
@@ -275,6 +312,7 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
         barcode: body.barcode || "",
         category: body.category || "",
         unit: body.unit || "ədəd",
+        description: body.description || "",
         trackingType: trackingType,
         activeSerials: activeSerials,
         currentQuantity: currentQuantity,
@@ -282,7 +320,7 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
         salePrice: parseFloat(body.salePrice || 0),
         purchasePrice: parseFloat(body.purchasePrice || 0),
         supplierName: body.supplierName || "",
-        notes: body.notes || ""
+        notes: body.description || body.notes || ""
       };
       products.push(newProduct);
       saveDb("products", products);
@@ -299,12 +337,42 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
       const body = getBody();
       const idx = products.findIndex(p => p.id === id);
       if (idx !== -1) {
-        const nameVal = body.name || body.productName || products[idx].productName || products[idx].name || "";
+        const resolvedName = body.name || body.productName || products[idx].productName || products[idx].name || "";
+        const resolvedDescription = body.description !== undefined ? body.description : (products[idx].description || products[idx].notes || "");
+
+        const normalizedNewName = normalizeName(resolvedName);
+        const newKeywords = resolvedDescription.split(/[,;]+/).map((k: string) => normalizeName(k)).filter(Boolean);
+
+        for (let i = 0; i < products.length; i++) {
+          if (products[i].id === id) continue;
+          
+          const p = products[i];
+          const existingNameNormalized = normalizeName(p.name || p.productName || "");
+          const existingKeywords = (p.description || p.notes || "").split(/[,;]+/).map((k: string) => normalizeName(k)).filter(Boolean);
+
+          if (existingNameNormalized === normalizedNewName) {
+            return jsonResponse({ message: `Bu adda məhsul artıq kataloqda mövcuddur: '${p.productName || p.name}'. Fərqli bir ad seçin.` }, 400);
+          }
+
+          if (existingKeywords.includes(normalizedNewName)) {
+            return jsonResponse({ message: `Bu məhsul artıq mövcuddur (Açar sözlər ilə eşləşdi: '${p.productName || p.name}').` }, 400);
+          }
+
+          for (const newKw of newKeywords) {
+            if (existingNameNormalized === newKw || existingKeywords.includes(newKw)) {
+              return jsonResponse({ message: `Daxil etdiyiniz '${newKw}' təsvir/açar sözü artıq '${p.productName || p.name}' məhsulunda istifadə olunub.` }, 400);
+            }
+          }
+        }
+
+        const nameVal = resolvedName;
         products[idx] = { 
           ...products[idx], 
           ...body,
           name: nameVal,
-          productName: nameVal
+          productName: nameVal,
+          description: resolvedDescription,
+          notes: resolvedDescription
         };
         saveDb("products", products);
         logActivity(`Məhsul yeniləndi: ${products[idx].productName}`);
@@ -883,6 +951,7 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
         activeSerials: product.activeSerials || [],
         lastPurchaseDate,
         barcode: product.barcode || "",
+        description: product.description || product.notes || "",
       };
     });
     

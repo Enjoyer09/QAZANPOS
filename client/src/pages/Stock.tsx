@@ -15,6 +15,7 @@ interface StockLevel {
   barcode?: string | null;
   activeSerials?: string[];
   trackingType?: string;
+  description?: string | null;
 }
 export default function Stock() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -72,6 +73,7 @@ export default function Stock() {
         normalizeSearchText(item.productName).includes(word) ||
         (item.category && normalizeSearchText(item.category).includes(word)) ||
         (item.barcode && normalizeSearchText(item.barcode).includes(word)) ||
+        (item.description && normalizeSearchText(item.description).includes(word)) ||
         normalizeSearchText(serialsStr).includes(word)
       );
     });

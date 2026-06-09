@@ -211,7 +211,6 @@ export default function POS() {
       .replace(/ç/g, "c")
       .replace(/ğ/g, "g");
   };
-
   // Filter products by manual search input
   const searchedProducts = sellableProducts.filter((p) => {
     const q = productSearchQuery.trim();
@@ -221,12 +220,11 @@ export default function POS() {
     return words.every((word) => {
       return (
         normalizeSearchText(p.productName).includes(word) ||
-        (p.barcode && normalizeSearchText(p.barcode).includes(word))
+        (p.barcode && normalizeSearchText(p.barcode).includes(word)) ||
+        (p.description && normalizeSearchText(p.description).includes(word))
       );
     });
-  });
-
-  // Scanning State & Helpers
+  });  // Scanning State & Helpers
   const [scanInput, setScanInput] = useState("");
 
   const addProductToBasket = (prod: any, serialNum?: string | null) => {
