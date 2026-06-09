@@ -214,6 +214,7 @@ export const creditPayments = pgTable("credit_payments", {
     .references(() => sales.id, { onDelete: "cascade" }),
   paymentDate: text("payment_date").notNull(), // ISO timestamp
   amount: doublePrecision("amount").notNull(), // Ödənilən məbləğ
+  paymentType: text("payment_type").notNull().default("Nəğd"), // "Nəğd", "Kart", "Kart2Kart", "Köçürmə"
 });
 
 // 7. General Expenses

@@ -601,11 +601,13 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
 
       if (remaining > 0) {
         const nextPayId = payments.length > 0 ? Math.max(...payments.map((p: any) => p.id)) + 1 : 1;
+        const body = getBody();
+        const payType = body?.paymentType || "Nəğd";
         payments.push({
           id: nextPayId,
           amount: remaining,
           paymentDate: new Date().toISOString(),
-          paymentType: "cash"
+          paymentType: payType
         });
       }
 
@@ -635,7 +637,7 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
         id: nextPayId,
         amount: paymentAmount,
         paymentDate: new Date().toISOString(),
-        paymentType: "cash"
+        paymentType: body?.paymentType || "Nəğd"
       });
 
       const totalPaid = payments.reduce((acc: number, p: any) => acc + p.amount, 0);

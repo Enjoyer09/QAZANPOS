@@ -1885,6 +1885,9 @@ router.get("/sales/:id", async (req, res) => {
 router.patch("/sales/:id/pay-credit", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
+    const { paymentType } = req.body;
+    const payType = paymentType || "Nəğd";
+
     const sale = await db.query.sales.findFirst({
       where: and(eq(schema.sales.id, id), eq(schema.sales.tenantId, req.tenantId)),
       with: { payments: true, returns: true },
@@ -1917,6 +1920,7 @@ router.patch("/sales/:id/pay-credit", async (req, res) => {
         saleId: id,
         paymentDate: new Date().toISOString(),
         amount: remaining,
+        paymentType: payType,
       });
     }
 
@@ -1941,8 +1945,9 @@ router.patch("/sales/:id/pay-credit", async (req, res) => {
 router.patch("/sales/:id/add-payment", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const { amount } = req.body;
+    const { amount, paymentType } = req.body;
     const paymentAmount = parseFloat(amount);
+    const payType = paymentType || "Nəğd";
 
     if (!paymentAmount || paymentAmount <= 0) {
       return res.status(400).json({ message: "Düzgün ödəniş məbləği daxil edilməlidir" });
@@ -1975,6 +1980,7 @@ router.patch("/sales/:id/add-payment", async (req, res) => {
       saleId: id,
       paymentDate: new Date().toISOString(),
       amount: paymentAmount,
+      paymentType: payType,
     });
 
     // Check if fully paid now

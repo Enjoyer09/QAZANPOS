@@ -39,6 +39,7 @@ export default function Invoice({ params }: InvoiceProps) {
 
   const saleId = parseInt(params.id);
   const [payAmount, setPayAmount] = useState("");
+  const [paymentType, setPaymentType] = useState("Nəğd");
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [returnItemsState, setReturnItemsState] = useState<Record<number, { quantity: number; status: "returned_to_stock" | "defective" }>>({});
   const [returnReason, setReturnReason] = useState("");
@@ -97,6 +98,8 @@ export default function Invoice({ params }: InvoiceProps) {
     mutationFn: async () => {
       const res = await fetch(`/api/sales/${saleId}/pay-credit`, {
         method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentType }),
       });
       if (!res.ok) throw new Error();
       return res.json();
@@ -116,7 +119,7 @@ export default function Invoice({ params }: InvoiceProps) {
       const res = await fetch(`/api/sales/${saleId}/add-payment`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount }),
+        body: JSON.stringify({ amount, paymentType }),
       });
       if (!res.ok) {
         const err = await res.json();
@@ -570,24 +573,36 @@ export default function Invoice({ params }: InvoiceProps) {
 
                 {/* Repayment inputs */}
                 <div className="space-y-4">
-                  <form onSubmit={handlePartialPaySubmit} className="space-y-2 text-xs font-semibold">
-                    <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Məbləğlə ödə</label>
-                    <div className="flex gap-2">
-                      <input
-                        type="number"
-                        min="0.01"
-                        step="0.01"
-                        placeholder="Məbləğ ₼"
-                        value={payAmount}
-                        onChange={(e) => setPayAmount(e.target.value)}
-                        className="flex-1 px-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary text-xs bg-gray-50/50"
-                      />
+                  <form onSubmit={handlePartialPaySubmit} className="space-y-3 text-xs font-semibold">
+                    <div>
+                      <label className="text-gray-400 uppercase tracking-wider block text-[10px] mb-1">Məbləğlə ödə</label>
+                      <div className="grid grid-cols-2 gap-2 mb-2">
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          placeholder="Məbləğ ₼"
+                          value={payAmount}
+                          onChange={(e) => setPayAmount(e.target.value)}
+                          className="px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary text-xs bg-gray-50/50 w-full"
+                        />
+                        <select
+                          value={paymentType}
+                          onChange={(e) => setPaymentType(e.target.value)}
+                          className="px-3 py-2.5 border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-1 focus:ring-primary text-xs cursor-pointer w-full"
+                        >
+                          <option value="Nəğd">💵 Nəğd</option>
+                          <option value="Kart">💳 Kart</option>
+                          <option value="Kart2Kart">📲 Kart2Kart</option>
+                          <option value="Köçürmə">🏢 Köçürmə</option>
+                        </select>
+                      </div>
                       <button
                         type="submit"
                         disabled={partialPayMutation.isPending}
-                        className="px-4 py-2 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 cursor-pointer disabled:opacity-50"
+                        className="w-full py-2.5 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 cursor-pointer disabled:opacity-50 transition-all text-center flex items-center justify-center gap-1.5"
                       >
-                        Ödə
+                        <Check className="w-3.5 h-3.5" /> Ödənişi Qəbul Et
                       </button>
                     </div>
                   </form>
@@ -621,11 +636,16 @@ export default function Invoice({ params }: InvoiceProps) {
                   {invoice.payments.map((p: any, idx: number) => (
                     <div key={p.id} className="flex justify-between items-center p-3 bg-gray-50/50 border border-gray-100 rounded-xl">
                       <div className="space-y-0.5">
-                        <span className="text-gray-900 font-bold block">
-                          {idx + 1}. Ödəniş: {new Date(p.paymentDate).toLocaleDateString("az-AZ")}
-                        </span>
-                        <span className="text-[9px] text-gray-400 font-mono block">
-                          Vaxt: {new Date(p.paymentDate).toLocaleTimeString("az-AZ", { hour: '2-digit', minute: '2-digit' })}
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-900 font-bold">
+                            {idx + 1}. Ödəniş
+                          </span>
+                          <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[9px] font-bold">
+                            {p.paymentType || "Nəğd"}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-gray-400 font-medium block">
+                          Tarix: {new Date(p.paymentDate).toLocaleDateString("az-AZ")} | Vaxt: {new Date(p.paymentDate).toLocaleTimeString("az-AZ", { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </div>
                       
@@ -670,8 +690,24 @@ export default function Invoice({ params }: InvoiceProps) {
               </p>
             </div>
 
-            <div className="p-3 bg-gray-50 border border-gray-100 rounded-xl text-xs font-bold text-gray-700">
-              Qalıq Borc: <span className="text-red-600 font-mono text-sm font-black">{remainingDebt.toFixed(2)} ₼</span>
+            <div className="p-3 bg-gray-50 border border-gray-100 rounded-xl text-xs font-bold text-gray-700 space-y-2">
+              <div className="flex justify-between items-center">
+                <span>Qalıq Borc:</span>
+                <span className="text-red-600 font-mono text-sm font-black">{remainingDebt.toFixed(2)} ₼</span>
+              </div>
+              <div className="flex justify-between items-center pt-2 border-t border-gray-200">
+                <span className="text-gray-500 text-[11px] font-medium">Ödəniş Üsulu:</span>
+                <select
+                  value={paymentType}
+                  onChange={(e) => setPaymentType(e.target.value)}
+                  className="px-2.5 py-1.5 border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-green-500 text-xs font-semibold cursor-pointer"
+                >
+                  <option value="Nəğd">💵 Nəğd</option>
+                  <option value="Kart">💳 Kart</option>
+                  <option value="Kart2Kart">📲 Kart2Kart</option>
+                  <option value="Köçürmə">🏢 Köçürmə</option>
+                </select>
+              </div>
             </div>
 
             <div className="flex gap-3 pt-2">
