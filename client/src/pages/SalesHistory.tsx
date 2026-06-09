@@ -396,8 +396,16 @@ export default function SalesHistory() {
                             </span>
                           </td>
                           <td className="p-4 text-center font-semibold">
-                            <span className={`px-2 py-0.5 border rounded-full text-[9px] font-bold ${paymentBadges[sale.paymentType] || "bg-gray-50 text-gray-500"}`}>
-                              {sale.paymentType}
+                            <span
+                              className={`px-2 py-0.5 border rounded-full text-[9px] font-bold ${
+                                sale.paymentType === "Nisyə" && sale.paymentStatus === "paid"
+                                  ? "bg-green-50 text-green-700 border-green-100"
+                                  : paymentBadges[sale.paymentType] || "bg-gray-50 text-gray-500"
+                              }`}
+                            >
+                              {sale.paymentType === "Nisyə" && sale.paymentStatus === "paid"
+                                ? "Nisyə (Bağlı)"
+                                : sale.paymentType}
                             </span>
                             {sale.paymentType === "Kart" && sale.bankName && (
                               <span className="text-[9px] text-gray-500 font-bold block mt-0.5">
