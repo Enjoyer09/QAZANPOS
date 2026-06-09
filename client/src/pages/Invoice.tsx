@@ -364,7 +364,10 @@ export default function Invoice({ params }: InvoiceProps) {
               <span className="text-gray-400 font-bold uppercase block text-[9px] tracking-wider mb-2">
                 Ödəniş detalları
               </span>
-              <p className="font-semibold text-gray-800">Üsul: {invoice.paymentType}</p>
+              <p className="font-semibold text-gray-800">
+                Üsul: {invoice.paymentType}
+                {invoice.paymentType === "Kart" && invoice.bankName && ` (${invoice.bankName})`}
+              </p>
               <p className="mt-1 text-gray-500 font-bold">Satıcı: {invoice.sellerName || "Sistem"}</p>
               <p className="mt-1">
                 Status:{" "}

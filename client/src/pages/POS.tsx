@@ -84,6 +84,7 @@ export default function POS() {
 
   // Payment State
   const [paymentType, setPaymentType] = useState("Nəğd");
+  const [bankName, setBankName] = useState("");
   const [creditDueDate, setCreditDueDate] = useState("");
   const [notes, setNotes] = useState("");
   const [salesChannel, setSalesChannel] = useState<string>("Mağaza");
@@ -126,6 +127,7 @@ export default function POS() {
     setNewCustomerEmail("");
     setNewCustomerAddress("");
     setPaymentType("Nəğd");
+    setBankName("");
     setCreditDueDate("");
     setNotes("");
     setLastCreatedSale(null);
@@ -178,6 +180,16 @@ export default function POS() {
   const activeSettings = isOnline ? settings : getCachedSettings();
   const activeStockLevels = isOnline ? stockLevels : getCachedProducts();
   const activeCustomers = isOnline ? customers : getCachedCustomers();
+
+  const activeBanksList: string[] = React.useMemo(() => {
+    if (!activeSettings?.activeBanks) return [];
+    try {
+      const parsed = JSON.parse(activeSettings.activeBanks);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }, [activeSettings?.activeBanks]);
 
   // Filter products that have positive stock levels (in sale mode) or all products (in return mode)
   const sellableProducts = posMode === "sale"
@@ -563,6 +575,7 @@ export default function POS() {
         customerName: customerMode === "none" ? null : (customerMode === "existing" ? activeCustomer?.name : newCustomerName.trim()),
         customerPhone: customerMode === "existing" ? activeCustomer?.phone : newCustomerPhone.trim() || null,
         paymentType,
+        bankName: paymentType === "Kart" ? bankName : null,
         paymentStatus: isCredit ? "credit" : "paid",
         creditDueDate: isCredit ? creditDueDate : null,
         notes: notes.trim() || null,
@@ -748,6 +761,11 @@ export default function POS() {
       }
     }
 
+    if (posMode === "sale" && paymentType === "Kart" && !bankName) {
+      toast({ title: "Xəta!", description: "Kart ödənişi üçün bank seçilməlidir", variant: "destructive" });
+      return;
+    }
+
     // Prepare Customer Data
     let customerId: number | null = null;
     let customerName: string | null = null;
@@ -773,6 +791,7 @@ export default function POS() {
       customerEmail,
       customerAddress,
       paymentType,
+      bankName: paymentType === "Kart" ? (bankName || null) : null,
       creditDueDate: isCredit ? creditDueDate : null,
       notes: notes.trim() || null,
       totalAmount,
@@ -1360,7 +1379,10 @@ export default function POS() {
                 </label>
                 <select
                   value={paymentType}
-                  onChange={(e) => setPaymentType(e.target.value)}
+                  onChange={(e) => {
+                    setPaymentType(e.target.value);
+                    if (e.target.value !== "Kart") setBankName("");
+                  }}
                   className={`w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none bg-gray-50/50 cursor-pointer focus:ring-1 ${posMode === "return" ? "focus:ring-amber-500" : "focus:ring-primary"}`}
                 >
                   <option value="Nəğd">Nəğd</option>
@@ -1370,6 +1392,26 @@ export default function POS() {
                   {posMode === "sale" && <option value="Nisyə">Nisyə (Borc)</option>}
                 </select>
               </div>
+
+              {/* Bank Selection (Only if payment type is Kart and sale mode) */}
+              {posMode === "sale" && paymentType === "Kart" && (
+                <div className="space-y-1.5 animate-in slide-in-from-top-1.5">
+                  <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Bank Hesabı *</label>
+                  <select
+                    value={bankName}
+                    onChange={(e) => setBankName(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 cursor-pointer text-xs font-bold"
+                    required
+                  >
+                    <option value="">Bank Seçin...</option>
+                    {(activeBanksList.length > 0 ? activeBanksList : ["Digər"]).map((bank) => (
+                      <option key={bank} value={bank}>
+                        {bank}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Return Status if in Return Mode */}
               {posMode === "return" && (
@@ -1471,7 +1513,7 @@ export default function POS() {
               </span>
               <span className="text-2xl font-black text-gray-950 font-mono">{lastCreatedSale.totalAmount.toFixed(2)} ₼</span>
               <span className="text-[10px] text-gray-500">
-                {lastCreatedSale.customerName === "Qaytarış" ? `Tip: ${returnStatus === "returned_to_stock" ? "Anbara Qayıdan" : "Deffekt (Zay)"}` : `Ödəniş Üsulu: {lastCreatedSale.paymentType}`}
+                {lastCreatedSale.customerName === "Qaytarış" ? `Tip: ${returnStatus === "returned_to_stock" ? "Anbara Qayıdan" : "Deffekt (Zay)"}` : `Ödəniş Üsulu: ${lastCreatedSale.paymentType}${lastCreatedSale.bankName ? ` (${lastCreatedSale.bankName})` : ""}`}
               </span>
             </div>
 

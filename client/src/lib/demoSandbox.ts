@@ -135,6 +135,7 @@ const DEFAULT_SETTINGS = {
   showReceiptFooter: 1,
   showPaymentDetails: 1,
   lowStockAlertCount: 5,
+  activeBanks: null,
 };
 
 const DEFAULT_LOGS = [
@@ -413,6 +414,7 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
         customerId: body.customerId || null,
         customerName,
         paymentType: body.paymentType,
+        bankName: body.paymentType === "Kart" ? (body.bankName || null) : null,
         paymentStatus: body.paymentType === "credit" ? "unpaid" : "paid",
         totalAmount,
         totalCost,
@@ -753,6 +755,7 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
         supplier: body.supplier || "",
         notes: body.notes || "",
         paymentType: body.paymentType,
+        bankName: body.paymentType === "Kart" ? (body.bankName || null) : null,
         creditDueDate: body.creditDueDate || null,
         entryDate: new Date().toISOString(),
         paidStatus: body.paymentType === "Nisyə" ? "credit" : "paid"
@@ -761,10 +764,13 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
       entriesList.unshift(newEntry);
       saveDb("stock_entries", entriesList);
       
-      // Update product quantity and purchase price in DB
+      // Update product quantity, purchase price, and serials in DB
       if (p) {
         p.currentQuantity = (p.currentQuantity || 0) + newEntry.quantity;
         p.purchasePrice = newEntry.purchasePrice;
+        if (body.serialNumbers && Array.isArray(body.serialNumbers)) {
+          p.activeSerials = [...(p.activeSerials || []), ...body.serialNumbers];
+        }
         saveDb("products", productsList);
       }
       
@@ -802,6 +808,7 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
           quantity: newQty,
           purchasePrice: parseFloat(body.purchasePrice),
           paymentType: body.paymentType,
+          bankName: body.paymentType === "Kart" ? (body.bankName || null) : null,
           creditDueDate: body.creditDueDate || null,
           supplier: body.supplier || "",
           notes: body.notes || "",
@@ -855,7 +862,7 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
         lastSalePrice,
         totalValue: currentQuantity * lastPurchasePrice,
         trackingType: product.trackingType || "none",
-        activeSerials: [],
+        activeSerials: product.activeSerials || [],
         lastPurchaseDate,
       };
     });

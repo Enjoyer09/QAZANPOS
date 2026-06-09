@@ -104,11 +104,15 @@ export function generateReceiptHtml(sale: any, settings: any): string {
   }
 
   // Dynamic Payment info
+  const displayPaymentType = sale.paymentType === "Kart" && sale.bankName
+    ? `${sale.paymentType} (${sale.bankName})`
+    : sale.paymentType;
+
   let paymentDetailsHtml = `
     <table class="receipt-table">
       <tr>
         <td>Ödəniş Üsulu:</td>
-        <td>${sale.paymentType}</td>
+        <td>${displayPaymentType}</td>
       </tr>
     </table>
   `;

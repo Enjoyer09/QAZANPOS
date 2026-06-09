@@ -20,7 +20,28 @@ import {
   Send,
   Bell,
   Globe,
+  Landmark,
 } from "lucide-react";
+
+const AZ_BANKS = [
+  "Kapital Bank",
+  "ABB (Azərbaycan Beynəlxalq Bankı)",
+  "PASHA Bank",
+  "Unibank (LeoBank)",
+  "Bank Respublika",
+  "Xalq Bank",
+  "Rabitəbank",
+  "AccessBank",
+  "TuranBank",
+  "Yelo Bank",
+  "Expressbank",
+  "Bank of Baku",
+  "Premium Bank",
+  "Ziraat Bank Azerbaijan",
+  "Yapı Kredi Bank Azerbaijan",
+  "Bank BTB",
+  "AFB Bank"
+];
 import { useToast } from "../components/Toast.tsx";
 import { qzService } from "../lib/qz.ts";
 
@@ -96,6 +117,11 @@ export default function SettingsPage() {
   const [staffCanViewDebts, setStaffCanViewDebts] = useState(1);
   const [staffCanManageCatalog, setStaffCanManageCatalog] = useState(1);
   const [selectedPermissionsUserId, setSelectedPermissionsUserId] = useState<number | "">("");
+
+  // Banks State
+  const [activeBanks, setActiveBanks] = useState<string[]>([]);
+  const [customBanks, setCustomBanks] = useState<string[]>([]);
+  const [newCustomBankName, setNewCustomBankName] = useState("");
 
 
   // QZ Tray local state
@@ -349,6 +375,23 @@ export default function SettingsPage() {
         setMarketplaceCommissions({});
       }
 
+      // Load Azerbaijan Banks settings
+      try {
+        const banks = settingsData.activeBanks 
+          ? JSON.parse(settingsData.activeBanks) 
+          : [];
+        if (Array.isArray(banks)) {
+          setActiveBanks(banks);
+          const customs = banks.filter((b: string) => !AZ_BANKS.includes(b));
+          setCustomBanks(customs);
+        } else {
+          setActiveBanks([]);
+          setCustomBanks([]);
+        }
+      } catch (e) {
+        setActiveBanks([]);
+        setCustomBanks([]);
+      }
     }
   }, [settingsData]);
 
@@ -643,6 +686,29 @@ export default function SettingsPage() {
     }
   };
 
+  const toggleBank = (bankName: string) => {
+    if (activeBanks.includes(bankName)) {
+      setActiveBanks(activeBanks.filter((b) => b !== bankName));
+    } else {
+      setActiveBanks([...activeBanks, bankName]);
+    }
+  };
+
+  const addCustomBank = () => {
+    const name = newCustomBankName.trim();
+    if (!name) return;
+    if (AZ_BANKS.includes(name) || customBanks.includes(name)) {
+      if (!activeBanks.includes(name)) {
+        setActiveBanks([...activeBanks, name]);
+      }
+      setNewCustomBankName("");
+      return;
+    }
+    setCustomBanks([...customBanks, name]);
+    setActiveBanks([...activeBanks, name]);
+    setNewCustomBankName("");
+  };
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -689,6 +755,9 @@ export default function SettingsPage() {
 
       // Marketplace commissions
       marketplaceCommissions: JSON.stringify(marketplaceCommissions),
+
+      // Azerbaijan Banks settings
+      activeBanks: JSON.stringify(activeBanks),
     };
 
     updateSettingsMutation.mutate(payload);
@@ -981,6 +1050,18 @@ export default function SettingsPage() {
         >
           <Users className="w-4 h-4" />
           İstifadəçilər və Təhlükəsizlik
+        </button>
+        <button
+          type="button"
+          onClick={() => setSettingsTab("banks")}
+          className={`flex items-center gap-2 px-5 py-3 border-b-2 text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+            settingsTab === "banks"
+              ? "border-primary text-primary"
+              : "border-transparent text-gray-400 hover:text-gray-600"
+          }`}
+        >
+          <Landmark className="w-4 h-4" />
+          Bank Ayarları 🏦
         </button>
         <button
           type="button"
@@ -1280,6 +1361,65 @@ export default function SettingsPage() {
                     </table>
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {settingsTab === "banks" && (
+            /* Card 6: Azerbaijani Banks Configuration */
+            <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card">
+              <div className="flex items-center gap-2 mb-6 border-b border-gray-100/50 pb-3">
+                <Landmark className="w-5 h-5 text-primary" />
+                <h3 className="font-extrabold text-gray-900 text-sm">Kart Ödənişləri üçün Bank Hesabları</h3>
+              </div>
+
+              <div className="space-y-6">
+                <p className="text-xs text-gray-400 leading-relaxed font-semibold">
+                  Aktiv etdiyiniz banklar satış və mədaxil zamanı kart ödənişlərində seçim olaraq göstəriləcəkdir.
+                </p>
+
+                {/* Add Custom Bank form */}
+                <div className="flex gap-2 p-3.5 bg-gray-50/50 border border-gray-100 rounded-2xl max-w-md">
+                  <input
+                    type="text"
+                    placeholder="Yeni bank adı (Məs. LeoBank, Rabitəbank...)"
+                    value={newCustomBankName}
+                    onChange={(e) => setNewCustomBankName(e.target.value)}
+                    className="flex-1 px-3.5 py-2 border border-gray-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-1 focus:ring-primary bg-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={addCustomBank}
+                    className="px-4 py-2 bg-primary text-white text-xs font-bold rounded-xl hover:bg-primary/90 cursor-pointer shadow-sm shadow-primary/10 transition-all shrink-0"
+                  >
+                    Əlavə Et
+                  </button>
+                </div>
+
+                {/* Checklist of banks */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 pt-2">
+                  {[...AZ_BANKS, ...customBanks].map((bank) => {
+                    const isActive = activeBanks.includes(bank);
+                    return (
+                      <label
+                        key={bank}
+                        className={`flex items-center gap-3 p-3.5 rounded-2xl border transition-all cursor-pointer select-none ${
+                          isActive
+                            ? "bg-primary/5 border-primary/25 text-primary font-bold shadow-sm shadow-primary/5"
+                            : "bg-white border-gray-100 hover:border-gray-200 text-gray-700 font-semibold"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isActive}
+                          onChange={() => toggleBank(bank)}
+                          className="rounded border-gray-300 text-primary focus:ring-primary h-4.5 w-4.5 cursor-pointer shrink-0"
+                        />
+                        <span className="text-xs truncate" title={bank}>{bank}</span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}
@@ -1686,7 +1826,7 @@ export default function SettingsPage() {
           </div>
           )}
 
-          {(settingsTab === "general" || settingsTab === "printer" || settingsTab === "tax" || settingsTab === "channels") && (
+          {(settingsTab === "general" || settingsTab === "printer" || settingsTab === "tax" || settingsTab === "channels" || settingsTab === "banks") && (
             /* Save Button */
             <div className="flex justify-end">
               <button

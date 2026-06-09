@@ -26,6 +26,7 @@ interface Sale {
   customerName: string | null;
   customerPhone: string | null;
   paymentType: string;
+  bankName?: string | null;
   creditDueDate: string | null;
   notes: string | null;
   saleDate: string;
@@ -394,10 +395,15 @@ export default function SalesHistory() {
                               {sale.sellerName || "Sistem"}
                             </span>
                           </td>
-                          <td className="p-4 text-center">
+                          <td className="p-4 text-center font-semibold">
                             <span className={`px-2 py-0.5 border rounded-full text-[9px] font-bold ${paymentBadges[sale.paymentType] || "bg-gray-50 text-gray-500"}`}>
                               {sale.paymentType}
                             </span>
+                            {sale.paymentType === "Kart" && sale.bankName && (
+                              <span className="text-[9px] text-gray-500 font-bold block mt-0.5">
+                                {sale.bankName}
+                              </span>
+                            )}
                           </td>
                           <td className="p-4 text-right font-bold text-gray-950 font-mono">
                             {Number(sale.totalAmount || 0).toFixed(2)} ₼

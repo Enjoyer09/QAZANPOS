@@ -61,6 +61,7 @@ export const stockEntries = pgTable("stock_entries", {
   supplier: text("supplier"),
   notes: text("notes"),
   paymentType: text("payment_type").notNull(), // "Nəğd", "Kart", "Kart2Kart", "Köçürmə", "Nisyə"
+  bankName: text("bank_name"),
   creditDueDate: text("credit_due_date"), // Borc son ödəniş tarixi
   entryDate: text("entry_date").notNull(), // ISO timestamp
   paidStatus: text("paid_status").notNull().default("paid"), // "paid" (ödənilib), "credit" (tədarükçüyə borc)
@@ -165,6 +166,7 @@ export const sales = pgTable("sales", {
   customerName: text("customer_name"), // Snapshotted at sale time
   customerPhone: text("customer_phone"), // Snapshotted at sale time
   paymentType: text("payment_type").notNull(), // "Nəğd", "Kart", "Kart2Kart", "Köçürmə", "Nisyə"
+  bankName: text("bank_name"),
   creditDueDate: text("credit_due_date"), // Borcun ödənilməli olduğu son tarix
   notes: text("notes"),
   saleDate: text("sale_date").notNull(), // ISO timestamp
@@ -265,6 +267,7 @@ export const settings = pgTable("settings", {
   staffCanViewCustomers: integer("staff_can_view_customers").notNull().default(1),
   staffCanViewVendors: integer("staff_can_view_vendors").notNull().default(1),
   staffCanViewExpenses: integer("staff_can_view_expenses").notNull().default(1),
+  activeBanks: text("active_banks"),
 });
 
 // 9. Users Table for Authentication & Authorization

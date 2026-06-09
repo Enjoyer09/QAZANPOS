@@ -921,7 +921,7 @@ router.post("/stock/entries", async (req, res) => {
       return res.status(403).json({ message: "Anbara mədaxil etmək səlahiyyətiniz yoxdur" });
     }
 
-    const { productId, quantity, purchasePrice, supplier, notes, paymentType, creditDueDate, vendorId, serialNumbers } = req.body;
+    const { productId, quantity, purchasePrice, supplier, notes, paymentType, creditDueDate, vendorId, serialNumbers, bankName } = req.body;
 
     if (!productId || !quantity || !purchasePrice || !paymentType) {
       return res.status(400).json({ message: "Məcburi sahələri doldurun" });
@@ -945,11 +945,12 @@ router.post("/stock/entries", async (req, res) => {
 
     const product = productList[0];
     const isSerialized = product.trackingType === "serialized";
+    const isSerializedInput = (serialNumbers && Array.isArray(serialNumbers) && serialNumbers.length > 0);
 
-    if (isSerialized) {
+    if (isSerialized || isSerializedInput) {
       if (!serialNumbers || !Array.isArray(serialNumbers) || serialNumbers.length !== parseInt(quantity)) {
         return res.status(400).json({ 
-          message: `Serial nömrəli məhsul üçün dəqiq ${parseInt(quantity)} ədəd serial nömrəsi daxil edilməlidir` 
+          message: `Serial nömrəli daxiletmə üçün dəqiq ${parseInt(quantity)} ədəd serial nömrəsi daxil edilməlidir` 
         });
       }
 
@@ -990,6 +991,7 @@ router.post("/stock/entries", async (req, res) => {
           supplier: supplier || null,
           notes: notes || null,
           paymentType,
+          bankName: paymentType === "Kart" ? (bankName || null) : null,
           creditDueDate: isCredit ? creditDueDate : null,
           entryDate: new Date().toISOString(),
           paidStatus: isCredit ? "credit" : "paid",
@@ -999,7 +1001,7 @@ router.post("/stock/entries", async (req, res) => {
       const entryId = entry[0].id;
 
       // 3. Insert serial numbers if serialized
-      if (isSerialized && serialNumbers) {
+      if ((isSerialized || isSerializedInput) && serialNumbers) {
         for (const sNum of serialNumbers) {
           await tx.insert(schema.productSerials).values({
             tenantId: req.tenantId,
@@ -1201,7 +1203,7 @@ router.put("/stock/entries/:id", async (req, res) => {
     }
 
     const id = parseInt(req.params.id);
-    const { quantity, purchasePrice, paymentType, creditDueDate, supplier, notes, vendorId, adminPassword } = req.body;
+    const { quantity, purchasePrice, paymentType, creditDueDate, supplier, notes, vendorId, adminPassword, bankName } = req.body;
 
     if (quantity === undefined || purchasePrice === undefined || !paymentType) {
       return res.status(400).json({ message: "Məcburi sahələri doldurun" });
@@ -1247,10 +1249,16 @@ router.put("/stock/entries/:id", async (req, res) => {
     const product = productList[0];
     const isSerialized = product.trackingType === "serialized";
 
+    const serialCountResult = await db
+      .select({ count: sql`count(*)` })
+      .from(schema.productSerials)
+      .where(eq(schema.productSerials.stockEntryId, id));
+    const entryHasSerials = parseInt((serialCountResult[0]?.count as string) || "0") > 0;
+
     const parsedQty = parseFloat(quantity);
     const parsedPrice = parseFloat(purchasePrice);
 
-    if (isSerialized && parsedQty !== entry.quantity) {
+    if ((isSerialized || entryHasSerials) && parsedQty !== entry.quantity) {
       return res.status(400).json({ message: "Serial nömrəli məhsulun miqdarını birbaşa dəyişmək olmaz" });
     }
 
@@ -1308,6 +1316,7 @@ router.put("/stock/entries/:id", async (req, res) => {
         quantity: parsedQty,
         purchasePrice: parsedPrice,
         paymentType,
+        bankName: paymentType === "Kart" ? (bankName || null) : null,
         creditDueDate: paymentType === "Nisyə" ? creditDueDate : null,
         paidStatus: newPaidStatus,
         supplier: supplier || null,
@@ -1525,7 +1534,7 @@ router.get("/sales", async (req, res) => {
 // Process a POS sale / checkout
 router.post("/sales", async (req, res) => {
   try {
-    const { customerId, paymentType, creditDueDate, notes, items, totalAmount, totalCost, paidAmount, offlineId, salesChannel, marketplaceFee } = req.body;
+    const { customerId, paymentType, creditDueDate, notes, items, totalAmount, totalCost, paidAmount, offlineId, salesChannel, marketplaceFee, bankName } = req.body;
 
     if (!items || items.length === 0 || !paymentType) {
       return res.status(400).json({ message: "Çek məlumatları boş ola bilməz" });
@@ -1608,6 +1617,7 @@ router.post("/sales", async (req, res) => {
           customerName,
           customerPhone,
           paymentType,
+          bankName: paymentType === "Kart" ? (bankName || null) : null,
           creditDueDate: isCredit ? creditDueDate : null,
           notes: notes || null,
           saleDate: new Date().toISOString(),

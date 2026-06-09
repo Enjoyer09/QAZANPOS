@@ -14,6 +14,7 @@ const emptyEntry = {
   paymentType: "Nəğd",
   creditDueDate: "",
   vendorId: "",
+  bankName: "",
 };
 
 const paymentTypes = ["Nəğd", "Kart", "Kart2Kart", "Köçürmə", "Nisyə"];
@@ -116,6 +117,27 @@ export default function StockIn() {
       return res.json();
     },
   });
+
+  const { data: settings } = useQuery<any>({
+    queryKey: ["/api/settings"],
+    queryFn: async () => {
+      const res = await fetch("/api/settings");
+      if (!res.ok) throw new Error();
+      return res.json();
+    },
+  });
+
+  const activeBanksList: string[] = React.useMemo(() => {
+    if (!settings?.activeBanks) return [];
+    try {
+      const parsed = JSON.parse(settings.activeBanks);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }, [settings?.activeBanks]);
+
+  const [forceSerialized, setForceSerialized] = useState(false);
 
   const { data: entries, isLoading: isEntriesLoading } = useQuery<any[]>({
     queryKey: ["/api/stock/entries"],
@@ -222,7 +244,16 @@ export default function StockIn() {
   const calculatedTotal = parseFloat(formData.quantity || "0") * parseFloat(formData.purchasePrice || "0");
 
   const selectedProduct = products?.find((p) => String(p.id) === formData.productId);
-  const isSerialized = selectedProduct?.trackingType === "serialized";
+  const isSerializedProduct = selectedProduct?.trackingType === "serialized";
+  const isSerialized = isSerializedProduct || forceSerialized;
+
+  useEffect(() => {
+    if (isSerializedProduct) {
+      setForceSerialized(true);
+    } else {
+      setForceSerialized(false);
+    }
+  }, [isSerializedProduct]);
 
   const parsedSerials = serialNumbersText
     .split(/[\n,]+/)
@@ -265,6 +296,7 @@ export default function StockIn() {
       supplier: formData.supplier || null,
       notes: formData.notes || null,
       paymentType: formData.paymentType,
+      bankName: formData.paymentType === "Kart" ? (formData.bankName || null) : null,
       creditDueDate: isCredit ? formData.creditDueDate : null,
       vendorId: formData.vendorId ? parseInt(formData.vendorId) : null,
       serialNumbers: isSerialized ? parsedSerials : null,
@@ -406,6 +438,22 @@ export default function StockIn() {
               </div>
             )}
 
+            {/* Serialization override toggle (Only visible if the product is not already serialized) */}
+            {selectedProduct && !isSerializedProduct && (
+              <div className="flex items-center gap-2 py-1 select-none animate-in fade-in duration-200">
+                <input
+                  type="checkbox"
+                  id="forceSerialized"
+                  checked={forceSerialized}
+                  onChange={(e) => setForceSerialized(e.target.checked)}
+                  className="rounded border-gray-300 text-primary focus:ring-primary h-4.5 w-4.5 cursor-pointer"
+                />
+                <label htmlFor="forceSerialized" className="text-xs font-bold text-gray-700 cursor-pointer">
+                  Serial nömrələri (IMEI) daxil et 🏷️
+                </label>
+              </div>
+            )}
+
             {/* Serial Numbers (Only if product is serialized) */}
             {isSerialized && (
               <div className="space-y-1.5 border border-amber-200 bg-amber-50/15 p-3.5 rounded-xl animate-in slide-in-from-top-1.5">
@@ -443,6 +491,26 @@ export default function StockIn() {
                 ))}
               </select>
             </div>
+
+            {/* Bank Selection (Only if payment type is Kart) */}
+            {formData.paymentType === "Kart" && (
+              <div className="space-y-1.5 animate-in slide-in-from-top-1.5">
+                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Bank Hesabı *</label>
+                <select
+                  value={formData.bankName}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, bankName: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 cursor-pointer text-xs font-bold"
+                  required
+                >
+                  <option value="">Bank Seçin...</option>
+                  {(activeBanksList.length > 0 ? activeBanksList : ["Digər"]).map((bank) => (
+                    <option key={bank} value={bank}>
+                      {bank}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Due Date for Credit Restocking */}
             {isCredit && (
@@ -579,9 +647,14 @@ export default function StockIn() {
                         {Number(entry.purchasePrice || 0).toFixed(2)} ₼
                       </td>
                       <td className="py-3 px-2 text-center">
-                        <span className={`px-2 py-0.5 border rounded-full text-[9px] font-bold ${paymentBadges[entry.paymentType] || "bg-gray-50 text-gray-500"}`}>
-                          {entry.paymentType}
-                        </span>
+                        <div className="flex flex-col items-center justify-center gap-0.5">
+                          <span className={`px-2 py-0.5 border rounded-full text-[9px] font-bold ${paymentBadges[entry.paymentType] || "bg-gray-50 text-gray-500"}`}>
+                            {entry.paymentType}
+                          </span>
+                          {entry.paymentType === "Kart" && entry.bankName && (
+                            <span className="text-[9px] text-gray-500 font-bold block">{entry.bankName}</span>
+                          )}
+                        </div>
                       </td>
                       <td className="py-3 px-2 text-right text-gray-400">
                         {(() => {
@@ -600,6 +673,7 @@ export default function StockIn() {
                               quantity: String(entry.quantity),
                               purchasePrice: String(entry.purchasePrice),
                               paymentType: entry.paymentType,
+                              bankName: entry.bankName || "",
                               creditDueDate: entry.creditDueDate || "",
                               supplier: entry.supplier || "",
                               notes: entry.notes || "",
@@ -669,6 +743,7 @@ export default function StockIn() {
                   quantity: parseFloat(editFormData.quantity),
                   purchasePrice: parseFloat(editFormData.purchasePrice),
                   paymentType: editFormData.paymentType,
+                  bankName: editFormData.paymentType === "Kart" ? (editFormData.bankName || null) : null,
                   creditDueDate: isEditCredit ? editFormData.creditDueDate : null,
                   supplier: editFormData.supplier || null,
                   notes: editFormData.notes || null,
@@ -761,6 +836,26 @@ export default function StockIn() {
                   ))}
                 </select>
               </div>
+
+              {/* Bank Selection (Only if payment type is Kart) */}
+              {editFormData.paymentType === "Kart" && (
+                <div className="space-y-1 animate-in slide-in-from-top-1.5">
+                  <label className="text-gray-400 uppercase tracking-wider block text-[9px]">Bank Hesabı *</label>
+                  <select
+                    value={editFormData.bankName}
+                    onChange={(e) => setEditFormData((prev: any) => ({ ...prev, bankName: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-white cursor-pointer"
+                    required
+                  >
+                    <option value="">Bank Seçin...</option>
+                    {(activeBanksList.length > 0 ? activeBanksList : ["Digər"]).map((bank) => (
+                      <option key={bank} value={bank}>
+                        {bank}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Due Date for Credit */}
               {editFormData.paymentType === "Nisyə" && (
