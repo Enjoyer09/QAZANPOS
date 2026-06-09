@@ -983,7 +983,7 @@ router.post("/stock/entries", async (req, res) => {
       return res.status(403).json({ message: "Anbara mədaxil etmək səlahiyyətiniz yoxdur" });
     }
 
-    const { productId, quantity, purchasePrice, supplier, notes, paymentType, creditDueDate, vendorId, serialNumbers, bankName } = req.body;
+    const { productId, quantity, purchasePrice, supplier, notes, paymentType, creditDueDate, vendorId, serialNumbers, bankName, applyEdv } = req.body;
 
     if (!productId || !quantity || !purchasePrice || !paymentType) {
       return res.status(400).json({ message: "Məcburi sahələri doldurun" });
@@ -1057,6 +1057,7 @@ router.post("/stock/entries", async (req, res) => {
           creditDueDate: isCredit ? creditDueDate : null,
           entryDate: new Date().toISOString(),
           paidStatus: isCredit ? "credit" : "paid",
+          applyEdv: applyEdv !== undefined && applyEdv !== null ? (applyEdv ? 1 : 0) : 1,
         })
         .returning();
 
@@ -1265,7 +1266,7 @@ router.put("/stock/entries/:id", async (req, res) => {
     }
 
     const id = parseInt(req.params.id);
-    const { quantity, purchasePrice, paymentType, creditDueDate, supplier, notes, vendorId, adminPassword, bankName } = req.body;
+    const { quantity, purchasePrice, paymentType, creditDueDate, supplier, notes, vendorId, adminPassword, bankName, applyEdv } = req.body;
 
     if (quantity === undefined || purchasePrice === undefined || !paymentType) {
       return res.status(400).json({ message: "Məcburi sahələri doldurun" });
@@ -1384,6 +1385,7 @@ router.put("/stock/entries/:id", async (req, res) => {
         supplier: supplier || null,
         notes: notes || null,
         vendorId: vendorId ? parseInt(vendorId) : null,
+        applyEdv: applyEdv !== undefined && applyEdv !== null ? (applyEdv ? 1 : 0) : entry.applyEdv,
       })
       .where(eq(schema.stockEntries.id, id))
       .returning();
@@ -1596,7 +1598,7 @@ router.get("/sales", async (req, res) => {
 // Process a POS sale / checkout
 router.post("/sales", async (req, res) => {
   try {
-    const { customerId, paymentType, creditDueDate, notes, items, totalAmount, totalCost, paidAmount, offlineId, salesChannel, marketplaceFee, bankName } = req.body;
+    const { customerId, paymentType, creditDueDate, notes, items, totalAmount, totalCost, paidAmount, offlineId, salesChannel, marketplaceFee, bankName, applyEdv } = req.body;
 
     if (!items || items.length === 0 || !paymentType) {
       return res.status(400).json({ message: "Çek məlumatları boş ola bilməz" });
@@ -1690,6 +1692,7 @@ router.post("/sales", async (req, res) => {
           salesChannel: salesChannel || "Mağaza",
           marketplaceFee: marketplaceFee ? parseFloat(marketplaceFee) : 0,
           sellerName,
+          applyEdv: applyEdv !== undefined && applyEdv !== null ? (applyEdv ? 1 : 0) : 1,
         })
         .returning();
 

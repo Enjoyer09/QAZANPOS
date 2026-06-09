@@ -462,12 +462,21 @@ export default function Invoice({ params }: InvoiceProps) {
                 </span>
               </div>
               {settings?.showTaxOnInvoice !== 0 && settings?.taxStatus === "edv" && (
-                <div className="flex justify-between text-[11px] text-gray-400 font-medium">
-                  <span>ƏDV ({settings?.edvRate ?? 18}% daxil)</span>
-                  <span className="font-bold text-gray-700 font-mono">
-                    {((totalAmount * (settings?.edvRate ?? 18)) / (100 + (settings?.edvRate ?? 18))).toFixed(2)} ₼
-                  </span>
-                </div>
+                invoice.applyEdv !== 0 ? (
+                  <div className="flex justify-between text-[11px] text-gray-400 font-medium">
+                    <span>ƏDV ({settings?.edvRate ?? 18}% daxil)</span>
+                    <span className="font-bold text-gray-700 font-mono">
+                      {((totalAmount * (settings?.edvRate ?? 18)) / (100 + (settings?.edvRate ?? 18))).toFixed(2)} ₼
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex justify-between text-[11px] text-gray-400 font-medium italic">
+                    <span>Vergi Rejimi:</span>
+                    <span className="font-bold text-gray-500 font-mono bg-gray-100 px-1.5 py-0.5 rounded">
+                      ƏDV-siz (Vergidən Azad)
+                    </span>
+                  </div>
+                )
               )}
               {settings?.showTaxOnInvoice !== 0 && settings?.taxStatus === "sadelestirilmis" && (
                 <div className="flex justify-between text-[11px] text-gray-400 font-medium">

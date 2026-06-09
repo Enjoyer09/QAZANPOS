@@ -51,15 +51,26 @@ export function generateReceiptHtml(sale: any, settings: any): string {
   let taxDetailsHtml = "";
   if (showTaxOnReceipt === 1 && taxStatus) {
     if (taxStatus === "edv") {
-      const vatVal = (totalAmount * edvRate) / (100 + edvRate);
-      taxDetailsHtml = `
-        <table class="receipt-table" style="font-size: 8.5pt; color: #333333; margin-top: 2px;">
-          <tr>
-            <td>ƏDV (${edvRate}% daxil):</td>
-            <td>${vatVal.toFixed(2)} ₼</td>
-          </tr>
-        </table>
-      `;
+      if (sale.applyEdv !== 0) {
+        const vatVal = (totalAmount * edvRate) / (100 + edvRate);
+        taxDetailsHtml = `
+          <table class="receipt-table" style="font-size: 8.5pt; color: #333333; margin-top: 2px;">
+            <tr>
+              <td>ƏDV (${edvRate}% daxil):</td>
+              <td>${vatVal.toFixed(2)} ₼</td>
+            </tr>
+          </table>
+        `;
+      } else {
+        taxDetailsHtml = `
+          <table class="receipt-table" style="font-size: 8.5pt; color: #555555; margin-top: 2px; font-style: italic;">
+            <tr>
+              <td>Vergi Rejimi:</td>
+              <td>ƏDV-siz (Azad)</td>
+            </tr>
+          </table>
+        `;
+      }
     } else if (taxStatus === "sadelestirilmis") {
       const simplifiedVal = (totalAmount * simplifiedRate) / 100;
       taxDetailsHtml = `

@@ -66,6 +66,7 @@ export const stockEntries = pgTable("stock_entries", {
   creditDueDate: text("credit_due_date"), // Borc son ödəniş tarixi
   entryDate: text("entry_date").notNull(), // ISO timestamp
   paidStatus: text("paid_status").notNull().default("paid"), // "paid" (ödənilib), "credit" (tədarükçüyə borc)
+  applyEdv: integer("apply_edv").notNull().default(1),
 });
 
 // 2b. Vendor Payments (Wholesale payment history ledger)
@@ -178,6 +179,7 @@ export const sales = pgTable("sales", {
   salesChannel: text("sales_channel").default("Mağaza").notNull(),
   marketplaceFee: doublePrecision("marketplace_fee").default(0.0).notNull(),
   sellerName: text("seller_name").default("Sistem"),
+  applyEdv: integer("apply_edv").notNull().default(1),
 }, (table) => ({
   salesTenantOfflineIdIdx: uniqueIndex("sales_tenant_offline_id_idx").on(table.tenantId, table.offlineId)
 }));

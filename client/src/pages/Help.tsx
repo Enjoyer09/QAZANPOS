@@ -408,6 +408,37 @@ export default function Help() {
           </ol>
         </div>
       )
+    },
+    {
+      id: "apply-edv-toggle",
+      title: "🏷️ Dinamik 18% ƏDV Tətbiq Edilməsi (Toggle)",
+      category: "maliyye",
+      icon: DollarSign,
+      content: (
+        <div className="space-y-3 leading-relaxed text-gray-700">
+          <p>
+            Məhsul mədaxili və satışı zamanı vergi öhdəliklərinizə uyğun olaraq 18% ƏDV (Əlavə Dəyər Vergisi) tətbiq edilib-edilməməsini hər tranzaksiya üçün fərdi şəkildə seçə bilərsiniz.
+          </p>
+          <div className="bg-green-50/50 border border-green-100 rounded-xl p-3.5 space-y-1">
+            <span className="text-[10px] font-black text-green-700 uppercase block tracking-wider">Mühüm Qeyd</span>
+            <span className="text-xs text-green-950 font-semibold block">
+              Bu seçim yalnız mağazanızın vergi statusu <b>\"ƏDV Ödəyicisi\"</b> olaraq konfiqurasiya edildikdə POS terminalında və mal mədaxili pəncərəsində görünəcəkdir.
+            </span>
+          </div>
+          <h4 className="font-extrabold text-gray-900 text-xs mt-3 uppercase tracking-wider">İstifadə Qaydası:</h4>
+          <ol className="list-decimal pl-4 space-y-2 text-xs font-semibold">
+            <li>
+              <b>POS Terminalda Satış:</b> Səbətə malları əlavə etdikdən sonra ödəniş bölməsində <b>\"18% ƏDV Tətbiq Edilsin\"</b> keçiricisini (toggle) görəcəksiniz. Satışa ƏDV tətbiq etmək istəyirsinizsə, bu xananı işarəli saxlayın. Satış ƏDV-siz olacaqsa (Vergidən azad tranzaksiya), xananı söndürün.
+            </li>
+            <li>
+              <b>Mal Mədaxilində (Stock In):</b> Yeni mal daxil edərkən və ya daxil edilmiş mədaxili redaktə edərkən eyni keçiricini aktiv/deaktiv edərək mal alışını ƏDV-li və ya ƏDV-siz qeydə ala bilərsiniz.
+            </li>
+            <li>
+              <b>İnvoys və Qəbzdə Əks Olunması:</b> Əgər ƏDV tətbiqi söndürülübsə, çap olunan qəbzdə və rəsmi A4 qaiməsində ƏDV sətiri görünməyəcək və sənəd rəsmi olaraq <b>\"ƏDV-siz (Vergidən Azad)\"</b> statusu ilə çıxacakdır.
+            </li>
+          </ol>
+        </div>
+      )
     }
   ];
 

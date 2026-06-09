@@ -437,7 +437,8 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
         creditDueDate: body.creditDueDate || null,
         items: enrichedItems,
         payments: body.paymentType === "credit" ? [] : [{ id: 1, amount: totalAmount, paymentDate: new Date().toISOString(), paymentType: body.paymentType }],
-        sellerName: userUsername ? userUsername.trim().toLowerCase() : (userRole === "Admin" ? "admin" : "satici")
+        sellerName: userUsername ? userUsername.trim().toLowerCase() : (userRole === "Admin" ? "admin" : "satici"),
+        applyEdv: body.applyEdv !== undefined && body.applyEdv !== null ? (body.applyEdv ? 1 : 0) : 1
       };
 
       sales.unshift(newSale);
@@ -773,7 +774,8 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
         bankName: body.paymentType === "Kart" ? (body.bankName || null) : null,
         creditDueDate: body.creditDueDate || null,
         entryDate: new Date().toISOString(),
-        paidStatus: body.paymentType === "Nisyə" ? "credit" : "paid"
+        paidStatus: body.paymentType === "Nisyə" ? "credit" : "paid",
+        applyEdv: body.applyEdv !== undefined && body.applyEdv !== null ? (body.applyEdv ? 1 : 0) : 1
       };
       
       entriesList.unshift(newEntry);
@@ -828,6 +830,7 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
           supplier: body.supplier || "",
           notes: body.notes || "",
           vendorId: body.vendorId || null,
+          applyEdv: body.applyEdv !== undefined && body.applyEdv !== null ? (body.applyEdv ? 1 : 0) : entryObj.applyEdv
         };
         saveDb("stock_entries", entriesList);
         

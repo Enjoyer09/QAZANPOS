@@ -88,6 +88,7 @@ export default function POS() {
   const [creditDueDate, setCreditDueDate] = useState("");
   const [notes, setNotes] = useState("");
   const [salesChannel, setSalesChannel] = useState<string>("Mağaza");
+  const [applyEdv, setApplyEdv] = useState(true);
 
   // POS Mode State
   const [posMode, setPosMode] = useState<"sale" | "return">("sale");
@@ -131,6 +132,7 @@ export default function POS() {
     setCreditDueDate("");
     setNotes("");
     setLastCreatedSale(null);
+    setApplyEdv(true);
     setShowSuccessModal(false);
     setPosMode("sale");
     setReturnStatus("returned_to_stock");
@@ -579,6 +581,7 @@ export default function POS() {
         paymentStatus: isCredit ? "credit" : "paid",
         creditDueDate: isCredit ? creditDueDate : null,
         notes: notes.trim() || null,
+        applyEdv: activeSettings?.taxStatus === "edv" ? (applyEdv ? 1 : 0) : 1,
         totalAmount,
         totalPaid: isCredit ? 0 : totalAmount,
         remainingDebt: isCredit ? totalAmount : 0,
@@ -794,6 +797,7 @@ export default function POS() {
       bankName: paymentType === "Kart" ? (bankName || null) : null,
       creditDueDate: isCredit ? creditDueDate : null,
       notes: notes.trim() || null,
+      applyEdv: activeSettings?.taxStatus === "edv" ? (applyEdv ? 1 : 0) : 1,
       totalAmount,
       totalCost,
       offlineId: `ONL-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
@@ -1459,6 +1463,22 @@ export default function POS() {
                   className={`w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none bg-gray-50/50 focus:ring-1 ${posMode === "return" ? "focus:ring-amber-500" : "focus:ring-primary"}`}
                 />
               </div>
+
+              {/* VAT (ƏDV) Toggle */}
+              {posMode === "sale" && activeSettings?.taxStatus === "edv" && (
+                <div className="flex items-center gap-2 py-1 select-none animate-in fade-in duration-200">
+                  <input
+                    type="checkbox"
+                    id="applyEdv"
+                    checked={applyEdv}
+                    onChange={(e) => setApplyEdv(e.target.checked)}
+                    className="rounded border-gray-300 text-primary focus:ring-primary h-4.5 w-4.5 cursor-pointer"
+                  />
+                  <label htmlFor="applyEdv" className="text-xs font-bold text-gray-700 cursor-pointer flex items-center gap-1">
+                    18% ƏDV Tətbiq Edilsin <span className="text-[10px] text-gray-400 font-normal">(Qiymətə ƏDV daxildir)</span>
+                  </label>
+                </div>
+              )}
 
               {/* Checkout Button */}
               <button
