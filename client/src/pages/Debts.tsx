@@ -7,6 +7,7 @@ import { useToast } from "../components/Toast.tsx";
 export default function Debts() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const [isFixing, setIsFixing] = useState(false);
 
   const user = (() => {
     try {
@@ -96,6 +97,36 @@ export default function Debts() {
       toast({ title: "Xəta!", description: "Borc ödənilərkən xəta baş verdi.", variant: "destructive" });
     },
   });
+
+  const handleFixCredits = async () => {
+    setIsFixing(true);
+    try {
+      const res = await fetch("/api/sales/fix-past-credits", {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Düzəliş zamanı xəta baş verdi");
+      }
+      const data = await res.json();
+      toast({
+        title: "Düzəliş Uğurludur!",
+        description: data.message,
+        variant: "success",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/credits/overdue"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/credits/pending"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
+    } catch (err: any) {
+      toast({
+        title: "Xəta!",
+        description: err.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsFixing(false);
+    }
+  };
 
   const totalCustomerDebt =
     (overdueList?.reduce((sum, item) => sum + (Number(item.remainingDebt) || 0), 0) || 0) +
@@ -189,11 +220,22 @@ export default function Debts() {
   return (
     <div className="space-y-6 animate-in fade-in-0">
       {/* Header */}
-      <div>
-        <h2 className="text-2xl font-black text-gray-900 tracking-tight">Nisyə və Borc İdarəetməsi</h2>
-        <p className="text-xs text-gray-400 mt-1">
-          Müştərilərin bizə olan nisyə borcları və bizim tədarükçülərə olan anbar borclarımız
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-black text-gray-900 tracking-tight">Nisyə və Borc İdarəetməsi</h2>
+          <p className="text-xs text-gray-400 mt-1">
+            Müştərilərin bizə olan nisyə borcları və bizim tədarükçülərə olan anbar borclarımız
+          </p>
+        </div>
+        {isAdmin && (
+          <button
+            onClick={handleFixCredits}
+            disabled={isFixing}
+            className="px-4.5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-50 select-none"
+          >
+            {isFixing ? "Düzəldilir..." : "Köhnə Nisyə Statuslarını Düzəlt"}
+          </button>
+        )}
       </div>
 
       {/* Search and Filters panel */}

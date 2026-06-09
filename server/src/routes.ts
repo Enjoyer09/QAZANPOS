@@ -2065,6 +2065,62 @@ router.delete("/sales/payments/:paymentId", requireAdmin, async (req, res) => {
   }
 });
 
+// Fix past credit statuses for sales that are already fully paid
+router.post("/sales/fix-past-credits", requireAdmin, async (req, res) => {
+  try {
+    const creditSales = await db.query.sales.findMany({
+      where: and(
+        eq(schema.sales.paymentStatus, "credit"),
+        eq(schema.sales.tenantId, req.tenantId)
+      ),
+      with: { payments: true, returns: true },
+    });
+
+    let fixCount = 0;
+    const fixedSales = [];
+
+    for (const sale of creditSales) {
+      const totalPaid = sale.payments.reduce((sum, p) => sum + p.amount, 0);
+      const returned = sale.returns ? sale.returns.reduce((sum, r) => sum + r.totalAmount, 0) : 0;
+      
+      const totalPaidCents = Math.round(totalPaid * 100);
+      const remainingDebtCents = Math.round((sale.totalAmount - returned) * 100);
+
+      if (totalPaidCents >= remainingDebtCents) {
+        await db
+          .update(schema.sales)
+          .set({ paymentStatus: "paid" })
+          .where(eq(schema.sales.id, sale.id));
+        
+        fixedSales.push({
+          id: sale.id,
+          customerName: sale.customerName,
+          totalAmount: sale.totalAmount,
+          totalPaid,
+          returned,
+        });
+        fixCount++;
+      }
+    }
+
+    if (fixCount > 0) {
+      await logActivity(
+        req,
+        "CORRECT_CREDIT_STATUSES",
+        `Verilənlər bazasında tam ödənilmiş ${fixCount} nisyə satışın statusu 'Ödənilib' olaraq yeniləndi.`
+      );
+    }
+
+    res.json({
+      message: `${fixCount} nisyə satışın statusu uğurla 'Ödənilib' olaraq düzəldildi.`,
+      fixedCount: fixCount,
+      fixedSales,
+    });
+  } catch (error: any) {
+    res.status(500).json({ message: "Köhnə nisyə statuslarını düzəldərkən xəta baş verdi: " + error.message });
+  }
+});
+
 // ----------------------------------------------------
 // 4b. RETURN / REFUND ENDPOINTS
 // ----------------------------------------------------

@@ -532,6 +532,38 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
     }
   }
 
+  if (path === "/api/sales/fix-past-credits") {
+    if (method === "POST") {
+      const sales = getDb("sales");
+      let fixCount = 0;
+      for (let i = 0; i < sales.length; i++) {
+        const sale = sales[i];
+        if (sale.paymentStatus === "credit") {
+          const payments = sale.payments || [];
+          const totalPaid = payments.reduce((acc: number, p: any) => acc + p.amount, 0);
+          const returns = getDb("returns").filter((r: any) => r.saleId === sale.id);
+          const returned = returns.reduce((acc: number, r: any) => acc + r.totalAmount, 0);
+          
+          const totalPaidCents = Math.round(totalPaid * 100);
+          const remainingDebtCents = Math.round((sale.totalAmount - returned) * 100);
+          
+          if (totalPaidCents >= remainingDebtCents) {
+            sales[i].paymentStatus = "paid";
+            fixCount++;
+          }
+        }
+      }
+      if (fixCount > 0) {
+        saveDb("sales", sales);
+        logActivity(`Verilənlər bazasında tam ödənilmiş ${fixCount} nisyə satışın statusu 'Ödənilib' olaraq yeniləndi.`);
+      }
+      return jsonResponse({
+        message: `${fixCount} nisyə satışın statusu uğurla 'Ödənilib' olaraq düzəldildi.`,
+        fixedCount: fixCount
+      });
+    }
+  }
+
   if (path.startsWith("/api/sales/")) {
     const parts = path.split("/");
     const id = parseInt(parts[3] || "0");
