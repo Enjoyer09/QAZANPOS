@@ -12,6 +12,9 @@ interface StockLevel {
   lastPurchasePrice: number;
   totalValue: number;
   lastPurchaseDate?: string | null;
+  barcode?: string | null;
+  activeSerials?: string[];
+  trackingType?: string;
 }
 export default function Stock() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -63,9 +66,12 @@ export default function Stock() {
     const words = normalizeSearchText(q).split(/\s+/).filter(Boolean);
     if (words.length === 0) return true;
     return words.every((word) => {
+      const serialsStr = item.activeSerials ? item.activeSerials.join(" ") : "";
       return (
         normalizeSearchText(item.productName).includes(word) ||
-        (item.category && normalizeSearchText(item.category).includes(word))
+        (item.category && normalizeSearchText(item.category).includes(word)) ||
+        (item.barcode && normalizeSearchText(item.barcode).includes(word)) ||
+        normalizeSearchText(serialsStr).includes(word)
       );
     });
   });
@@ -178,7 +184,35 @@ export default function Stock() {
               ) : (
                 filteredList.map((item) => (
                   <tr key={item.productId} className="border-b border-gray-50 hover:bg-gray-50/30 transition-all text-xs">
-                    <td className="p-4 pl-6 font-bold text-gray-900">{item.productName}</td>
+                    <td className="p-4 pl-6 font-bold text-gray-900">
+                      <div className="flex flex-col gap-1 py-1">
+                        <span className="text-gray-950 font-black">{item.productName}</span>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                          {item.barcode && (
+                            <span className="bg-gray-100 text-gray-600 border border-gray-200 px-2 py-0.5 rounded text-[10px] font-mono font-bold flex items-center gap-1">
+                              🖨️ {item.barcode}
+                            </span>
+                          )}
+                          {item.trackingType === "serialized" && (
+                            <span className="bg-blue-50 text-blue-600 border border-blue-100 px-2 py-0.5 rounded text-[10px] font-bold">
+                              🏷️ Seriallı (IMEI)
+                            </span>
+                          )}
+                        </div>
+                        {item.activeSerials && item.activeSerials.length > 0 && (
+                          <div className="text-[10px] font-mono text-amber-700 bg-amber-50/35 border border-amber-100/40 p-2 rounded-xl max-w-sm mt-1">
+                            <span className="font-extrabold block text-[9px] text-amber-800 uppercase tracking-wider mb-1">Stokdakı S/N (IMEI):</span>
+                            <div className="flex flex-wrap gap-1">
+                              {item.activeSerials.map((s, idx) => (
+                                <span key={idx} className="bg-white px-1.5 py-0.5 border border-amber-200 rounded text-[9.5px]">
+                                  {s}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </td>
                     <td className="p-4 font-medium text-gray-600">
                       {item.category ? (
                         <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md text-[10px] font-bold">

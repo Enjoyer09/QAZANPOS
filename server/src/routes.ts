@@ -1166,6 +1166,7 @@ router.get("/stock/levels", async (req, res) => {
         trackingType: product.trackingType,
         activeSerials,
         lastPurchaseDate: metric.lastPurchaseDate,
+        barcode: product.barcode,
       });
     }
 

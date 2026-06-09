@@ -882,6 +882,7 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
         trackingType: product.trackingType || "none",
         activeSerials: product.activeSerials || [],
         lastPurchaseDate,
+        barcode: product.barcode || "",
       };
     });
     
