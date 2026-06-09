@@ -1909,7 +1909,7 @@ router.patch("/sales/:id/pay-credit", async (req, res) => {
     // Calculate total already paid
     const alreadyPaid = sale.payments.reduce((acc, p) => acc + p.amount, 0);
     const returned = sale.returns ? sale.returns.reduce((acc, r) => acc + r.totalAmount, 0) : 0;
-    const remaining = Math.max(0, sale.totalAmount - alreadyPaid - returned);
+    const remaining = Math.max(0, Math.round((sale.totalAmount - alreadyPaid - returned) * 100) / 100);
 
     if (remaining > 0) {
       await db.insert(schema.creditPayments).values({
@@ -1984,7 +1984,10 @@ router.patch("/sales/:id/add-payment", async (req, res) => {
     const totalPaid = updatedPayments.reduce((acc, p) => acc + p.amount, 0);
     const returned = sale.returns ? sale.returns.reduce((acc, r) => acc + r.totalAmount, 0) : 0;
 
-    if (totalPaid >= (sale.totalAmount - returned)) {
+    const totalPaidCents = Math.round(totalPaid * 100);
+    const remainingDebtCents = Math.round((sale.totalAmount - returned) * 100);
+
+    if (totalPaidCents >= remainingDebtCents) {
       await db
         .update(schema.sales)
         .set({ paymentStatus: "paid" })
@@ -2038,7 +2041,10 @@ router.delete("/sales/payments/:paymentId", requireAdmin, async (req, res) => {
       const totalPaid = sale.payments.reduce((acc, p) => acc + p.amount, 0);
       const returned = sale.returns ? sale.returns.reduce((acc, r) => acc + r.totalAmount, 0) : 0;
       
-      if (totalPaid < (sale.totalAmount - returned)) {
+      const totalPaidCents = Math.round(totalPaid * 100);
+      const remainingDebtCents = Math.round((sale.totalAmount - returned) * 100);
+
+      if (totalPaidCents < remainingDebtCents) {
         // Change status back to credit since it has unpaid balance
         await db
           .update(schema.sales)

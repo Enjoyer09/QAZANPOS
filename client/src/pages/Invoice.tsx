@@ -104,6 +104,8 @@ export default function Invoice({ params }: InvoiceProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sales", saleId] });
       queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/credits/overdue"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/credits/pending"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/summary"] });
       toast({ title: "Uğurlu!", description: "Borc tamamilə ödənildi.", variant: "success" });
     },
@@ -125,6 +127,8 @@ export default function Invoice({ params }: InvoiceProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sales", saleId] });
       queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/credits/overdue"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/credits/pending"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/summary"] });
       toast({ title: "Ödəniş qəbul edildi!", description: "Qalıq borc yeniləndi.", variant: "success" });
       setPayAmount("");
@@ -148,6 +152,8 @@ export default function Invoice({ params }: InvoiceProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sales", saleId] });
       queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/credits/overdue"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/credits/pending"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/summary"] });
       toast({ title: "Ödəniş ləğv edildi!", description: "Borc balansı bərpa olundu.", variant: "success" });
     },

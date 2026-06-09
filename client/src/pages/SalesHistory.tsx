@@ -422,7 +422,9 @@ export default function SalesHistory() {
                                   : "bg-red-50 text-red-600 border-red-100"
                               }`}
                             >
-                              {sale.paymentStatus === "paid" ? "Ödənilib" : "Nisyə"}
+                              {sale.paymentStatus === "paid"
+                                ? (sale.paymentType === "Nisyə" ? "Bağlı" : "Ödənilib")
+                                : (sale.paymentType === "Nisyə" ? "Nisyə" : "Ödənilməyib")}
                             </span>
                           </td>
                           <td className="p-4 text-right pr-6">
