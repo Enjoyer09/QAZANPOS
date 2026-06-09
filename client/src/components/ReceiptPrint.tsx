@@ -88,10 +88,30 @@ export function generateReceiptHtml(sale: any, settings: any): string {
         ? `<div style="font-size: 7.5pt; font-family: monospace; color: #444444; margin-top: 1px; font-weight: bold;">S/N: ${itemSerials.map((s: any) => s.serialNumber).join(", ")}</div>`
         : "";
 
+      const getWarrantyExpiryString = (saleDateStr: string, months: number) => {
+        if (!saleDateStr || !months) return null;
+        const d = new Date(saleDateStr);
+        if (isNaN(d.getTime())) return null;
+        d.setMonth(d.getMonth() + months);
+        
+        // Format as DD.MM.YYYY
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = d.getFullYear();
+        return `${day}.${month}.${year}`;
+      };
+
+      const warrantyMonths = item.product?.warrantyMonths;
+      const warrantyExpiry = getWarrantyExpiryString(sale.saleDate, warrantyMonths);
+      const warrantyHtml = warrantyExpiry
+        ? `<div style="font-size: 7.5pt; font-family: monospace; color: #000000; margin-top: 1px; font-weight: bold;">Zəmanət: ${warrantyMonths} ay (Bitmə: ${warrantyExpiry})</div>`
+        : "";
+
       itemsHtml += `
         <div class="item-row">
           <div class="item-name">${name}</div>
           ${serialsHtml}
+          ${warrantyHtml}
           <table class="receipt-table" style="font-size: 8.5pt;">
             <tr>
               <td style="width: 65%; text-align: left; font-size: 8.5pt; padding: 1px 0;">${qty} ${unit} x ${price.toFixed(2)} ₼</td>

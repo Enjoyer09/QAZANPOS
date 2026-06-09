@@ -13,6 +13,19 @@ export default function Invoice({ params }: InvoiceProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  const getWarrantyExpiryString = (saleDateStr: string, months: number) => {
+    if (!saleDateStr || !months) return null;
+    const d = new Date(saleDateStr);
+    if (isNaN(d.getTime())) return null;
+    d.setMonth(d.getMonth() + months);
+    
+    // Format as DD.MM.YYYY
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}.${month}.${year}`;
+  };
+
   const activeUser = (() => {
     try {
       const userStr = localStorage.getItem("qazanpos_user");
@@ -417,6 +430,14 @@ export default function Invoice({ params }: InvoiceProps) {
                             S/N: {itemSerials.map((s: any) => s.serialNumber).join(", ")}
                           </div>
                         )}
+                        {item.product?.warrantyMonths ? (
+                          <div className="text-[10px] text-blue-600 font-bold flex items-center gap-1.5 mt-0.5 select-none">
+                            <span>🛡️ Zəmanət: {item.product.warrantyMonths} ay</span>
+                            {getWarrantyExpiryString(invoice.saleDate, item.product.warrantyMonths) && (
+                              <span className="text-gray-400 font-medium">(Bitmə tarixi: {getWarrantyExpiryString(invoice.saleDate, item.product.warrantyMonths)})</span>
+                            )}
+                          </div>
+                        ) : null}
                       </td>
                       <td className="py-4 text-right text-gray-500 font-medium">{item.product?.unit || item.unit || "ədəd"}</td>
                       <td className="py-4 text-right font-semibold text-gray-800 font-mono">{item.quantity}</td>

@@ -736,7 +736,7 @@ router.post("/products", async (req, res) => {
     if (!await checkUserPermission(req, "staffCanManageCatalog")) {
       return res.status(403).json({ message: "Bu əməliyyat üçün səlahiyyətiniz yoxdur." });
     }
-    const { name, category, unit, description, barcode, trackingType, serialNumber } = req.body;
+    const { name, category, unit, description, barcode, trackingType, serialNumber, warrantyMonths } = req.body;
     if (!name) return res.status(400).json({ message: "Ad tələb olunur" });
 
     // Validate product name uniqueness (case-insensitive, trimmed)
@@ -803,6 +803,7 @@ router.post("/products", async (req, res) => {
           description: description || null,
           barcode: barcode || null,
           trackingType: trackingType || "none",
+          warrantyMonths: warrantyMonths ? parseInt(String(warrantyMonths)) : null,
         })
         .returning();
 
@@ -860,7 +861,7 @@ router.put("/products/:id", async (req, res) => {
       return res.status(403).json({ message: "Bu əməliyyat üçün səlahiyyətiniz yoxdur." });
     }
     const id = parseInt(req.params.id);
-    const { name, category, unit, description, barcode, trackingType } = req.body;
+    const { name, category, unit, description, barcode, trackingType, warrantyMonths } = req.body;
 
     // Validate product name uniqueness (case-insensitive, trimmed)
     if (name) {
@@ -900,6 +901,7 @@ router.put("/products/:id", async (req, res) => {
         description: description || null,
         barcode: barcode || null,
         trackingType: trackingType || "none",
+        warrantyMonths: warrantyMonths ? parseInt(String(warrantyMonths)) : null,
       })
       .where(and(eq(schema.products.id, id), eq(schema.products.tenantId, req.tenantId)))
       .returning();

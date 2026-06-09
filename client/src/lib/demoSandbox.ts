@@ -261,6 +261,7 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
       const nameVal = body.name || body.productName || "";
       const trackingType = body.trackingType || "none";
       const serialNumber = body.serialNumber ? body.serialNumber.trim().toUpperCase() : null;
+      const warrantyMonths = body.warrantyMonths ? parseInt(String(body.warrantyMonths)) : null;
 
       // Auto-initialize serial list and quantity if an initial serial number is provided
       const activeSerials = (trackingType === "serialized" && serialNumber) ? [serialNumber] : [];
@@ -277,6 +278,7 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
         trackingType: trackingType,
         activeSerials: activeSerials,
         currentQuantity: currentQuantity,
+        warrantyMonths: warrantyMonths,
         salePrice: parseFloat(body.salePrice || 0),
         purchasePrice: parseFloat(body.purchasePrice || 0),
         supplierName: body.supplierName || "",

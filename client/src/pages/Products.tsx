@@ -13,6 +13,7 @@ interface Product {
   description: string | null;
   barcode: string | null;
   trackingType?: string;
+  warrantyMonths?: number | null;
 }
 
 const emptyProduct = {
@@ -23,6 +24,7 @@ const emptyProduct = {
   barcode: "",
   trackingType: "none",
   serialNumber: "",
+  warrantyMonths: "",
 };
 
 export default function Products() {
@@ -183,6 +185,7 @@ export default function Products() {
       barcode: product.barcode || "",
       trackingType: product.trackingType || "none",
       serialNumber: "",
+      warrantyMonths: product.warrantyMonths ? String(product.warrantyMonths) : "",
     });
     setIsOpen(true);
   };
@@ -292,7 +295,14 @@ export default function Products() {
                 filteredList.map((item, idx) => (
                   <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/30 transition-all text-xs">
                     <td className="p-4 text-center font-mono text-gray-400">{idx + 1}</td>
-                    <td className="p-4 font-bold text-gray-900">{item.name}</td>
+                    <td className="p-4 font-bold text-gray-900">
+                      <div>{item.name}</div>
+                      {item.warrantyMonths ? (
+                        <span className="inline-block bg-blue-50 text-blue-600 border border-blue-100 px-1.5 py-0.5 rounded-md text-[9px] font-bold mt-1 select-none animate-in fade-in duration-200">
+                          🛡️ {item.warrantyMonths} ay zəmanət
+                        </span>
+                      ) : null}
+                    </td>
                     <td className="p-4 font-mono text-[10px] text-gray-500 font-bold">{item.barcode || "—"}</td>
                     <td className="p-4 font-medium text-gray-600">
                       {item.category ? (
@@ -434,6 +444,18 @@ export default function Products() {
                   <option value="kq">kq (kiloqram olaraq)</option>
                   <option value="metr">metr (metrlə)</option>
                 </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Zəmanət Müddəti (Ay)</label>
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="Məs. 12 (ixtiyari)"
+                  value={formData.warrantyMonths}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, warrantyMonths: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 font-bold"
+                />
               </div>
 
               <div className="space-y-1.5">
