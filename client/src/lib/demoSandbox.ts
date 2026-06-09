@@ -135,7 +135,7 @@ const DEFAULT_SETTINGS = {
   showReceiptFooter: 1,
   showPaymentDetails: 1,
   lowStockAlertCount: 5,
-  activeBanks: null,
+  activeBanks: JSON.stringify(["Kapital Bank", "PASHA Bank"]),
 };
 
 const DEFAULT_LOGS = [
@@ -220,6 +220,10 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
   if (path === "/api/settings") {
     if (method === "GET") {
       const settings = JSON.parse(sessionStorage.getItem("birsaas_demo_settings") || "{}");
+      if (settings && settings.activeBanks === undefined) {
+        settings.activeBanks = JSON.stringify(["Kapital Bank", "PASHA Bank"]);
+        sessionStorage.setItem("birsaas_demo_settings", JSON.stringify(settings));
+      }
       return jsonResponse(settings);
     }
     if (method === "POST" || method === "PUT") {
