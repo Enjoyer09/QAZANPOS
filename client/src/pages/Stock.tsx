@@ -20,6 +20,13 @@ interface StockLevel {
 export default function Stock() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSerialProduct, setSelectedSerialProduct] = useState<StockLevel | null>(null);
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+
+  const handleCopy = (text: string, index: number) => {
+    navigator.clipboard.writeText(text);
+    setCopiedIndex(index);
+    setTimeout(() => setCopiedIndex(null), 2000);
+  };
 
   const user = (() => {
     try {
@@ -294,7 +301,7 @@ export default function Stock() {
               <p className="text-[9px] text-gray-400 mt-0.5">Stokdakı Aktiv Serial Nömrələr (IMEI)</p>
             </div>
             <button 
-              onClick={() => setSelectedSerialProduct(null)}
+              onClick={() => { setSelectedSerialProduct(null); setCopiedIndex(null); }}
               className="p-1 hover:bg-gray-100 text-gray-400 hover:text-gray-700 rounded-lg transition-all cursor-pointer font-bold"
             >
               ✕
@@ -308,11 +315,23 @@ export default function Stock() {
             </div>
 
             {selectedSerialProduct.activeSerials && selectedSerialProduct.activeSerials.length > 0 ? (
-              <div className="border border-gray-100 rounded-xl max-h-60 overflow-y-auto p-2 bg-gray-50/50 space-y-1">
+              <div 
+                className="border border-gray-100 rounded-xl max-h-72 overflow-y-auto p-2 bg-gray-50/50 space-y-1"
+                style={{ scrollbarWidth: 'thin' }}
+              >
                 {selectedSerialProduct.activeSerials.map((s, idx) => (
                   <div key={idx} className="flex items-center justify-between p-2 bg-white border border-gray-150 rounded-lg hover:bg-gray-50/50 transition-all text-[11px] font-mono font-bold text-gray-800">
-                    <span>{idx + 1}. {s}</span>
-                    <span className="bg-green-50 text-green-700 border border-green-100 px-1.5 py-0.2 rounded-md text-[9px] font-sans font-bold">Stokda</span>
+                    <span className="select-text">{idx + 1}. {s}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="bg-green-50 text-green-700 border border-green-100 px-1.5 py-0.5 rounded-md text-[9px] font-sans font-bold">Stokda</span>
+                      <button
+                        onClick={() => handleCopy(s, idx)}
+                        className="px-2 py-1 bg-gray-50 hover:bg-primary/10 border border-gray-200 hover:border-primary/20 text-gray-500 hover:text-primary rounded-md text-[9px] font-sans font-bold transition-all cursor-pointer"
+                        title="Kopyala"
+                      >
+                        {copiedIndex === idx ? "Kopyalandı ✓" : "📋 Kopyala"}
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -324,7 +343,7 @@ export default function Stock() {
           </div>
 
           <button
-            onClick={() => setSelectedSerialProduct(null)}
+            onClick={() => { setSelectedSerialProduct(null); setCopiedIndex(null); }}
             className="w-full py-2 bg-gray-900 text-white font-bold text-xs rounded-xl hover:bg-black transition-all cursor-pointer text-center"
           >
             Bağla
