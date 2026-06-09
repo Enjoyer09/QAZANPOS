@@ -18,6 +18,7 @@ interface StockLevel {
 }
 export default function Stock() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedSerialProduct, setSelectedSerialProduct] = useState<StockLevel | null>(null);
 
   const user = (() => {
     try {
@@ -182,38 +183,50 @@ export default function Stock() {
                   </td>
                 </tr>
               ) : (
-                filteredList.map((item) => (
-                  <tr key={item.productId} className="border-b border-gray-50 hover:bg-gray-50/30 transition-all text-xs">
-                    <td className="p-4 pl-6 font-bold text-gray-900">
-                      <div className="flex flex-col gap-1 py-1">
-                        <span className="text-gray-950 font-black">{item.productName}</span>
-                        <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
-                          {item.barcode && (
-                            <span className="bg-gray-100 text-gray-600 border border-gray-200 px-2 py-0.5 rounded text-[10px] font-mono font-bold flex items-center gap-1">
-                              🖨️ {item.barcode}
-                            </span>
+                filteredList.map((item) => {
+                  const isSN = item.trackingType === "serialized";
+                  return (
+                    <tr 
+                      key={item.productId} 
+                      className={`border-b border-gray-50 hover:bg-gray-50/30 transition-all text-xs ${isSN ? "bg-blue-50/10" : ""}`}
+                    >
+                      <td className={`p-4 font-bold text-gray-900 ${isSN ? "pl-4 border-l-4 border-blue-500" : "pl-6"}`}>
+                        <div className="flex flex-col gap-1 py-1">
+                          {isSN ? (
+                            <button
+                              onClick={() => setSelectedSerialProduct(item)}
+                              className="text-left font-black text-blue-900 hover:text-primary transition-all flex flex-col gap-0.5 cursor-pointer group"
+                            >
+                              <span className="group-hover:underline">{item.productName}</span>
+                            </button>
+                          ) : (
+                            <span className="text-gray-900 font-bold">{item.productName}</span>
                           )}
-                          {item.trackingType === "serialized" && (
-                            <span className="bg-blue-50 text-blue-600 border border-blue-100 px-2 py-0.5 rounded text-[10px] font-bold">
-                              🏷️ Seriallı (IMEI)
-                            </span>
+                          
+                          <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                            {item.barcode && (
+                              <span className="bg-gray-100 text-gray-600 border border-gray-200 px-2 py-0.5 rounded text-[10px] font-mono font-bold flex items-center gap-1">
+                                🖨️ {item.barcode}
+                              </span>
+                            )}
+                            {isSN && (
+                              <span className="bg-blue-50 text-blue-600 border border-blue-100 px-2 py-0.5 rounded text-[10px] font-bold">
+                                🏷️ Seriallı (IMEI)
+                              </span>
+                            )}
+                          </div>
+                          
+                          {isSN && item.activeSerials && item.activeSerials.length > 0 && (
+                            <button
+                              onClick={() => setSelectedSerialProduct(item)}
+                              className="text-[10px] font-bold text-amber-700 hover:text-amber-800 bg-amber-50 border border-amber-200/50 hover:bg-amber-100/30 px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 mt-1.5 w-max"
+                            >
+                              🔍 {item.activeSerials.length} IMEI / Serial Göstər
+                            </button>
                           )}
                         </div>
-                        {item.activeSerials && item.activeSerials.length > 0 && (
-                          <div className="text-[10px] font-mono text-amber-700 bg-amber-50/35 border border-amber-100/40 p-2 rounded-xl max-w-sm mt-1">
-                            <span className="font-extrabold block text-[9px] text-amber-800 uppercase tracking-wider mb-1">Stokdakı S/N (IMEI):</span>
-                            <div className="flex flex-wrap gap-1">
-                              {item.activeSerials.map((s, idx) => (
-                                <span key={idx} className="bg-white px-1.5 py-0.5 border border-amber-200 rounded text-[9.5px]">
-                                  {s}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="p-4 font-medium text-gray-600">
+                      </td>
+                      <td className="p-4 font-medium text-gray-600">
                       {item.category ? (
                         <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md text-[10px] font-bold">
                           {item.category}
@@ -236,8 +249,9 @@ export default function Stock() {
                     </td>
                     <td className="p-4 pl-8 font-medium">{getStatusBadge(item.currentQuantity)}</td>
                   </tr>
-                ))
-              )}
+                );
+              })
+            )}
             </tbody>
           </table>
         </div>
@@ -257,14 +271,65 @@ export default function Stock() {
           )}
 
           <div className="bg-primary/5 border border-primary/10 rounded-2xl px-6 py-4 text-right glass">
-            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">Ümumi Anbar Dəyəri</span>
-            <span className="text-3xl font-black text-primary font-mono block mt-1.5">
-              {totalStockValue.toFixed(2)} ₼
-            </span>
-            <span className="text-[10px] text-gray-400 block mt-1">bütün mövcud malların alış maya dəyəri</span>
-          </div>
+          <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">Ümumi Anbar Dəyəri</span>
+          <span className="text-3xl font-black text-primary font-mono block mt-1.5">
+            {totalStockValue.toFixed(2)} ₼
+          </span>
+          <span className="text-[10px] text-gray-400 block mt-1">bütün mövcud malların alış maya dəyəri</span>
         </div>
-      )}
-    </div>
+      </div>
+    )}
+
+    {/* Serial Numbers Modal */}
+    {selectedSerialProduct && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-xs animate-in fade-in-0 duration-200">
+        <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xl max-w-md w-full relative overflow-hidden glass-card space-y-4 animate-in zoom-in-95 duration-200">
+          <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-blue-500 to-indigo-500"></div>
+          
+          <div className="flex justify-between items-center pb-2 border-b border-gray-50">
+            <div>
+              <h3 className="text-xs font-black text-gray-900">{selectedSerialProduct.productName}</h3>
+              <p className="text-[9px] text-gray-400 mt-0.5">Stokdakı Aktiv Serial Nömrələr (IMEI)</p>
+            </div>
+            <button 
+              onClick={() => setSelectedSerialProduct(null)}
+              className="p-1 hover:bg-gray-100 text-gray-400 hover:text-gray-700 rounded-lg transition-all cursor-pointer font-bold"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            <div className="bg-blue-50/30 border border-blue-100 rounded-xl p-3 flex items-center justify-between text-xs">
+              <span className="font-bold text-gray-500">Toplam Stok sayı:</span>
+              <span className="font-black text-blue-600 text-xs font-mono">{selectedSerialProduct.activeSerials?.length || 0} ədəd</span>
+            </div>
+
+            {selectedSerialProduct.activeSerials && selectedSerialProduct.activeSerials.length > 0 ? (
+              <div className="border border-gray-100 rounded-xl max-h-60 overflow-y-auto p-2 bg-gray-50/50 space-y-1">
+                {selectedSerialProduct.activeSerials.map((s, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-2 bg-white border border-gray-150 rounded-lg hover:bg-gray-50/50 transition-all text-[11px] font-mono font-bold text-gray-800">
+                    <span>{idx + 1}. {s}</span>
+                    <span className="bg-green-50 text-green-700 border border-green-100 px-1.5 py-0.2 rounded-md text-[9px] font-sans font-bold">Stokda</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-6 text-xs text-gray-400 italic font-semibold">
+                Stokda heç bir aktiv serial nömrəsi yoxdur.
+              </div>
+            )}
+          </div>
+
+          <button
+            onClick={() => setSelectedSerialProduct(null)}
+            className="w-full py-2 bg-gray-900 text-white font-bold text-xs rounded-xl hover:bg-black transition-all cursor-pointer text-center"
+          >
+            Bağla
+          </button>
+        </div>
+      </div>
+    )}
+  </div>
   );
 }

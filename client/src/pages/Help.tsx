@@ -439,6 +439,40 @@ export default function Help() {
           </ol>
         </div>
       )
+    },
+    {
+      id: "serial-stock-ui",
+      title: "🏷️ Anbarda Seriallı (SN) Məhsulların Fərqləndirilməsi və IMEI Siyahısı (Popup)",
+      category: "anbar",
+      icon: Tag,
+      content: (
+        <div className="space-y-3 leading-relaxed text-gray-700">
+          <p>
+            Anbar qalıqları səhifəsində unikal serial nömrəsi (IMEI) ilə izlənilən məhsullar xüsusi vizual dizayn ilə digər məhsullardan dərhal fərqləndirilir.
+          </p>
+          <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-3.5 space-y-1">
+            <span className="text-[10px] font-black text-blue-700 uppercase block tracking-wider">Vizual Fərqlər</span>
+            <span className="text-xs text-blue-950 font-semibold block">
+              Serial nömrəli məhsullar sətirdə sol tərəfdən mavi rəngli qalın xətt (border), açıq mavi fon və xüsusi <b>\"🏷️ Seriallı (IMEI)\"</b> nişanı ilə seçilir.
+            </span>
+          </div>
+          <h4 className="font-extrabold text-gray-900 text-xs mt-3 uppercase tracking-wider">İstifadəsi və Serial Nömrələri Popup-ı:</h4>
+          <ol className="list-decimal pl-4 space-y-2 text-xs font-semibold">
+            <li>
+              <a href="/anbar" className="text-primary hover:underline font-bold font-sans">Anbar Qalıqları</a> səhifəsinə daxil olun.
+            </li>
+            <li>
+              Siyahıda mavi haşiyəli hər hansı serial nömrəli məhsulun adına və ya məhsulun altında çıxan <b>\"🔍 [Sayı] IMEI / Serial Göstər\"</b> düyməsinə klikləyin.
+            </li>
+            <li>
+              Ekranda frosted-glass (şüşə) effektli premium **Popup (modal)** pəncərəsi açılacaqdır.
+            </li>
+            <li>
+              Bu pəncərədə həmin məhsulun anbarda olan bütün aktiv serial nömrələri (IMEI) ardıcıl şəkildə siyahılanacaq və hər birinin yanında <b>\"Stokda\"</b> vergi/anbar status nişanı göstəriləcəkdir.
+            </li>
+          </ol>
+        </div>
+      )
     }
   ];
 
