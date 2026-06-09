@@ -533,10 +533,12 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
   }
 
   if (path.startsWith("/api/sales/")) {
-    const id = parseInt(path.split("/").pop() || "0");
+    const parts = path.split("/");
+    const id = parseInt(parts[3] || "0");
+    const subRoute = parts[4] || "";
     const sales = getDb("sales");
 
-    if (method === "GET") {
+    if (method === "GET" && !subRoute) {
       const sale = sales.find(s => s.id === id);
       if (sale) {
         if (userRole !== "Admin") {
@@ -550,6 +552,111 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
         return jsonResponse({ ...sale, returns });
       }
       return jsonResponse({ message: "Satış tapılmadı" }, 404);
+    }
+
+    if (method === "PATCH" && subRoute === "pay-credit") {
+      const saleIdx = sales.findIndex(s => s.id === id);
+      if (saleIdx === -1) return jsonResponse({ message: "Satış tapılmadı" }, 404);
+
+      const sale = sales[saleIdx];
+      const payments = sale.payments || [];
+      const alreadyPaid = payments.reduce((acc: number, p: any) => acc + p.amount, 0);
+
+      const returns = getDb("returns").filter(r => r.saleId === id);
+      const returned = returns.reduce((acc: number, r: any) => acc + r.totalAmount, 0);
+
+      const remaining = Math.max(0, sale.totalAmount - alreadyPaid - returned);
+
+      if (remaining > 0) {
+        const nextPayId = payments.length > 0 ? Math.max(...payments.map((p: any) => p.id)) + 1 : 1;
+        payments.push({
+          id: nextPayId,
+          amount: remaining,
+          paymentDate: new Date().toISOString(),
+          paymentType: "cash"
+        });
+      }
+
+      sales[saleIdx].paymentStatus = "paid";
+      sales[saleIdx].payments = payments;
+      saveDb("sales", sales);
+
+      logActivity(`Müştəri nisyə borcunun hamısı toplandı: ${remaining.toFixed(2)} AZN (Çek № ${id})`);
+      return jsonResponse({ message: "Nisyə borc tam olaraq ödənildi" });
+    }
+
+    if (method === "PATCH" && subRoute === "add-payment") {
+      const saleIdx = sales.findIndex(s => s.id === id);
+      if (saleIdx === -1) return jsonResponse({ message: "Satış tapılmadı" }, 404);
+
+      const body = getBody();
+      const paymentAmount = parseFloat(body.amount);
+      if (!paymentAmount || paymentAmount <= 0) {
+        return jsonResponse({ message: "Düzgün ödəniş məbləği daxil edilməlidir" }, 400);
+      }
+
+      const sale = sales[saleIdx];
+      const payments = sale.payments || [];
+      const nextPayId = payments.length > 0 ? Math.max(...payments.map((p: any) => p.id)) + 1 : 1;
+
+      payments.push({
+        id: nextPayId,
+        amount: paymentAmount,
+        paymentDate: new Date().toISOString(),
+        paymentType: "cash"
+      });
+
+      const totalPaid = payments.reduce((acc: number, p: any) => acc + p.amount, 0);
+      const returns = getDb("returns").filter(r => r.saleId === id);
+      const returned = returns.reduce((acc: number, r: any) => acc + r.totalAmount, 0);
+
+      if (totalPaid >= (sale.totalAmount - returned)) {
+        sales[saleIdx].paymentStatus = "paid";
+      }
+
+      sales[saleIdx].payments = payments;
+      saveDb("sales", sales);
+
+      logActivity(`Müştəri nisyə borcundan qismən ödəniş alındı: ${paymentAmount.toFixed(2)} AZN (Çek № ${id})`);
+      return jsonResponse({ message: "Qismən ödəniş qeydə alındı" });
+    }
+  }
+
+  // Delete payment in demo sandbox
+  if (path.startsWith("/api/sales/payments/")) {
+    const paymentId = parseInt(path.split("/").pop() || "0");
+    if (method === "DELETE") {
+      const sales = getDb("sales");
+      let found = false;
+
+      for (let i = 0; i < sales.length; i++) {
+        const sale = sales[i];
+        const payments = sale.payments || [];
+        const payIdx = payments.findIndex((p: any) => p.id === paymentId);
+        if (payIdx !== -1) {
+          const removed = payments.splice(payIdx, 1)[0];
+          sale.payments = payments;
+
+          const totalPaid = payments.reduce((acc: number, p: any) => acc + p.amount, 0);
+          const returns = getDb("returns").filter(r => r.saleId === sale.id);
+          const returned = returns.reduce((acc: number, r: any) => acc + r.totalAmount, 0);
+
+          if (totalPaid < (sale.totalAmount - returned)) {
+            sale.paymentStatus = "unpaid";
+          }
+
+          sales[i] = sale;
+          saveDb("sales", sales);
+          found = true;
+          logActivity(`Müştəri borc ödənişi ləğv edildi: ${removed.amount.toFixed(2)} AZN (Ödəniş ID: ${paymentId})`);
+          break;
+        }
+      }
+
+      if (found) {
+        return jsonResponse({ message: "Ödəniş ləğv edildi" });
+      }
+      return jsonResponse({ message: "Ödəniş tapılmadı" }, 404);
     }
   }
 
