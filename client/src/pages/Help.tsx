@@ -16,7 +16,9 @@ import {
   Sliders,
   DollarSign,
   RotateCcw,
-  Globe
+  Globe,
+  CreditCard,
+  Calendar
 } from "lucide-react";
 
 interface HelpTopic {
@@ -285,6 +287,124 @@ export default function Help() {
             <li><b>⚠️ Çox Vacib:</b> İndicə yaratdığınız botu Telegram-da tapıb söhbəti başladın (**START** düyməsinə klikləyin).</li>
             <li>Telegram-da `@userinfobot` botuna daxil olaraq öz şəxsi **Chat ID** (9-10 rəqəmli kod) nömrənizi öyrənin.</li>
             <li>Hər iki kodu BirSaaS **Ayarlar** (`/ayarlar`) səhifəsindəki **Telegram** bölməsinə daxil edib testi icra edin və yadda saxlayın.</li>
+          </ol>
+        </div>
+      )
+    },
+    {
+      id: "bank-seçimi",
+      title: "🏦 Azərbaycan Bankları Seçimi və Kart Ödənişləri Uçotu",
+      category: "maliyye",
+      icon: CreditCard,
+      content: (
+        <div className="space-y-3 leading-relaxed text-gray-700">
+          <p>
+            Kartla edilən ödənişlərin (həm müştəri satışlarında, həm də tədarükçülərdən mal alışlarında) hansı bank hesabı (məs. Kapital Bank, PASHA Bank, ABB və s.) üzərindən icra olunduğunu dəqiq izləyə bilərsiniz.
+          </p>
+          <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-3.5 space-y-1">
+            <span className="text-[10px] font-black text-blue-700 uppercase block tracking-wider">Məqsəd</span>
+            <span className="text-xs text-blue-950 font-semibold block">
+              Ay sonunda hansı bank hesabınıza nə qədər vəsait daxil olduğunu və banklararası köçürmələri asanlıqla izləyə bilərsiniz.
+            </span>
+          </div>
+          <h4 className="font-extrabold text-gray-900 text-xs mt-3 uppercase tracking-wider">İstifadə Addımları:</h4>
+          <ol className="list-decimal pl-4 space-y-2 text-xs font-semibold">
+            <li>
+              <b>Banklarınızı Aktiv Edin:</b> <a href="/ayarlar" className="text-primary hover:underline font-bold">Ayarlar</a> səhifəsində <b>"Bank Ayarları 🏦"</b> tabına keçin. İstifadə etdiyiniz Azərbaycan banklarının yanındakı checkbox-ları işarələyin. Siyahıda olmayan bankınız varsa, <i>"Yeni bank əlavə et"</i> sahəsindən yazıb əlavə edərək ayarları saxlayın.
+            </li>
+            <li>
+              <b>POS Satışında Bank Seçin:</b> Kassa (POS) ekranında ödəniş üsulunu <b>"Kart"</b> seçdiyiniz an, dinamik olaraq <b>"Bank Hesabı *"</b> dropdown-u açılacaq. Buradan ödənişin keçdiyi bankı seçin.
+            </li>
+            <li>
+              <b>Mədaxil Zamanı Bank Seçin:</b> Anbara mal qəbul edərkən (Stock In) ödənişi Kartla etmisinizsə, eyni şəkildə müvafiq bank hesabını seçərək mədaxili təsdiqləyin.
+            </li>
+            <li>
+              <b>Hesabatlar və Çeklər:</b> Seçilmiş bank adı rəsmi satış qaimələrində (A4 Invoice), satış tarixçəsi sətirlərində və müştəriyə verilən termal çeklərdə (məs. <i>Ödəniş: Kart (Kapital Bank)</i>) avtomatik çap olunur.
+            </li>
+          </ol>
+        </div>
+      )
+    },
+    {
+      id: "filtered-stock-value",
+      title: "📊 Anbarda Axtarılan Malların Dinamik Dəyər Hesabı",
+      category: "anbar",
+      icon: Sliders,
+      content: (
+        <div className="space-y-3 leading-relaxed text-gray-700">
+          <p>
+            Böyük anbar qalıqlarında axtarış apardığınız zaman, sistem sizə yalnız ekranınızda filtrlənmiş/tapılmış məhsulların cəmi maya dəyərini real vaxtda hesablayaraq göstərir.
+          </p>
+          <h4 className="font-extrabold text-gray-900 text-xs mt-2 uppercase tracking-wider">Necə İşləyir?</h4>
+          <ol className="list-decimal pl-4 space-y-2 text-xs font-semibold">
+            <li>
+              <a href="/anbar" className="text-primary hover:underline font-bold">Anbar Qalıqları</a> səhifəsinə daxil olun.
+            </li>
+            <li>
+              Axtarış xanasına hər hansı brend, kateqoriya və ya məhsul adı yazın (məsələn: <i>"Lenovo"</i> və ya <i>"Qazan"</i>).
+            </li>
+            <li>
+              Ekranın sağ aşağı hissəsində standart "Cəmi Anbar Dəyəri" kartının yanında dinamik olaraq yeni mavi rəngli **"Axtarış üzrə Dəyər"** kartı açılacaqdır.
+            </li>
+            <li>
+              Bu kartda yalnız daxil etdiyiniz sözə uyğun tapılmış (məs. filtrlənmiş 5 məhsulun) cəmi miqdarı və FIFO üzrə cəmi alış dəyəri (AZN) anında əks olunacaq. Xananı təmizlədiyinizdə isə bu kart avtomatik olaraq gizlənəcəkdir.
+            </li>
+          </ol>
+        </div>
+      )
+    },
+    {
+      id: "initial-imei-entry",
+      title: "🏷️ Yeni Məhsul Yaradılarkən İlkin Serial Nömrəsinin (IMEI) Daxil Edilməsi",
+      category: "anbar",
+      icon: Tag,
+      content: (
+        <div className="space-y-3 leading-relaxed text-gray-700">
+          <p>
+            Kataloqa yeni noutbuk, telefon və ya digər serial nömrəli cihaz əlavə edərkən, anbara mal mədaxil etmək üçün əlavə səhifələrə keçmədən, elə yaradılış anında cihazın ilk serial nömrəsini (IMEI) skan edərək daxil edə bilərsiniz.
+          </p>
+          <h4 className="font-extrabold text-gray-900 text-xs mt-2 uppercase tracking-wider">Addım-Addım Təlimat:</h4>
+          <ol className="list-decimal pl-4 space-y-2 text-xs font-semibold">
+            <li>
+              <a href="/mehsullar" className="text-primary hover:underline font-bold">Məhsul Kataloqu</a> səhifəsində <b>"Yeni Məhsul"</b> düyməsinə klikləyin.
+            </li>
+            <li>
+              <b>"İzləmə Növü"</b> olaraq <b>"Serial Nömrə (IMEI ilə izlənilən)"</b> rejimini seçin.
+            </li>
+            <li>
+              Bu zaman açılan **"Serial Nömrə / IMEI (İlkin)"** xanasına noutbukun arxasındakı zəmanət/serial nömrəsini (məs. <i>LEGION-SN-994</i>) yazın və ya barkod skaneri vasitəsilə birbaşa skan edin.
+            </li>
+            <li>
+              <b>Avtomatik Uçot:</b> Məhsulu yadda saxladığınız an, sistem arxa planda avtomatik olaraq bu serial nömrəsi ilə anbara <b>1 ədəd</b> mədaxil (Stock Entry) edir. Məhsul dərhal stokda görünür və heç bir əlavə əməliyyat olmadan POS ekranda satılmağa hazır vəziyyətə gəlir.
+            </li>
+          </ol>
+        </div>
+      )
+    },
+    {
+      id: "automated-warranty",
+      title: "🛡️ Zəmanət (Qarantiya) Müddətinin Avtomatik Hesablanması və Çapı",
+      category: "tehlukesizlik",
+      icon: ShieldCheck,
+      content: (
+        <div className="space-y-3 leading-relaxed text-gray-700">
+          <p>
+            Satılan cihazların zəmanət (qarantiya) müddətlərini proqram daxilində avtomatik izləyə və müştəriyə təqdim olunan qaimə və ya çeki rəsmi zəmanət talonu kimi təqdim edə bilərsiniz.
+          </p>
+          <h4 className="font-extrabold text-gray-900 text-xs mt-2 uppercase tracking-wider">Zəmanətin Qurulması və Çap Edilməsi:</h4>
+          <ol className="list-decimal pl-4 space-y-2 text-xs font-semibold">
+            <li>
+              <b>Məhsula Zəmanət Təyin Edin:</b> Məhsul Kataloqunda (Yeni Məhsul və ya Düzəliş modalında) **"Zəmanət Müddəti (Ay)"** sahəsinə ay sayını yazın (məs. 12 və ya 24) və yadda saxlayın. Siyahıda məhsulun yanında mavi rəngdə zəmanət nişanı görünəcək.
+            </li>
+            <li>
+              <b>Kassada Satış:</b> Kassa (POS) ekranında həmin məhsulu müştəriyə satın.
+            </li>
+            <li>
+              <b>Avtomatik Bitmə Tarixi Hesabı:</b> Satış tamamlandıqdan sonra Qaimə (Invoice) səhifəsinə daxil olduqda, sistem satış tarixinin üzərinə zəmanət ayını gələrək avtomatik olaraq <b>"Zəmanət Bitmə Tarixini"</b> hesablayır və göstərir (məsələn: <i>Zəmanət: 12 ay (Bitmə tarixi: 09.06.2027)</i>).
+            </li>
+            <li>
+              <b>Zəmanət Talonlu Çek:</b> Termal çek printerindən çıxan qəbzin üzərində də müvafiq kompüter modelinin arxasındakı serial nömrəsinin (S/N) altında avtomatik olaraq zəmanət müddəti və bitmə tarixi çap olunur.
+            </li>
           </ol>
         </div>
       )
