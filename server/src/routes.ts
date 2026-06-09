@@ -736,7 +736,7 @@ router.post("/products", async (req, res) => {
     if (!await checkUserPermission(req, "staffCanManageCatalog")) {
       return res.status(403).json({ message: "Bu əməliyyat üçün səlahiyyətiniz yoxdur." });
     }
-    const { name, category, unit, description, barcode } = req.body;
+    const { name, category, unit, description, barcode, trackingType, serialNumber } = req.body;
     if (!name) return res.status(400).json({ message: "Ad tələb olunur" });
 
     // Validate product name uniqueness (case-insensitive, trimmed)
@@ -761,6 +761,23 @@ router.post("/products", async (req, res) => {
       }
     }
 
+    // Validate serial number uniqueness if provided
+    if (trackingType === "serialized" && serialNumber) {
+      const cleaned = serialNumber.trim().toUpperCase();
+      const existing = await db.query.productSerials.findFirst({
+        where: and(
+          eq(schema.productSerials.serialNumber, cleaned),
+          eq(schema.productSerials.tenantId, req.tenantId),
+          inArray(schema.productSerials.status, ["in_stock", "sold"])
+        ),
+      });
+      if (existing) {
+        return res.status(400).json({ 
+          message: `Daxil etdiyiniz serial nömrə (${cleaned}) artıq bazada mövcuddur (Status: ${existing.status})` 
+        });
+      }
+    }
+
     // Enforce SaaS resource limits
     const limitCheck = await verifyTenantLimit(req.tenantId, "products");
     if (!limitCheck.allowed) {
@@ -774,22 +791,64 @@ router.post("/products", async (req, res) => {
       });
     }
 
-    const newProduct = await db
-      .insert(schema.products)
-      .values({
-        tenantId: req.tenantId,
-        name,
-        category: category || null,
-        unit: unit || "ədəd",
-        description: description || null,
-        barcode: barcode || null,
-      })
-      .returning();
+    const createdProduct = await db.transaction(async (tx) => {
+      // 1. Insert product
+      const productRows = await tx
+        .insert(schema.products)
+        .values({
+          tenantId: req.tenantId,
+          name,
+          category: category || null,
+          unit: unit || "ədəd",
+          description: description || null,
+          barcode: barcode || null,
+          trackingType: trackingType || "none",
+        })
+        .returning();
 
-    await logActivity(req, "CREATE_PRODUCT", `Yeni məhsul yaratdı: '${name}' (Kateqoriya: ${category || "yoxdur"}, Vahid: ${unit || "ədəd"})`);
+      const prod = productRows[0];
 
-    res.json(newProduct[0]);
+      // 2. Insert stock entry & serial number if serialNumber is supplied
+      if (trackingType === "serialized" && serialNumber) {
+        const cleanedSerial = serialNumber.trim().toUpperCase();
+        
+        // Create matching stock entry
+        const entryRows = await tx
+          .insert(schema.stockEntries)
+          .values({
+            tenantId: req.tenantId,
+            productId: prod.id,
+            quantity: 1,
+            purchasePrice: 0,
+            supplier: "İlkin Mədaxil",
+            notes: "Məhsul yaradılarkən avtomatik əlavə edilib",
+            paymentType: "Nəğd",
+            paidStatus: "paid",
+            entryDate: new Date().toISOString(),
+          })
+          .returning();
+
+        const entryId = entryRows[0].id;
+
+        // Create product serial record
+        await tx.insert(schema.productSerials).values({
+          tenantId: req.tenantId,
+          productId: prod.id,
+          stockEntryId: entryId,
+          serialNumber: cleanedSerial,
+          status: "in_stock",
+          createdAt: new Date().toISOString(),
+        });
+      }
+
+      return prod;
+    });
+
+    await logActivity(req, "CREATE_PRODUCT", `Yeni məhsul yaratdı: '${name}' (Kateqoriya: ${category || "yoxdur"}, Vahid: ${unit || "ədəd"}, İzləmə: ${trackingType || "none"})${serialNumber ? ` (İlkin S/N: ${serialNumber.trim().toUpperCase()})` : ""}`);
+
+    res.json(createdProduct);
   } catch (error) {
+    console.error("Product creation error:", error);
     res.status(500).json({ message: "Məhsul yaradılarkən xəta baş verdi" });
   }
 });
@@ -801,7 +860,7 @@ router.put("/products/:id", async (req, res) => {
       return res.status(403).json({ message: "Bu əməliyyat üçün səlahiyyətiniz yoxdur." });
     }
     const id = parseInt(req.params.id);
-    const { name, category, unit, description, barcode } = req.body;
+    const { name, category, unit, description, barcode, trackingType } = req.body;
 
     // Validate product name uniqueness (case-insensitive, trimmed)
     if (name) {
@@ -840,6 +899,7 @@ router.put("/products/:id", async (req, res) => {
         unit: unit || "ədəd",
         description: description || null,
         barcode: barcode || null,
+        trackingType: trackingType || "none",
       })
       .where(and(eq(schema.products.id, id), eq(schema.products.tenantId, req.tenantId)))
       .returning();

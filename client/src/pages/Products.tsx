@@ -22,6 +22,7 @@ const emptyProduct = {
   description: "",
   barcode: "",
   trackingType: "none",
+  serialNumber: "",
 };
 
 export default function Products() {
@@ -109,7 +110,10 @@ export default function Products() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || "Məhsul yaradıla bilmədi");
+      }
       return res.json();
     },
     onSuccess: () => {
@@ -117,8 +121,8 @@ export default function Products() {
       toast({ title: "Əlavə edildi!", description: "Yeni məhsul kataloqa əlavə edildi.", variant: "success" });
       handleClose();
     },
-    onError: () => {
-      toast({ title: "Xəta!", description: "Məhsul yaradılarkən xəta baş verdi.", variant: "destructive" });
+    onError: (error: any) => {
+      toast({ title: "Xəta!", description: error.message || "Məhsul yaradılarkən xəta baş verdi.", variant: "destructive" });
     },
   });
 
@@ -129,7 +133,10 @@ export default function Products() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || "Məhsul yenilənə bilmədi");
+      }
       return res.json();
     },
     onSuccess: () => {
@@ -137,8 +144,8 @@ export default function Products() {
       toast({ title: "Yeniləndi!", description: "Məhsul məlumatları yeniləndi.", variant: "success" });
       handleClose();
     },
-    onError: () => {
-      toast({ title: "Xəta!", description: "Məhsul yenilənərkən xəta baş verdi.", variant: "destructive" });
+    onError: (error: any) => {
+      toast({ title: "Xəta!", description: error.message || "Məhsul yenilənərkən xəta baş verdi.", variant: "destructive" });
     },
   });
 
@@ -175,6 +182,7 @@ export default function Products() {
       description: product.description || "",
       barcode: product.barcode || "",
       trackingType: product.trackingType || "none",
+      serialNumber: "",
     });
     setIsOpen(true);
   };
@@ -386,6 +394,22 @@ export default function Products() {
                   <option value="serialized">Serial Nömrə (IMEI ilə izlənilən)</option>
                 </select>
               </div>
+
+              {formData.trackingType === "serialized" && !editingId && (
+                <div className="space-y-1.5 border border-amber-200 bg-amber-50/10 p-3.5 rounded-xl animate-in slide-in-from-top-1.5 duration-200">
+                  <label className="text-amber-800 uppercase tracking-wider block text-[10px] font-bold">Serial Nömrə / IMEI (İlkin)</label>
+                  <input
+                    type="text"
+                    placeholder="Məs. SN-1234567"
+                    value={formData.serialNumber}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, serialNumber: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 bg-white font-mono text-xs"
+                  />
+                  <p className="text-[10px] text-amber-700/80 leading-normal font-medium mt-1">
+                    İxtiyari. Əgər bura serial nömrəsi daxil etsəniz, məhsul yaradılarkən avtomatik olaraq anbara 1 ədəd mədaxil ediləcək (Alış qiyməti: 0 ₼).
+                  </p>
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Kateqoriya</label>

@@ -259,6 +259,13 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
       const products = getDb("products");
       const nextId = products.length > 0 ? Math.max(...products.map(p => p.id)) + 1 : 1;
       const nameVal = body.name || body.productName || "";
+      const trackingType = body.trackingType || "none";
+      const serialNumber = body.serialNumber ? body.serialNumber.trim().toUpperCase() : null;
+
+      // Auto-initialize serial list and quantity if an initial serial number is provided
+      const activeSerials = (trackingType === "serialized" && serialNumber) ? [serialNumber] : [];
+      const currentQuantity = activeSerials.length > 0 ? 1 : parseFloat(body.currentQuantity || 0);
+
       const newProduct = {
         id: nextId,
         productId: nextId,
@@ -267,7 +274,9 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
         barcode: body.barcode || "",
         category: body.category || "",
         unit: body.unit || "ədəd",
-        currentQuantity: parseFloat(body.currentQuantity || 0),
+        trackingType: trackingType,
+        activeSerials: activeSerials,
+        currentQuantity: currentQuantity,
         salePrice: parseFloat(body.salePrice || 0),
         purchasePrice: parseFloat(body.purchasePrice || 0),
         supplierName: body.supplierName || "",
@@ -275,7 +284,7 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
       };
       products.push(newProduct);
       saveDb("products", products);
-      logActivity(`Məhsul yaradıldı: ${newProduct.productName}`);
+      logActivity(`Məhsul yaradıldı: ${newProduct.productName}${serialNumber ? ` (İlkin S/N: ${serialNumber})` : ""}`);
       return jsonResponse(newProduct);
     }
   }
