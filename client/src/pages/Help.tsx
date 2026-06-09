@@ -263,11 +263,19 @@ export default function Help() {
           </p>
           <h4 className="font-extrabold text-gray-900 text-xs mt-2 uppercase tracking-wider">Hesablaşma addımları:</h4>
           <ol className="list-decimal pl-4 space-y-2 text-xs font-semibold">
-            <li>**Tədarükçülər** (`/tedarukculer`) bölməsində partnyor firmaları reyestrə əlavə edin.</li>
+            <li>**Tədarükçülər** (`/tedarukculer`) bölməsində partnyor firmaları reyestrə əlavə edin. Siyahıda hər bir tədarükçünün <b>Cəmi Alış</b>, <b>Cəmi Ödənilən</b> və <b>Cari Borc Balansı</b> anlıq olaraq hesablanır.</li>
             <li>**Anbara Mədaxil** edərkən yuxarıdakı **"Tədarükçü"** sahəsindən həmin firmanın adını seçin.</li>
             <li>Mədaxili **"Nisyə"** olaraq qeyd etsəniz, məbləğ avtomatik tədarükçünün borc balansına (sizə olan nisyəsinə) yazılacaq.</li>
             <li>Borcu hissə-hissə və ya tam ödəmək üçün tədarükçü kartında **"Ödəniş et 💸"** düyməsini sıxmağınız kifayətdir.</li>
           </ol>
+          <h4 className="font-extrabold text-gray-900 text-xs mt-3 uppercase tracking-wider">📊 Nisyə və Borc İdarəetməsi (Balans Hesabatları):</h4>
+          <p className="text-xs font-semibold">
+            Müəssisənizin bütün borc balanslarını <b>Nisyə və Borc</b> (`/debts`) səhifəsindən mərkəzləşdirilmiş şəkildə izləyə bilərsiniz:
+          </p>
+          <ul className="list-disc pl-4 space-y-1 text-xs font-semibold">
+            <li><b>Müştəri Borcları:</b> Alıcıların sizə olan nisyə borcları burada gecikmiş (vaxtı keçən) və aktiv (müddəti davam edən) olaraq qruplaşdırılır və hər bir müştərinin cari qalıq borc balansı göstərilir.</li>
+            <li><b>Bizim Borclarımız:</b> Tədarükçülərə olan borclarımız son ödəniş tarixləri və geri sayım indikatorları ilə (məs. <i>"3 gün qalıb"</i> və ya <i>"gecikmə"</i>) siyahı şəklində əks olunur.</li>
+          </ul>
         </div>
       )
     },
