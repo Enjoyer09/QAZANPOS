@@ -833,7 +833,7 @@ export default function Dashboard() {
                       <div>
                         <span className="font-semibold block text-gray-900">{sale.customerName || "Nəğd Satış"}</span>
                         <span className="text-[10px] text-gray-400 block mt-0.5">
-                          {new Date(sale.saleDate).toLocaleDateString("az-AZ")} | {sale.paymentType}
+                          {new Date(sale.saleDate).toLocaleDateString("az-AZ")} | {sale.paymentType}{sale.paymentType === "Kart" && sale.bankName ? ` (${sale.bankName})` : ""}
                         </span>
                       </div>
                       <div className="text-right">
