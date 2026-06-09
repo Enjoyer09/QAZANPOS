@@ -422,16 +422,16 @@ export default function Help() {
           <div className="bg-green-50/50 border border-green-100 rounded-xl p-3.5 space-y-1">
             <span className="text-[10px] font-black text-green-700 uppercase block tracking-wider">Mühüm Qeyd</span>
             <span className="text-xs text-green-950 font-semibold block">
-              Bu seçim yalnız mağazanızın vergi statusu <b>\"ƏDV Ödəyicisi\"</b> olaraq konfiqurasiya edildikdə POS terminalında və mal mədaxili pəncərəsində görünəcəkdir.
+              POS kassa ekranında ƏDV keçiricisi yalnız mağazanızın vergi rejimi <b>\"ƏDV Ödəyicisi\"</b> olaraq seçildikdə görünür. Mal mədaxili (Stock In) bölməsində isə mal alışı zamanı ƏDV seçimi <b>hər zaman görünür</b>.
             </span>
           </div>
           <h4 className="font-extrabold text-gray-900 text-xs mt-3 uppercase tracking-wider">İstifadə Qaydası:</h4>
           <ol className="list-decimal pl-4 space-y-2 text-xs font-semibold">
             <li>
-              <b>POS Terminalda Satış:</b> Səbətə malları əlavə etdikdən sonra ödəniş bölməsində <b>\"18% ƏDV Tətbiq Edilsin\"</b> keçiricisini (toggle) görəcəksiniz. Satışa ƏDV tətbiq etmək istəyirsinizsə, bu xananı işarəli saxlayın. Satış ƏDV-siz olacaqsa (Vergidən azad tranzaksiya), xananı söndürün.
+              <b>POS Terminalda Satış:</b> Səbətə malları əlavə etdikdən sonra ödəniş bölməsində <b>\"18% ƏDV Tətbiq Edilsin\"</b> keçiricisini (toggle) görəcəksiniz (yalnız ƏDV ödəyicisi statusunuz aktivdirsə). Satışa ƏDV tətbiq etmək istəyirsinizsə, bu xananı işarəli saxlayın. Satış ƏDV-siz olacaqsa, xananı söndürün.
             </li>
             <li>
-              <b>Mal Mədaxilində (Stock In):</b> Yeni mal daxil edərkən və ya daxil edilmiş mədaxili redaktə edərkən eyni keçiricini aktiv/deaktiv edərək mal alışını ƏDV-li və ya ƏDV-siz qeydə ala bilərsiniz.
+              <b>Mal Mədaxilində (Stock In):</b> Biznesinizin vergi statusundan asılı olmayaraq, supplier-dən mal alarkən ƏDV ödəmiş ola bilərsiniz. Yeni mal daxil edərkən və ya mədaxili redaktə edərkən bu keçiricini aktiv/deaktiv edərək mal alışını ƏDV-li və ya ƏDV-siz olaraq qeydə ala bilərsiniz.
             </li>
             <li>
               <b>İnvoys və Qəbzdə Əks Olunması:</b> Əgər ƏDV tətbiqi söndürülübsə, çap olunan qəbzdə və rəsmi A4 qaiməsində ƏDV sətiri görünməyəcək və sənəd rəsmi olaraq <b>\"ƏDV-siz (Vergidən Azad)\"</b> statusu ilə çıxacakdır.

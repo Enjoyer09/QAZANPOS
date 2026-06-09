@@ -136,6 +136,8 @@ const DEFAULT_SETTINGS = {
   showPaymentDetails: 1,
   lowStockAlertCount: 5,
   activeBanks: JSON.stringify(["Kapital Bank", "PASHA Bank"]),
+  taxStatus: "edv",
+  voen: "1234567890",
 };
 
 const DEFAULT_LOGS = [

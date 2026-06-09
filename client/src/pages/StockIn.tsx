@@ -300,7 +300,7 @@ export default function StockIn() {
       creditDueDate: isCredit ? formData.creditDueDate : null,
       vendorId: formData.vendorId ? parseInt(formData.vendorId) : null,
       serialNumbers: isSerialized ? parsedSerials : null,
-      applyEdv: settings?.taxStatus === "edv" ? (formData.applyEdv ? 1 : 0) : 1,
+      applyEdv: formData.applyEdv ? 1 : 0,
     };
 
     createMutation.mutate(payload);
@@ -478,20 +478,18 @@ export default function StockIn() {
             )}
 
             {/* VAT (ƏDV) Toggle */}
-            {settings?.taxStatus === "edv" && (
-              <div className="flex items-center gap-2 py-1 select-none animate-in fade-in duration-200">
-                <input
-                  type="checkbox"
-                  id="applyEdv"
-                  checked={!!formData.applyEdv}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, applyEdv: e.target.checked }))}
-                  className="rounded border-gray-300 text-primary focus:ring-primary h-4.5 w-4.5 cursor-pointer"
-                />
-                <label htmlFor="applyEdv" className="text-xs font-bold text-gray-700 cursor-pointer flex items-center gap-1">
-                  18% ƏDV Tətbiq Edilsin <span className="text-[10px] text-gray-400 font-normal">(Məbləğə ƏDV daxildir)</span>
-                </label>
-              </div>
-            )}
+            <div className="flex items-center gap-2 py-1 select-none animate-in fade-in duration-200">
+              <input
+                type="checkbox"
+                id="applyEdv"
+                checked={!!formData.applyEdv}
+                onChange={(e) => setFormData((prev) => ({ ...prev, applyEdv: e.target.checked }))}
+                className="rounded border-gray-300 text-primary focus:ring-primary h-4.5 w-4.5 cursor-pointer"
+              />
+              <label htmlFor="applyEdv" className="text-xs font-bold text-gray-700 cursor-pointer flex items-center gap-1">
+                18% ƏDV Tətbiq Edilsin <span className="text-[10px] text-gray-400 font-normal">(Məbləğə ƏDV daxildir)</span>
+              </label>
+            </div>
 
             {/* Payment Type */}
             <div className="space-y-1.5">
@@ -776,7 +774,7 @@ export default function StockIn() {
                   notes: editFormData.notes || null,
                   vendorId: editFormData.vendorId ? parseInt(editFormData.vendorId) : null,
                   adminPassword: adminPassword.trim(),
-                  applyEdv: settings?.taxStatus === "edv" ? (editFormData.applyEdv ? 1 : 0) : 1,
+                  applyEdv: editFormData.applyEdv ? 1 : 0,
                 };
 
                 updateMutation.mutate(payload);
@@ -850,20 +848,18 @@ export default function StockIn() {
               )}
 
               {/* Edit VAT (ƏDV) Toggle */}
-              {settings?.taxStatus === "edv" && (
-                <div className="flex items-center gap-2 py-1 select-none animate-in fade-in duration-200">
-                  <input
-                    type="checkbox"
-                    id="editApplyEdv"
-                    checked={!!editFormData.applyEdv}
-                    onChange={(e) => setEditFormData((prev: any) => ({ ...prev, applyEdv: e.target.checked }))}
-                    className="rounded border-gray-300 text-primary focus:ring-primary h-4.5 w-4.5 cursor-pointer"
-                  />
-                  <label htmlFor="editApplyEdv" className="text-xs font-bold text-gray-700 cursor-pointer">
-                    18% ƏDV Tətbiq Edilsin 🏷️
-                  </label>
-                </div>
-              )}
+              <div className="flex items-center gap-2 py-1 select-none animate-in fade-in duration-200">
+                <input
+                  type="checkbox"
+                  id="editApplyEdv"
+                  checked={!!editFormData.applyEdv}
+                  onChange={(e) => setEditFormData((prev: any) => ({ ...prev, applyEdv: e.target.checked }))}
+                  className="rounded border-gray-300 text-primary focus:ring-primary h-4.5 w-4.5 cursor-pointer"
+                />
+                <label htmlFor="editApplyEdv" className="text-xs font-bold text-gray-700 cursor-pointer">
+                  18% ƏDV Tətbiq Edilsin 🏷️
+                </label>
+              </div>
 
               {/* Payment Type */}
               <div className="space-y-1">
