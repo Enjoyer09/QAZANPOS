@@ -777,15 +777,6 @@ router.post("/products", async (req, res) => {
           message: `Bu məhsul artıq mövcuddur (Açar sözlər ilə eşləşdi: '${p.name}'). Təkrarlanmanın qarşısını almaq üçün mövcud məhsulu istifadə edin.` 
         });
       }
-
-      // 3. Do any of the new keywords collide with an existing product's name or keywords?
-      for (const newKw of newKeywords) {
-        if (existingNameNormalized === newKw || existingKeywords.includes(newKw)) {
-          return res.status(400).json({
-            message: `Daxil etdiyiniz '${newKw}' təsvir/açar sözü artıq '${p.name}' məhsulunda istifadə olunub. Təkrarlanan açar sözlərdən istifadə etmək olmaz.`
-          });
-        }
-      }
     }
 
     // Validate barcode uniqueness
@@ -940,14 +931,6 @@ router.put("/products/:id", async (req, res) => {
           });
         }
 
-        // 3. Do any of the new keywords collide with another product's name or keywords?
-        for (const newKw of newKeywords) {
-          if (existingNameNormalized === newKw || existingKeywords.includes(newKw)) {
-            return res.status(400).json({
-              message: `Daxil etdiyiniz '${newKw}' təsvir/açar sözü artıq '${p.name}' məhsulunda istifadə olunub. Təkrarlanan açar sözlərdən istifadə etmək olmaz.`
-            });
-          }
-        }
       }
     }
 

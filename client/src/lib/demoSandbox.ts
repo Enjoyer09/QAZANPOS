@@ -289,12 +289,6 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
         if (existingKeywords.includes(normalizedNewName)) {
           return jsonResponse({ message: `Bu məhsul artıq mövcuddur (Açar sözlər ilə eşləşdi: '${p.productName || p.name}').` }, 400);
         }
-
-        for (const newKw of newKeywords) {
-          if (existingNameNormalized === newKw || existingKeywords.includes(newKw)) {
-            return jsonResponse({ message: `Daxil etdiyiniz '${newKw}' təsvir/açar sözü artıq '${p.productName || p.name}' məhsulunda istifadə olunub.` }, 400);
-          }
-        }
       }
 
       const nextId = products.length > 0 ? Math.max(...products.map(p => p.id)) + 1 : 1;
@@ -358,12 +352,6 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
 
           if (existingKeywords.includes(normalizedNewName)) {
             return jsonResponse({ message: `Bu məhsul artıq mövcuddur (Açar sözlər ilə eşləşdi: '${p.productName || p.name}').` }, 400);
-          }
-
-          for (const newKw of newKeywords) {
-            if (existingNameNormalized === newKw || existingKeywords.includes(newKw)) {
-              return jsonResponse({ message: `Daxil etdiyiniz '${newKw}' təsvir/açar sözü artıq '${p.productName || p.name}' məhsulunda istifadə olunub.` }, 400);
-            }
           }
         }
 
