@@ -217,7 +217,9 @@ export default function POS() {
   };
   
   const cleanNumberInput = (val: string): string => {
-    const onlyDigitsAndDot = val.replace(/[^0-9.]/g, "");
+    // Convert commas to dots first
+    const normalized = val.replace(/,/g, ".");
+    const onlyDigitsAndDot = normalized.replace(/[^0-9.]/g, "");
     const parts = onlyDigitsAndDot.split(".");
     const singleDot = parts[0] + (parts.length > 1 ? "." + parts.slice(1).join("") : "");
     return sanitizeQtyInput(singleDot);
