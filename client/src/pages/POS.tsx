@@ -69,6 +69,8 @@ export default function POS() {
 
   // Basket State
   const [basket, setBasket] = useState<BasketItem[]>([]);
+  const [editingPrices, setEditingPrices] = useState<Record<number, string>>({});
+  const [editingQuantities, setEditingQuantities] = useState<Record<number, string>>({});
   const [selectedProductId, setSelectedProductId] = useState("");
   const [selectedQuantity, setSelectedQuantity] = useState("1");
   const [productSearchQuery, setProductSearchQuery] = useState("");
@@ -119,6 +121,8 @@ export default function POS() {
 
   const handleResetPOS = () => {
     setBasket([]);
+    setEditingPrices({});
+    setEditingQuantities({});
     setSelectedProductId("");
     setSelectedQuantity("1");
     setCustomerMode("none");
@@ -479,6 +483,16 @@ export default function POS() {
   // Remove item from basket
   const handleRemoveFromBasket = (id: number) => {
     setBasket((prev) => prev.filter((item) => item.productId !== id));
+    setEditingPrices((prev) => {
+      const copy = { ...prev };
+      delete copy[id];
+      return copy;
+    });
+    setEditingQuantities((prev) => {
+      const copy = { ...prev };
+      delete copy[id];
+      return copy;
+    });
   };
 
   // Update item field (quantity or sale price) in basket
@@ -1133,11 +1147,18 @@ export default function POS() {
                               type="number"
                               min="0.01"
                               step="0.01"
-                              value={item.quantity}
+                              value={editingQuantities[item.productId] !== undefined ? editingQuantities[item.productId] : item.quantity.toString()}
                               onChange={(e) => {
                                 const sanitized = sanitizeQtyInput(e.target.value);
-                                e.target.value = sanitized;
+                                setEditingQuantities((prev) => ({ ...prev, [item.productId]: sanitized }));
                                 handleUpdateBasketItem(item.productId, "quantity", sanitized);
+                              }}
+                              onBlur={() => {
+                                setEditingQuantities((prev) => {
+                                  const copy = { ...prev };
+                                  delete copy[item.productId];
+                                  return copy;
+                                });
                               }}
                               className={`w-16 px-2 py-1 border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-1 ${posMode === "return" ? "focus:ring-amber-500" : "focus:ring-primary"} ${item.serialNumbers && item.serialNumbers.length > 0 ? "bg-gray-100 cursor-not-allowed opacity-80" : ""}`}
                               readOnly={item.serialNumbers && item.serialNumbers.length > 0}
@@ -1153,8 +1174,19 @@ export default function POS() {
                                 type="number"
                                 min="0.01"
                                 step="0.01"
-                                value={item.salePrice}
-                                onChange={(e) => handleUpdateBasketItem(item.productId, "salePrice", e.target.value)}
+                                value={editingPrices[item.productId] !== undefined ? editingPrices[item.productId] : item.salePrice.toString()}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setEditingPrices((prev) => ({ ...prev, [item.productId]: val }));
+                                  handleUpdateBasketItem(item.productId, "salePrice", val);
+                                }}
+                                onBlur={() => {
+                                  setEditingPrices((prev) => {
+                                    const copy = { ...prev };
+                                    delete copy[item.productId];
+                                    return copy;
+                                  });
+                                }}
                                 className={`w-20 px-2 py-1 border rounded-lg text-right focus:outline-none focus:ring-1 ${
                                   isLoss
                                     ? "border-red-400 focus:ring-red-500 bg-red-50/50"
