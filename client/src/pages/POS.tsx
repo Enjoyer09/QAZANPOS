@@ -1150,6 +1150,7 @@ export default function POS() {
                               value={editingQuantities[item.productId] !== undefined ? editingQuantities[item.productId] : item.quantity.toString()}
                               onChange={(e) => {
                                 const sanitized = sanitizeQtyInput(e.target.value);
+                                e.target.value = sanitized;
                                 setEditingQuantities((prev) => ({ ...prev, [item.productId]: sanitized }));
                                 handleUpdateBasketItem(item.productId, "quantity", sanitized);
                               }}
@@ -1176,9 +1177,10 @@ export default function POS() {
                                 step="0.01"
                                 value={editingPrices[item.productId] !== undefined ? editingPrices[item.productId] : item.salePrice.toString()}
                                 onChange={(e) => {
-                                  const val = e.target.value;
-                                  setEditingPrices((prev) => ({ ...prev, [item.productId]: val }));
-                                  handleUpdateBasketItem(item.productId, "salePrice", val);
+                                  const sanitized = sanitizeQtyInput(e.target.value);
+                                  e.target.value = sanitized;
+                                  setEditingPrices((prev) => ({ ...prev, [item.productId]: sanitized }));
+                                  handleUpdateBasketItem(item.productId, "salePrice", sanitized);
                                 }}
                                 onBlur={() => {
                                   setEditingPrices((prev) => {
