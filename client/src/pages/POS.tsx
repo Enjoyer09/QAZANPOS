@@ -215,6 +215,13 @@ export default function POS() {
       .replace(/ç/g, "c")
       .replace(/ğ/g, "g");
   };
+  
+  const cleanNumberInput = (val: string): string => {
+    const onlyDigitsAndDot = val.replace(/[^0-9.]/g, "");
+    const parts = onlyDigitsAndDot.split(".");
+    const singleDot = parts[0] + (parts.length > 1 ? "." + parts.slice(1).join("") : "");
+    return sanitizeQtyInput(singleDot);
+  };
   // Filter products by manual search input
   const searchedProducts = sellableProducts.filter((p) => {
     const q = productSearchQuery.trim();
@@ -1058,9 +1065,8 @@ export default function POS() {
               </div>
               <div className="w-full sm:w-24">
                 <input
-                  type="number"
-                  min="0.01"
-                  step="0.01"
+                  type="text"
+                  inputMode="decimal"
                   placeholder="Miqdar"
                   value={selectedQuantity}
                   onChange={(e) => {
@@ -1144,12 +1150,11 @@ export default function POS() {
                           </td>
                           <td className="py-4 px-2 text-right">
                             <input
-                              type="number"
-                              min="0.01"
-                              step="0.01"
+                              type="text"
+                              inputMode="decimal"
                               value={editingQuantities[item.productId] !== undefined ? editingQuantities[item.productId] : item.quantity.toString()}
                               onChange={(e) => {
-                                const sanitized = sanitizeQtyInput(e.target.value);
+                                const sanitized = cleanNumberInput(e.target.value);
                                 e.target.value = sanitized;
                                 setEditingQuantities((prev) => ({ ...prev, [item.productId]: sanitized }));
                                 handleUpdateBasketItem(item.productId, "quantity", sanitized);
@@ -1172,12 +1177,11 @@ export default function POS() {
                           <td className="py-4 px-2 text-right">
                             <div className="flex flex-col items-end">
                               <input
-                                type="number"
-                                min="0.01"
-                                step="0.01"
+                                type="text"
+                                inputMode="decimal"
                                 value={editingPrices[item.productId] !== undefined ? editingPrices[item.productId] : item.salePrice.toString()}
                                 onChange={(e) => {
-                                  const sanitized = sanitizeQtyInput(e.target.value);
+                                  const sanitized = cleanNumberInput(e.target.value);
                                   e.target.value = sanitized;
                                   setEditingPrices((prev) => ({ ...prev, [item.productId]: sanitized }));
                                   handleUpdateBasketItem(item.productId, "salePrice", sanitized);
