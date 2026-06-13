@@ -280,6 +280,44 @@ export default function Help() {
       )
     },
     {
+      id: "vendor-returns",
+      title: "🔄 Tədarükçüyə Qaytarış Modulu və Borcların Düzəldilməsi",
+      category: "anbar",
+      icon: RotateCcw,
+      content: (
+        <div className="space-y-3 leading-relaxed text-gray-700">
+          <p>
+            Tədarükçüdən aldığınız zay, yararsız və ya artıq məhsulları eyni tədarükçüyə rəsmi sənədlə geri qaytarmaq və anbar qalıqları ilə borcları avtomatik sinxronizasiya etmək üçün bu modulu istifadə edə bilərsiniz.
+          </p>
+          <h4 className="font-extrabold text-gray-900 text-xs mt-2 uppercase tracking-wider">Addım-Addım İstifadə Qaydası:</h4>
+          <ol className="list-decimal pl-4 space-y-2 text-xs font-semibold">
+            <li>
+              Menudan <b>Tədarükçüyə Qaytarış</b> (`/anbar/qaytaris`) səhifəsinə keçin və yuxarı sağdakı <b>"Yeni Qaytarış"</b> düyməsinə klikləyin.
+            </li>
+            <li>
+              <b>Tədarükçünü seçin:</b> Siyahıdan malı qaytarmaq istədiyiniz tədarükçünü təyin edin.
+            </li>
+            <li>
+              <b>Məhsulları əlavə edin:</b> Qaytarılacaq məhsulu seçin. Əgər malı konkret mədaxil partiyasına (hansı gün gələn sənədlə gəldiyini) bağlamaq istəyirsinizsə, <b>"Mədaxil Partiyası (Batch)"</b> sahəsindən həmin sənədi seçə bilərsiniz (bu zaman alış qiyməti avtomatik dolur).
+            </li>
+            <li>
+              <b>Qaytarış miqdarını yazın:</b> Qaytaracağınız miqdarı daxil edib <b>"Əlavə et"</b> düyməsini sıxın. <i>Vacib: Qaytarılan miqdar anbarda olan mövcud qalıqdan və ya seçdiyiniz mədaxildəki miqdardan çox ola bilməz.</i>
+            </li>
+            <li>
+              <b>Kompensasiya (Geri Ödəniş) üsulunu seçin:</b>
+              <ul className="list-disc pl-4 mt-1 space-y-1 text-gray-600 font-medium">
+                <li><b>Borcdan Silinmə:</b> Əgər həmin tədarükçüyə nisyə borcunuz varsa, qaytarılan məbləğ avtomatik olaraq ümumi borcunuzdan silinəcək və balansınız düzələcək.</li>
+                <li><b>Nəğd / Kart / Köçürmə:</b> Əgər tədarükçü pulu sizə nağd və ya hesaba geri ödəyibsə, bu üsulu seçin (tədarükçü borc balansı dəyişməyəcək).</li>
+              </ul>
+            </li>
+            <li>
+              <b>Qaytarışı Təsdiqləyin:</b> "Qaytarışı Təsdiqlə" düyməsini sıxaraq sənədi yadda saxlayın. Anbarda malların qalığı avtomatik azalacaq, tarixçədə yeni qeyd yaranacaq və tədarükçü balansı dərhal yenilənəcək.
+            </li>
+          </ol>
+        </div>
+      )
+    },
+    {
       id: "telegram-bot",
       title: "🤖 Telegram Bildiriş Botunun Qoşulması",
       category: "sistem",
