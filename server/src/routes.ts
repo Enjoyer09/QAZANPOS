@@ -144,6 +144,21 @@ async function computeFIFOMetrics(productId: number, tenantId: number) {
 
   const netSold = Math.max(0, totalSold - totalReturned);
 
+  // Fetch vendor returns per entry for this product
+  const vendorReturns = await db
+    .select({
+      stockEntryId: schema.vendorReturnItems.stockEntryId,
+      totalReturned: sql`SUM(${schema.vendorReturnItems.quantity})`
+    })
+    .from(schema.vendorReturnItems)
+    .where(and(eq(schema.vendorReturnItems.productId, productId), eq(schema.vendorReturnItems.tenantId, tenantId)))
+    .groupBy(schema.vendorReturnItems.stockEntryId);
+
+  const vrMap = new Map<number, number>();
+  vendorReturns.forEach(v => {
+    if (v.stockEntryId) vrMap.set(v.stockEntryId, parseFloat((v.totalReturned as string) || "0"));
+  });
+
   // Consume netSold from the oldest entries to find remaining batches
   let soldRemaining = netSold;
   let totalValue = 0;
@@ -151,10 +166,14 @@ async function computeFIFOMetrics(productId: number, tenantId: number) {
   let foundNextUnit = false;
 
   for (const entry of entries) {
-    if (soldRemaining >= entry.quantity) {
-      soldRemaining -= entry.quantity;
+    const vrQty = vrMap.get(entry.id) || 0;
+    const adjustedQuantity = Math.max(0, entry.quantity - vrQty);
+    if (adjustedQuantity === 0) continue;
+
+    if (soldRemaining >= adjustedQuantity) {
+      soldRemaining -= adjustedQuantity;
     } else {
-      const qtyLeft = entry.quantity - soldRemaining;
+      const qtyLeft = adjustedQuantity - soldRemaining;
       soldRemaining = 0;
       totalValue += qtyLeft * entry.purchasePrice;
       if (!foundNextUnit) {
@@ -212,6 +231,15 @@ async function fetchTenantStockMetrics(tenantId: number) {
     )
     .groupBy(schema.returnItems.productId);
 
+  const vendorReturnsGroup = await db
+    .select({
+      productId: schema.vendorReturnItems.productId,
+      totalReturned: sql`SUM(${schema.vendorReturnItems.quantity})`
+    })
+    .from(schema.vendorReturnItems)
+    .where(eq(schema.vendorReturnItems.tenantId, tenantId))
+    .groupBy(schema.vendorReturnItems.productId);
+
   const allEntries = await db
     .select({
       id: schema.stockEntries.id,
@@ -234,6 +262,24 @@ async function fetchTenantStockMetrics(tenantId: number) {
   const returnedMap = new Map<number, number>();
   returnedGroup.forEach(g => returnedMap.set(g.productId, parseFloat((g.totalReturned as string) || "0")));
 
+  const vendorReturnedMap = new Map<number, number>();
+  vendorReturnsGroup.forEach(g => vendorReturnedMap.set(g.productId, parseFloat((g.totalReturned as string) || "0")));
+
+  // Vendor returns per stock entry to subtract in FIFO calculation
+  const vendorReturnsPerEntry = await db
+    .select({
+      stockEntryId: schema.vendorReturnItems.stockEntryId,
+      totalReturned: sql`SUM(${schema.vendorReturnItems.quantity})`
+    })
+    .from(schema.vendorReturnItems)
+    .where(eq(schema.vendorReturnItems.tenantId, tenantId))
+    .groupBy(schema.vendorReturnItems.stockEntryId);
+
+  const vrMap = new Map<number, number>();
+  vendorReturnsPerEntry.forEach(v => {
+    if (v.stockEntryId) vrMap.set(v.stockEntryId, parseFloat((v.totalReturned as string) || "0"));
+  });
+
   const entriesMap = new Map<number, typeof allEntries>();
   allEntries.forEach(entry => {
     if (!entriesMap.has(entry.productId)) {
@@ -255,7 +301,8 @@ async function fetchTenantStockMetrics(tenantId: number) {
     const totalRestocked = restockedMap.get(productId) || 0;
     const totalSold = soldMap.get(productId) || 0;
     const totalReturned = returnedMap.get(productId) || 0;
-    const currentQuantity = totalRestocked - totalSold + totalReturned;
+    const totalVendorReturned = vendorReturnedMap.get(productId) || 0;
+    const currentQuantity = totalRestocked - totalSold + totalReturned - totalVendorReturned;
 
     const productEntries = entriesMap.get(productId) || [];
     const netSold = Math.max(0, totalSold - totalReturned);
@@ -266,10 +313,14 @@ async function fetchTenantStockMetrics(tenantId: number) {
     let foundNextUnit = false;
 
     for (const entry of productEntries) {
-      if (soldRemaining >= entry.quantity) {
-        soldRemaining -= entry.quantity;
+      const vrQty = vrMap.get(entry.id) || 0;
+      const adjustedQuantity = Math.max(0, entry.quantity - vrQty);
+      if (adjustedQuantity === 0) continue;
+
+      if (soldRemaining >= adjustedQuantity) {
+        soldRemaining -= adjustedQuantity;
       } else {
-        const qtyLeft = entry.quantity - soldRemaining;
+        const qtyLeft = adjustedQuantity - soldRemaining;
         soldRemaining = 0;
         totalValue += qtyLeft * entry.purchasePrice;
         if (!foundNextUnit) {
@@ -330,13 +381,32 @@ async function computeFIFOSaleCost(productId: number, tenantId: number, quantity
 
   const netSold = Math.max(0, totalSold - totalReturned);
 
+  // Fetch vendor returns per entry for this product
+  const vendorReturns = await db
+    .select({
+      stockEntryId: schema.vendorReturnItems.stockEntryId,
+      totalReturned: sql`SUM(${schema.vendorReturnItems.quantity})`
+    })
+    .from(schema.vendorReturnItems)
+    .where(and(eq(schema.vendorReturnItems.productId, productId), eq(schema.vendorReturnItems.tenantId, tenantId)))
+    .groupBy(schema.vendorReturnItems.stockEntryId);
+
+  const vrMap = new Map<number, number>();
+  vendorReturns.forEach(v => {
+    if (v.stockEntryId) vrMap.set(v.stockEntryId, parseFloat((v.totalReturned as string) || "0"));
+  });
+
   let soldRemaining = netSold;
   const activeEntries = [];
   for (const entry of entries) {
-    if (soldRemaining >= entry.quantity) {
-      soldRemaining -= entry.quantity;
+    const vrQty = vrMap.get(entry.id) || 0;
+    const adjustedQuantity = Math.max(0, entry.quantity - vrQty);
+    if (adjustedQuantity === 0) continue;
+
+    if (soldRemaining >= adjustedQuantity) {
+      soldRemaining -= adjustedQuantity;
     } else {
-      const qtyLeft = entry.quantity - soldRemaining;
+      const qtyLeft = adjustedQuantity - soldRemaining;
       soldRemaining = 0;
       activeEntries.push({
         ...entry,
@@ -1282,7 +1352,14 @@ router.patch("/stock/entries/:id/pay", requireAdmin, async (req, res) => {
 
     const productList = await db.select().from(schema.products).where(and(eq(schema.products.id, entry.productId), eq(schema.products.tenantId, req.tenantId))).limit(1);
     const productName = productList[0] ? productList[0].name : `ID: ${entry.productId}`;
-    const debtAmount = entry.quantity * entry.purchasePrice;
+    
+    // Fetch total returned for this stock entry
+    const returnedResult = await db
+      .select({ total: sql`SUM(quantity)` })
+      .from(schema.vendorReturnItems)
+      .where(and(eq(schema.vendorReturnItems.stockEntryId, id), eq(schema.vendorReturnItems.tenantId, req.tenantId)));
+    const returnedQty = parseFloat((returnedResult[0]?.total as string) || "0");
+    const debtAmount = Math.max(0, entry.quantity - returnedQty) * entry.purchasePrice;
 
     // Link and automatically insert record in global vendorPayments
     let vendorId = entry.vendorId;
@@ -1412,7 +1489,14 @@ router.put("/stock/entries/:id", async (req, res) => {
         );
       const totalReturned = parseFloat((returnedResult[0]?.total as string) || "0");
 
-      const currentQuantity = totalRestocked - totalSold + totalReturned;
+      // 4. Calculate total vendor returned
+      const vendorReturnedResult = await db
+        .select({ total: sql`SUM(quantity)` })
+        .from(schema.vendorReturnItems)
+        .where(and(eq(schema.vendorReturnItems.productId, product.id), eq(schema.vendorReturnItems.tenantId, req.tenantId)));
+      const totalVendorReturned = parseFloat((vendorReturnedResult[0]?.total as string) || "0");
+
+      const currentQuantity = totalRestocked - totalSold + totalReturned - totalVendorReturned;
       const difference = parsedQty - entry.quantity; // will be negative
       if (currentQuantity + difference < 0) {
         return res.status(400).json({ 
@@ -2276,6 +2360,178 @@ router.post("/returns", async (req, res) => {
   } catch (error) {
     console.error("Return error:", error);
     res.status(500).json({ message: "Geri qaytarış tamamlanarkən xəta baş verdi" });
+  }
+});
+
+// ----------------------------------------------------
+// 4c. VENDOR RETURNS ENDPOINTS (Tədarükçüyə Qaytarışlar)
+// ----------------------------------------------------
+
+// List all vendor returns
+router.get("/vendor-returns", async (req, res) => {
+  try {
+    const list = await db.query.vendorReturns.findMany({
+      where: eq(schema.vendorReturns.tenantId, req.tenantId),
+      with: {
+        vendor: true,
+        items: {
+          with: {
+            product: true
+          }
+        }
+      },
+      orderBy: [desc(schema.vendorReturns.returnDate)],
+    });
+    res.json(list);
+  } catch (error) {
+    console.error("List vendor returns error:", error);
+    res.status(500).json({ message: "Tədarükçüyə qaytarış tarixçəsini gətirərkən xəta baş verdi" });
+  }
+});
+
+// Fetch vendor return details by ID
+router.get("/vendor-returns/:id", async (req, res) => {
+  try {
+    const returnId = parseInt(req.params.id);
+    const ret = await db.query.vendorReturns.findFirst({
+      where: and(eq(schema.vendorReturns.id, returnId), eq(schema.vendorReturns.tenantId, req.tenantId)),
+      with: {
+        vendor: true,
+        items: {
+          with: {
+            product: true,
+            stockEntry: true
+          }
+        }
+      },
+    });
+
+    if (!ret) {
+      return res.status(404).json({ message: "Qaytarış tapılmadı" });
+    }
+
+    res.json(ret);
+  } catch (error: any) {
+    console.error("Fetch vendor return error:", error);
+    res.status(500).json({ message: "Qaytarış məlumatlarını gətirərkən xəta baş verdi: " + error.message });
+  }
+});
+
+// Process a vendor return
+router.post("/vendor-returns", async (req, res) => {
+  try {
+    const { vendorId, paymentType, notes, items } = req.body;
+
+    if (!vendorId) {
+      return res.status(400).json({ message: "Tədarükçü seçilməlidir" });
+    }
+    if (!paymentType) {
+      return res.status(400).json({ message: "Ödəniş üsulu seçilməlidir" });
+    }
+    if (!items || items.length === 0) {
+      return res.status(400).json({ message: "Qaytarılan məhsullar daxil edilməlidir" });
+    }
+
+    // Validate quantities and stock levels
+    const { metrics } = await fetchTenantStockMetrics(req.tenantId);
+
+    for (const returnItem of items) {
+      const productId = parseInt(returnItem.productId);
+      const qtyToReturn = parseFloat(returnItem.quantity);
+      const stockEntryId = returnItem.stockEntryId ? parseInt(returnItem.stockEntryId) : null;
+
+      if (isNaN(productId) || isNaN(qtyToReturn) || qtyToReturn <= 0) {
+        return res.status(400).json({ message: "Daxil edilmiş miqdar keçərsizdir" });
+      }
+
+      // Check overall stock level
+      const metric = metrics.get(productId);
+      const currentStock = metric ? metric.currentQuantity : 0;
+      if (qtyToReturn > currentStock) {
+        return res.status(400).json({
+          message: `Məhsulun (ID: ${productId}) qaytarılma miqdarı anbarda olan qalıqdan çox ola bilməz. Mövcud qalıq: ${currentStock}`
+        });
+      }
+
+      // Check stock entry quantity if linked
+      if (stockEntryId) {
+        const entry = await db.query.stockEntries.findFirst({
+          where: and(eq(schema.stockEntries.id, stockEntryId), eq(schema.stockEntries.tenantId, req.tenantId))
+        });
+        if (!entry) {
+          return res.status(404).json({ message: `Mədaxil (ID: ${stockEntryId}) tapılmadı` });
+        }
+
+        // Calculate already returned quantity for this stock entry
+        const prevReturnedResult = await db
+          .select({ sum: sql`SUM(quantity)` })
+          .from(schema.vendorReturnItems)
+          .where(and(eq(schema.vendorReturnItems.stockEntryId, stockEntryId), eq(schema.vendorReturnItems.tenantId, req.tenantId)));
+        const alreadyReturned = parseFloat((prevReturnedResult[0]?.sum as string) || "0");
+
+        const remainingInBatch = entry.quantity - alreadyReturned;
+        if (qtyToReturn > remainingInBatch) {
+          return res.status(400).json({
+            message: `Qaytarılan miqdar müvafiq mədaxildəki qalıqdan çox ola bilməz. Mədaxildən qaytarıla bilən: ${remainingInBatch}`
+          });
+        }
+      }
+    }
+
+    // Calculate total return amount
+    let totalAmount = 0;
+    for (const item of items) {
+      totalAmount += parseFloat(item.quantity) * parseFloat(item.purchasePrice);
+    }
+
+    // Execute within database transaction
+    const returnResult = await db.transaction(async (tx) => {
+      // Create the vendor return record
+      const newReturn = await tx
+        .insert(schema.vendorReturns)
+        .values({
+          tenantId: req.tenantId,
+          vendorId: parseInt(vendorId),
+          returnDate: new Date().toISOString(),
+          totalAmount,
+          paymentType,
+          notes: notes || null,
+        })
+        .returning();
+
+      const vendorReturnId = newReturn[0].id;
+
+      // Create return items
+      for (const item of items) {
+        await tx.insert(schema.vendorReturnItems).values({
+          tenantId: req.tenantId,
+          vendorReturnId,
+          productId: parseInt(item.productId),
+          stockEntryId: item.stockEntryId ? parseInt(item.stockEntryId) : null,
+          quantity: parseFloat(item.quantity),
+          purchasePrice: parseFloat(item.purchasePrice),
+          notes: item.notes || null,
+        });
+      }
+
+      return newReturn[0];
+    });
+
+    const vendor = await db.query.vendors.findFirst({
+      where: and(eq(schema.vendors.id, parseInt(vendorId)), eq(schema.vendors.tenantId, req.tenantId))
+    });
+    const vendorName = vendor ? vendor.name : `ID: ${vendorId}`;
+
+    await logActivity(
+      req,
+      "CREATE_VENDOR_RETURN",
+      `Tədarükçüyə geri qaytarış həyata keçirildi: Qaytarış № ${returnResult.id} (Tədarükçü: ${vendorName}, Məbləğ: ${totalAmount.toFixed(2)} ₼, Üsul: ${paymentType})`
+    );
+
+    res.json(returnResult);
+  } catch (error: any) {
+    console.error("Vendor return creation error:", error);
+    res.status(500).json({ message: "Tədarükçüyə qaytarış tamamlanarkən xəta baş verdi: " + error.message });
   }
 });
 
@@ -3808,7 +4064,18 @@ router.get("/vendors", async (req, res) => {
       );
       const totalPayments = payments.reduce((acc, pay) => acc + pay.amount, 0);
       
-      const balance = totalDebtCreated - totalPayments;
+      // Calculate total returns to this vendor where paymentType = "Borcdan Silinmə"
+      const returnsList = await db.select().from(schema.vendorReturns).where(
+        and(
+          eq(schema.vendorReturns.vendorId, vendor.id),
+          eq(schema.vendorReturns.tenantId, req.tenantId)
+        )
+      );
+      const totalReturnDeductions = returnsList
+        .filter(r => r.paymentType === "Borcdan Silinmə")
+        .reduce((acc, r) => acc + r.totalAmount, 0);
+
+      const balance = totalDebtCreated - totalPayments - totalReturnDeductions;
       
       result.push({
         id: vendor.id,

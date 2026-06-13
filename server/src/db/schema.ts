@@ -564,3 +564,71 @@ export const productSerialsRelations = relations(productSerials, ({ one }) => ({
   }),
 }));
 
+// 14. Vendor Returns Table (Tədarükçüyə Qaytarışlar)
+export const vendorReturns = pgTable("vendor_returns", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" })
+    .default(1),
+  vendorId: integer("vendor_id")
+    .notNull()
+    .references(() => vendors.id, { onDelete: "cascade" }),
+  returnDate: text("return_date").notNull(), // ISO timestamp
+  totalAmount: doublePrecision("total_amount").notNull(),
+  paymentType: text("payment_type").notNull(), // "Nəğd", "Kart", "Borcdan Silinmə", "Köçürmə"
+  notes: text("notes"),
+});
+
+// 15. Vendor Return Items Table
+export const vendorReturnItems = pgTable("vendor_return_items", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" })
+    .default(1),
+  vendorReturnId: integer("vendor_return_id")
+    .notNull()
+    .references(() => vendorReturns.id, { onDelete: "cascade" }),
+  productId: integer("product_id")
+    .notNull()
+    .references(() => products.id, { onDelete: "cascade" }),
+  stockEntryId: integer("stock_entry_id")
+    .references(() => stockEntries.id, { onDelete: "set null" }),
+  quantity: doublePrecision("quantity").notNull(),
+  purchasePrice: doublePrecision("purchase_price").notNull(),
+  notes: text("notes"),
+});
+
+export const vendorReturnsRelations = relations(vendorReturns, ({ one, many }) => ({
+  tenant: one(tenants, {
+    fields: [vendorReturns.tenantId],
+    references: [tenants.id],
+  }),
+  vendor: one(vendors, {
+    fields: [vendorReturns.vendorId],
+    references: [vendors.id],
+  }),
+  items: many(vendorReturnItems),
+}));
+
+export const vendorReturnItemsRelations = relations(vendorReturnItems, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [vendorReturnItems.tenantId],
+    references: [tenants.id],
+  }),
+  vendorReturn: one(vendorReturns, {
+    fields: [vendorReturnItems.vendorReturnId],
+    references: [vendorReturns.id],
+  }),
+  product: one(products, {
+    fields: [vendorReturnItems.productId],
+    references: [products.id],
+  }),
+  stockEntry: one(stockEntries, {
+    fields: [vendorReturnItems.stockEntryId],
+    references: [stockEntries.id],
+  }),
+}));
+
+

@@ -114,6 +114,8 @@ const DEFAULT_SALES = [
 
 const DEFAULT_RETURNS: any[] = [];
 
+const DEFAULT_VENDOR_RETURNS: any[] = [];
+
 const DEFAULT_EXPENSES = [
   { id: 1, amount: 800, category: "Kira", description: "Mağaza Aylıq İcarə Haqqı", date: getPastIsoDate(10) },
   { id: 2, amount: 120, category: "Komunal", description: "Elektrik enerjisi borcu", date: getPastIsoDate(8) },
@@ -168,6 +170,7 @@ export function initDemoDatabase() {
   sessionStorage.setItem("birsaas_demo_stock_entries", JSON.stringify(DEFAULT_STOCK_ENTRIES));
   sessionStorage.setItem("birsaas_demo_sales", JSON.stringify(DEFAULT_SALES));
   sessionStorage.setItem("birsaas_demo_returns", JSON.stringify(DEFAULT_RETURNS));
+  sessionStorage.setItem("birsaas_demo_vendor_returns", JSON.stringify(DEFAULT_VENDOR_RETURNS));
   sessionStorage.setItem("birsaas_demo_expenses", JSON.stringify(DEFAULT_EXPENSES));
   sessionStorage.setItem("birsaas_demo_settings", JSON.stringify(DEFAULT_SETTINGS));
   sessionStorage.setItem("birsaas_demo_logs", JSON.stringify(DEFAULT_LOGS));
@@ -748,6 +751,120 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
       logActivity(`Qaytarış qeydə alındı: #${nextId.toString().padStart(5, "0")} (${totalRefunded.toFixed(2)} AZN)`);
       return jsonResponse(newReturn);
     }
+  }
+
+  // 6b. Vendor Returns Endpoints (Tədarükçüyə Qaytarışlar Mock)
+  if (path === "/api/vendor-returns") {
+    if (method === "GET") {
+      const returns = getDb("vendor_returns");
+      const vendors = getDb("vendors");
+      const products = getDb("products");
+      
+      const list = returns.map((r: any) => {
+        const v = vendors.find((vend: any) => vend.id === r.vendorId);
+        const enrichedItems = r.items.map((item: any) => {
+          const p = products.find((prod: any) => prod.id === item.productId);
+          return {
+            ...item,
+            product: p || null
+          };
+        });
+        return {
+          ...r,
+          vendor: v || null,
+          items: enrichedItems
+        };
+      });
+      return jsonResponse(list);
+    }
+    if (method === "POST") {
+      const body = getBody();
+      const returns = getDb("vendor_returns");
+      const nextId = returns.length > 0 ? Math.max(...returns.map(r => r.id)) + 1 : 1;
+
+      const products = getDb("products");
+      const enrichedItems = body.items.map((item: any, index: number) => {
+        const p = products.find(prod => prod.id === item.productId);
+        const productName = p ? (p.productName || p.name) : "Məhsul";
+        return {
+          id: index + 1,
+          productId: item.productId,
+          productName,
+          quantity: parseFloat(item.quantity || 0),
+          purchasePrice: parseFloat(item.purchasePrice || 0),
+          notes: item.notes || null,
+          stockEntryId: item.stockEntryId || null
+        };
+      });
+
+      const totalReturnAmount = enrichedItems.reduce((acc: number, item: any) => acc + (item.quantity * item.purchasePrice), 0);
+
+      const newReturn = {
+        id: nextId,
+        returnDate: new Date().toISOString(),
+        vendorId: parseInt(body.vendorId),
+        totalAmount: totalReturnAmount,
+        paymentType: body.paymentType,
+        notes: body.notes || null,
+        items: enrichedItems
+      };
+
+      returns.unshift(newReturn);
+      saveDb("vendor_returns", returns);
+
+      // Decrease product quantities
+      const updatedProducts = products.map(prod => {
+        const retItem = enrichedItems.find((item: any) => item.productId === prod.id);
+        if (retItem) {
+          return {
+            ...prod,
+            currentQuantity: Math.max(0, (prod.currentQuantity || 0) - retItem.quantity)
+          };
+        }
+        return prod;
+      });
+      saveDb("products", updatedProducts);
+
+      // Adjust vendor balance if "Borcdan Silinmə" is chosen
+      if (body.paymentType === "Borcdan Silinmə") {
+        const vendors = getDb("vendors");
+        const vIdx = vendors.findIndex(v => v.id === parseInt(body.vendorId));
+        if (vIdx !== -1) {
+          vendors[vIdx].balance = Math.max(0, (vendors[vIdx].balance || 0) - totalReturnAmount);
+          saveDb("vendors", vendors);
+        }
+      }
+
+      const vendors = getDb("vendors");
+      const vendorName = vendors.find(v => v.id === parseInt(body.vendorId))?.name || `ID: ${body.vendorId}`;
+      logActivity(`Tədarükçüyə qaytarış qeydə alındı: #${nextId.toString().padStart(5, "0")} (${vendorName}, ${totalReturnAmount.toFixed(2)} AZN, Üsul: ${body.paymentType})`);
+      
+      return jsonResponse(newReturn);
+    }
+  }
+
+  if (path.startsWith("/api/vendor-returns/")) {
+    const id = parseInt(path.split("/").pop() || "0");
+    const returns = getDb("vendor_returns");
+    const ret = returns.find(r => r.id === id);
+    if (ret) {
+      const vendors = getDb("vendors");
+      const products = getDb("products");
+      const v = vendors.find((vend: any) => vend.id === ret.vendorId);
+      const enrichedItems = ret.items.map((item: any) => {
+        const p = products.find((prod: any) => prod.id === item.productId);
+        return {
+          ...item,
+          product: p || null
+        };
+      });
+      return jsonResponse({
+        ...ret,
+        vendor: v || null,
+        items: enrichedItems
+      });
+    }
+    return jsonResponse({ message: "Qaytarış tapılmadı" }, 404);
   }
 
   // 7. Expenses Endpoints
