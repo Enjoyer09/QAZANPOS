@@ -76,6 +76,7 @@ export default function Vendors() {
   // Modals state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
+  const [isPurchasesModalOpen, setIsPurchasesModalOpen] = useState(false);
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
 
   // Form states
@@ -124,6 +125,16 @@ export default function Vendors() {
       return res.json();
     },
     enabled: activeTab === "ledger",
+  });
+
+  // Query all stock entries globally to list purchases
+  const { data: stockEntries = [], isLoading: isEntriesLoading } = useQuery<any[]>({
+    queryKey: ["/api/stock/entries"],
+    queryFn: async () => {
+      const res = await fetch("/api/stock/entries");
+      if (!res.ok) throw new Error("Mədaxilləri yükləyərkən xəta baş verdi");
+      return res.json();
+    },
   });
 
   // Mutation to create vendor
@@ -489,6 +500,17 @@ export default function Vendors() {
                             className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-black rounded-lg text-[9px] uppercase tracking-wider transition-all cursor-pointer"
                           >
                             Ödəniş et 💸
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setSelectedVendor(vendor);
+                              setIsPurchasesModalOpen(true);
+                            }}
+                            className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-black rounded-lg text-[9px] uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1"
+                          >
+                            <FileText className="w-3 h-3" />
+                            <span>Alışlar 📦</span>
                           </button>
                           
                           <button
@@ -885,6 +907,100 @@ export default function Vendors() {
           </div>
         </div>
       )}
+
+      {/* MODAL 3: TƏDARÜKÇÜ ALIŞLARI (MƏDAXİLLƏR) */}
+      {isPurchasesModalOpen && selectedVendor && (() => {
+        const vendorPurchases = stockEntries.filter(
+          (entry) =>
+            entry.vendorId === selectedVendor.id ||
+            (entry.supplier && entry.supplier.toLowerCase().trim() === selectedVendor.name.toLowerCase().trim())
+        );
+
+        return (
+          <div className="liquid-glass-overlay">
+            <div className="liquid-glass-card max-w-4xl w-full p-6 max-h-[85vh] overflow-y-auto">
+              <h3 className="text-lg font-black text-gray-900 tracking-tight flex items-center gap-2 border-b border-gray-100 pb-3 text-left">
+                <Truck className="w-5 h-5 text-primary" />
+                <span>Alış Tarixçəsi: {selectedVendor.name}</span>
+              </h3>
+
+              <div className="py-4 text-left">
+                {isEntriesLoading ? (
+                  <div className="text-center py-8 text-xs text-gray-400 font-bold uppercase tracking-wider">
+                    Məlumatlar yüklənir...
+                  </div>
+                ) : vendorPurchases.length === 0 ? (
+                  <div className="text-center py-12 text-xs text-gray-400 italic">
+                    Bu tədarükçüdən hələ heç bir mal mədaxili edilməyib.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-2xl border border-gray-50 max-h-[50vh]">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-gray-50 text-[9px] font-black text-gray-400 uppercase tracking-wider border-b border-gray-100 sticky top-0 z-10">
+                          <th className="py-3 px-4">Mədaxil №</th>
+                          <th className="py-3 px-4">Tarix</th>
+                          <th className="py-3 px-4">Məhsul</th>
+                          <th className="py-3 px-4 text-right">Miqdar</th>
+                          <th className="py-3 px-4 text-right">Alış Qiyməti</th>
+                          <th className="py-3 px-4 text-right">Cəmi Məbləğ</th>
+                          <th className="py-3 px-4 text-center">Ödəniş</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50 font-bold text-gray-600">
+                        {vendorPurchases.map((entry: any) => (
+                          <tr key={entry.id} className="hover:bg-gray-50/50 transition-colors">
+                            <td className="py-3 px-4 font-mono font-bold text-gray-900">
+                              #{entry.id.toString().padStart(5, "0")}
+                            </td>
+                            <td className="py-3 px-4 text-gray-500 font-mono">
+                              {entry.entryDate ? new Date(entry.entryDate).toLocaleDateString("az-AZ") : "-"}
+                            </td>
+                            <td className="py-3 px-4 text-gray-900">
+                              {entry.productName}
+                            </td>
+                            <td className="py-3 px-4 text-right font-mono text-gray-800">
+                              {entry.quantity} {entry.unit || "ədəd"}
+                            </td>
+                            <td className="py-3 px-4 text-right font-mono text-gray-750">
+                              {parseFloat(entry.purchasePrice || 0).toFixed(2)} ₼
+                            </td>
+                            <td className="py-3 px-4 text-right font-mono text-gray-950">
+                              {(parseFloat(entry.quantity) * parseFloat(entry.purchasePrice || 0)).toFixed(2)} ₼
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                                entry.paymentType === "Nisyə" && entry.paidStatus !== "paid"
+                                  ? "bg-red-50 text-red-700 border border-red-150"
+                                  : "bg-emerald-50 text-emerald-700 border border-emerald-150"
+                              }`}>
+                                {entry.paymentType === "Nisyə" && entry.paidStatus !== "paid" ? "Borc" : "Ödənilib"}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end pt-3 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsPurchasesModalOpen(false);
+                    setSelectedVendor(null);
+                  }}
+                  className="px-6 py-2.5 bg-gray-900 hover:bg-black text-white font-bold rounded-xl text-xs uppercase tracking-wide transition-all cursor-pointer text-center"
+                >
+                  Bağla
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );
