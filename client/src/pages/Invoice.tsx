@@ -430,7 +430,7 @@ export default function Invoice({ params }: InvoiceProps) {
                           <span>{item.product?.name || item.productName || "Məhsul"}</span>
                           {returnedQty > 0 && (
                             <span className="bg-amber-50 text-amber-700 border border-amber-100 px-2 py-0.5 rounded-full text-[9px] font-bold">
-                              Qaytarılıb: {returnedQty} {item.product?.unit || item.unit || "ədəd"}
+                              Qaytarılıb: {returnedQty} {item.product?.unit || item.unit || "ədəd"} (Cəmi: {(returnedQty * item.salePrice).toFixed(2)} ₼)
                             </span>
                           )}
                         </div>
@@ -545,9 +545,16 @@ export default function Invoice({ params }: InvoiceProps) {
                       {/* List returned products */}
                       <div className="text-[10px] space-y-1 text-gray-500 border-t border-gray-100/50 pt-1.5">
                         {(r.items || []).map((item: any) => (
-                          <div key={item.id} className="flex justify-between">
-                            <span>• {item.product?.name || item.productName || `Məhsul (ID: ${item.productId})`} ({item.quantity} {item.product?.unit || item.unit || "ədəd"})</span>
-                            <span className="font-medium">{item.status === "returned_to_stock" ? "🟢 Anbara" : "🔴 Deffekt"}</span>
+                          <div key={item.id} className="flex justify-between items-center gap-2">
+                            <span className="truncate">
+                              • {item.product?.name || item.productName || `Məhsul (ID: ${item.productId})`}{" "}
+                              <span className="text-[9px] text-gray-400 font-medium">
+                                ({item.quantity} {item.product?.unit || item.unit || "ədəd"} × {Number(item.salePrice || 0).toFixed(2)} ₼ = {Number((item.quantity * item.salePrice) || 0).toFixed(2)} ₼)
+                              </span>
+                            </span>
+                            <span className="font-bold text-[9px] px-1.5 py-0.5 rounded shrink-0 bg-white border border-gray-100">
+                              {item.status === "returned_to_stock" ? "🟢 Anbara" : "🔴 Deffekt"}
+                            </span>
                           </div>
                         ))}
                       </div>
@@ -781,8 +788,13 @@ export default function Invoice({ params }: InvoiceProps) {
                       <div className="flex-1">
                         <span className="font-bold text-gray-900 block text-xs">{item.product?.name || item.productName || "Məhsul"}</span>
                         <span className="text-[10px] text-gray-400 mt-1 block">
-                          Satılıb: {item.quantity} {item.product?.unit || item.unit || "ədəd"} | Qaytarıla bilər: {maxQty} {item.product?.unit || item.unit || "ədəd"}
+                          Satılıb: {item.quantity} {item.product?.unit || item.unit || "ədəd"} | Qaytarıla bilər: {maxQty} {item.product?.unit || item.unit || "ədəd"} | Qiymət: {Number(item.salePrice || 0).toFixed(2)} ₼
                         </span>
+                        {itemState.quantity > 0 && (
+                          <span className="text-[10px] text-amber-700 font-bold mt-1 block animate-in fade-in">
+                            Qaytarılan Məbləğ: {(itemState.quantity * item.salePrice).toFixed(2)} ₼
+                          </span>
+                        )}
                       </div>
 
                       {/* Inputs */}
