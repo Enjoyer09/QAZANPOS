@@ -358,7 +358,16 @@ export default function VendorReturns() {
                           })}
                         </td>
                         <td className="p-4 font-bold text-gray-900">
-                          {r.vendor?.name || `ID: ${r.vendorId}`}
+                          <div>{r.vendor?.name || `ID: ${r.vendorId}`}</div>
+                          <div className="text-[10px] text-gray-400 font-medium mt-1.5 space-y-1">
+                            {(r.items || []).map((item: any) => (
+                              <div key={item.id} className="flex items-center gap-1.5">
+                                <span className="text-gray-500">• {item.product?.name || item.productName || `Məhsul (ID: ${item.productId})`}:</span>
+                                <span className="text-gray-800 font-bold">{item.quantity} {item.product?.unit || "ədəd"}</span>
+                                <span className="text-gray-400 font-mono">({parseFloat(item.purchasePrice || 0).toFixed(2)} ₼)</span>
+                              </div>
+                            ))}
+                          </div>
                         </td>
                         <td className="p-4">
                           <span
@@ -480,7 +489,7 @@ export default function VendorReturns() {
                       <option value="">Məhsul Seçin...</option>
                       {vendorProducts.map((p) => (
                         <option key={p.productId} value={p.productId}>
-                          {p.productName} (Anbarda: {p.currentQuantity} {p.unit})
+                          {p.productName} (Anbarda: {p.currentQuantity} {p.unit} | Son Alış: {Number(p.lastPurchasePrice || 0).toFixed(2)} ₼)
                         </option>
                       ))}
                     </select>
@@ -532,6 +541,22 @@ export default function VendorReturns() {
                           {selectedProductForReturn.unit}
                         </span>
                       </div>
+                      {(() => {
+                        const purchasePrice = selectedEntryId
+                          ? (vendorEntries.find((e) => e.id === parseInt(selectedEntryId))?.purchasePrice || selectedProductForReturn.lastPurchasePrice || 0)
+                          : (selectedProductForReturn.lastPurchasePrice || 0);
+                        const qty = parseFloat(returnQty) || 0;
+                        return (
+                          <div className="text-[10px] text-gray-400 mt-1 flex justify-between font-bold">
+                            <span>Alış Qiyməti: {purchasePrice.toFixed(2)} ₼</span>
+                            {qty > 0 && (
+                              <span className="text-amber-700 font-extrabold animate-in fade-in">
+                                Cəmi: {(qty * purchasePrice).toFixed(2)} ₼
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Item Notes */}
