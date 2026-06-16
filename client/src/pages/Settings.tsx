@@ -21,6 +21,7 @@ import {
   Bell,
   Globe,
   Landmark,
+  Warehouse,
 } from "lucide-react";
 
 const AZ_BANKS = [
@@ -195,6 +196,12 @@ export default function SettingsPage() {
   const [staffNewPassword, setStaffNewPassword] = useState("");
   const [staffConfirmPassword, setStaffConfirmPassword] = useState("");
 
+  // Warehouse Management State
+  const [newWarehouseName, setNewWarehouseName] = useState("");
+  const [newWarehouseLocation, setNewWarehouseLocation] = useState("");
+  const [newWarehouseIsDefault, setNewWarehouseIsDefault] = useState(false);
+  const [editingWarehouse, setEditingWarehouse] = useState<any | null>(null);
+
   // Fetch users list
   const { data: usersList, refetch: refetchUsers } = useQuery<any[]>({
     queryKey: ["/api/users"],
@@ -204,6 +211,16 @@ export default function SettingsPage() {
       return res.json();
     },
     enabled: isAdmin,
+  });
+
+  // Fetch warehouses list
+  const { data: warehousesList = [], refetch: refetchWarehouses } = useQuery<any[]>({
+    queryKey: ["/api/warehouses"],
+    queryFn: async () => {
+      const res = await fetch("/api/warehouses");
+      if (!res.ok) throw new Error("Anbarları yükləmək mümkün olmadı");
+      return res.json();
+    }
   });
 
   // 2FA Setup State & Logic
@@ -610,6 +627,129 @@ export default function SettingsPage() {
       toast({
         title: "Xəta!",
         description: err.message || "Səlahiyyətlər yenilənərkən xəta baş verdi.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateUserWarehouseMutation = useMutation({
+    mutationFn: async ({ id, warehouseId }: { id: number; warehouseId: number }) => {
+      const res = await fetch(`/api/users/${id}/warehouse`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ warehouseId }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Anbarı yeniləmək mümkün olmadı");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      refetchUsers();
+      queryClient.invalidateQueries({ queryKey: ["/api/users/me"] });
+      toast({
+        title: "Anbar təyin edildi",
+        description: "İstifadəçinin default anbarı uğurla yeniləndi.",
+        variant: "success",
+      });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Xəta!",
+        description: err.message || "Anbar yenilənərkən xəta baş verdi.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const createWarehouseMutation = useMutation({
+    mutationFn: async (newW: { name: string; location?: string; isDefault?: number }) => {
+      const res = await fetch("/api/warehouses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newW),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Anbar yaradılarkən xəta baş verdi");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      refetchWarehouses();
+      setNewWarehouseName("");
+      setNewWarehouseLocation("");
+      setNewWarehouseIsDefault(false);
+      toast({
+        title: "Anbar yaradıldı",
+        description: "Yeni anbar uğurla əlavə edildi.",
+        variant: "success",
+      });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Xəta!",
+        description: err.message || "Anbar yaradıla bilmədi.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateWarehouseMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: { name: string; location?: string; isDefault?: number } }) => {
+      const res = await fetch(`/api/warehouses/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Anbar yenilənərkən xəta baş verdi");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      refetchWarehouses();
+      setEditingWarehouse(null);
+      toast({
+        title: "Anbar yeniləndi",
+        description: "Anbar məlumatları uğurla yeniləndi.",
+        variant: "success",
+      });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Xəta!",
+        description: err.message || "Anbar yenilənə bilmədi.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteWarehouseMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/warehouses/${id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Anbar silinərkən xəta baş verdi");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      refetchWarehouses();
+      toast({
+        title: "Anbar silindi",
+        description: "Anbar uğurla silindi.",
+        variant: "success",
+      });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Xəta!",
+        description: err.message || "Anbar silinə bilmədi.",
         variant: "destructive",
       });
     },
@@ -1065,6 +1205,18 @@ export default function SettingsPage() {
         </button>
         <button
           type="button"
+          onClick={() => setSettingsTab("warehouses")}
+          className={`flex items-center gap-2 px-5 py-3 border-b-2 text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+            settingsTab === "warehouses"
+              ? "border-primary text-primary"
+              : "border-transparent text-gray-400 hover:text-gray-600"
+          }`}
+        >
+          <Warehouse className="w-4 h-4" />
+          Anbar Ayarları 🏢
+        </button>
+        <button
+          type="button"
           onClick={() => {
             setShowResetConfirmModal(true);
             setResetPassword("");
@@ -1419,6 +1571,219 @@ export default function SettingsPage() {
                       </label>
                     );
                   })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {settingsTab === "warehouses" && (
+            <div className="space-y-6 animate-in fade-in-0 duration-300">
+              {/* Warehouse Management Card */}
+              <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card">
+                <div className="flex items-center gap-2 mb-6 border-b border-gray-100/50 pb-3">
+                  <Warehouse className="w-5 h-5 text-primary" />
+                  <h3 className="font-extrabold text-gray-900 text-sm">Anbarların İdarə Edilməsi</h3>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+                  {/* Left/Middle: List of Warehouses */}
+                  <div className="lg:col-span-2 space-y-4">
+                    <div className="overflow-hidden border border-gray-100 rounded-2xl">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-gray-50/50 border-b border-gray-100 text-[10px] text-gray-400 font-extrabold uppercase tracking-wider">
+                            <th className="p-4">Anbar Adı</th>
+                            <th className="p-4">Ünvan / Yerləşmə</th>
+                            <th className="p-4">Status</th>
+                            <th className="p-4 text-right">Əməliyyatlar</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50 text-xs font-semibold text-gray-700">
+                          {warehousesList.map((w: any) => (
+                            <tr key={w.id} className="hover:bg-gray-50/50 transition-colors">
+                              <td className="p-4 font-bold text-gray-950">{w.name}</td>
+                              <td className="p-4 text-gray-500">{w.location || "Qeyd edilməyib"}</td>
+                              <td className="p-4">
+                                {w.isDefault === 1 ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-extrabold bg-primary/10 text-primary border border-primary/25 uppercase">
+                                    Default
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-extrabold bg-gray-100 text-gray-500 border border-gray-200 uppercase">
+                                    Aktiv
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-4 text-right space-x-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingWarehouse(w);
+                                    setNewWarehouseName(w.name);
+                                    setNewWarehouseLocation(w.location || "");
+                                    setNewWarehouseIsDefault(w.isDefault === 1);
+                                  }}
+                                  className="px-2.5 py-1.5 bg-white text-gray-500 rounded-lg border border-gray-200 hover:text-primary hover:border-primary/50 cursor-pointer shadow-xs transition-all text-[10px]"
+                                >
+                                  Redaktə
+                                </button>
+                                {w.isDefault !== 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (window.confirm(`'${w.name}' anbarını silməyə əminsiniz?`)) {
+                                        deleteWarehouseMutation.mutate(w.id);
+                                      }
+                                    }}
+                                    className="p-1.5 bg-white text-red-500 rounded-lg border border-red-100 hover:bg-red-50 cursor-pointer shadow-xs transition-all inline-flex items-center justify-center align-middle"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Right: Add/Edit Form */}
+                  <div className="bg-gray-50/50 border border-gray-100/50 p-5 rounded-2xl space-y-4">
+                    <h4 className="text-[10px] text-gray-400 font-extrabold uppercase tracking-wider">
+                      {editingWarehouse ? "Anbarı Redaktə Et" : "Yeni Anbar Əlavə Et"}
+                    </h4>
+                    <div className="space-y-3">
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-gray-400 font-bold uppercase">Anbar Adı</label>
+                        <input
+                          type="text"
+                          placeholder="Məs. Narimanov Anbarı"
+                          value={newWarehouseName}
+                          onChange={(e) => setNewWarehouseName(e.target.value)}
+                          className="w-full px-3.5 py-2.5 text-xs font-bold border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-white"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-gray-400 font-bold uppercase">Ünvan / Qeyd</label>
+                        <input
+                          type="text"
+                          placeholder="Məs. Bakı, Nərimanov r."
+                          value={newWarehouseLocation}
+                          onChange={(e) => setNewWarehouseLocation(e.target.value)}
+                          className="w-full px-3.5 py-2.5 text-xs font-bold border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-white"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2 py-2">
+                        <input
+                          type="checkbox"
+                          id="newWarehouseIsDefault"
+                          checked={newWarehouseIsDefault}
+                          onChange={(e) => setNewWarehouseIsDefault(e.target.checked)}
+                          className="rounded border-gray-350 text-primary focus:ring-primary h-4.5 w-4.5 cursor-pointer"
+                        />
+                        <label htmlFor="newWarehouseIsDefault" className="text-xs font-bold text-gray-750 select-none cursor-pointer">
+                          Default (Əsas) Anbar et
+                        </label>
+                      </div>
+
+                      <div className="flex gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!newWarehouseName.trim()) {
+                              toast({ title: "Xəta", description: "Anbar adı mütləqdir", variant: "destructive" });
+                              return;
+                            }
+                            const payload = {
+                              name: newWarehouseName.trim(),
+                              location: newWarehouseLocation.trim() || undefined,
+                              isDefault: newWarehouseIsDefault ? 1 : 0
+                            };
+                            if (editingWarehouse) {
+                              updateWarehouseMutation.mutate({ id: editingWarehouse.id, data: payload });
+                            } else {
+                              createWarehouseMutation.mutate(payload);
+                            }
+                          }}
+                          className="flex-1 py-2.5 bg-primary text-white text-xs font-extrabold rounded-xl hover:bg-primary/90 cursor-pointer shadow-sm shadow-primary/10 transition-all text-center"
+                        >
+                          {editingWarehouse ? "Yadda Saxla" : "Anbar Əlavə Et"}
+                        </button>
+                        {editingWarehouse && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingWarehouse(null);
+                              setNewWarehouseName("");
+                              setNewWarehouseLocation("");
+                              setNewWarehouseIsDefault(false);
+                            }}
+                            className="px-4 py-2.5 bg-white text-gray-500 text-xs font-bold border border-gray-200 rounded-xl hover:bg-gray-50 cursor-pointer transition-all"
+                          >
+                            Ləğv Et
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* User Warehouse Assignment Card */}
+              <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card">
+                <div className="flex items-center gap-2 mb-6 border-b border-gray-100/50 pb-3">
+                  <Users className="w-5 h-5 text-primary" />
+                  <h3 className="font-extrabold text-gray-900 text-sm">İstifadəçilərin Anbarlara Təhkim Edilməsi</h3>
+                </div>
+
+                <div className="space-y-4">
+                  <p className="text-xs text-gray-400 font-semibold leading-relaxed">
+                    Satıcılara default anbar təyin edərək POS kassa satışı və anbardan mədaxil/məxaric əməliyyatlarının avtomatik olaraq həmin anbar üzrə həyata keçirilməsini təmin edə bilərsiniz.
+                  </p>
+
+                  <div className="overflow-hidden border border-gray-100 rounded-2xl max-w-2xl">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-gray-50/50 border-b border-gray-100 text-[10px] text-gray-400 font-extrabold uppercase tracking-wider">
+                          <th className="p-4">İstifadəçi Adı</th>
+                          <th className="p-4">Rol</th>
+                          <th className="p-4">Təhkim Olunmuş Anbar</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50 text-xs font-semibold text-gray-700">
+                        {usersList?.map((u: any) => (
+                          <tr key={u.id} className="hover:bg-gray-50/50 transition-colors">
+                            <td className="p-4 font-bold text-gray-950">{u.username}</td>
+                            <td className="p-4">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase ${
+                                u.role === "Admin" ? "bg-purple-50 text-purple-700 border border-purple-100" : "bg-blue-50 text-blue-750 border border-blue-100"
+                              }`}>
+                                {u.role === "Admin" ? "Administrator" : "Satıcı"}
+                              </span>
+                            </td>
+                            <td className="p-4">
+                              <select
+                                value={u.warehouseId || ""}
+                                onChange={(e) => {
+                                  const val = parseInt(e.target.value);
+                                  if (!isNaN(val)) {
+                                    updateUserWarehouseMutation.mutate({ id: u.id, warehouseId: val });
+                                  }
+                                }}
+                                className="px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-white text-xs font-bold"
+                              >
+                                <option value="" disabled>Seçin...</option>
+                                {warehousesList.map((w: any) => (
+                                  <option key={w.id} value={w.id}>{w.name}</option>
+                                ))}
+                              </select>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             </div>

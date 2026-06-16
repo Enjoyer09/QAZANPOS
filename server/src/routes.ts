@@ -194,15 +194,15 @@ async function computeFIFOMetrics(productId: number, tenantId: number) {
   };
 }
 
-async function fetchTenantStockMetrics(tenantId: number) {
+async function fetchTenantStockMetrics(tenantId: number, warehouseId?: number) {
   // 1. Fetch all products (active only)
   const allProducts = await db
     .select()
     .from(schema.products)
     .where(and(eq(schema.products.tenantId, tenantId), eq(schema.products.isArchived, 0)));
 
-  // 2. Fetch bulk sums
-  const restockedGroup = await db
+  // 2. Fetch global sums (always needed for FIFO global valuation)
+  const globalRestockedGroup = await db
     .select({
       productId: schema.stockEntries.productId,
       totalRestocked: sql`SUM(${schema.stockEntries.quantity})`
@@ -211,7 +211,7 @@ async function fetchTenantStockMetrics(tenantId: number) {
     .where(eq(schema.stockEntries.tenantId, tenantId))
     .groupBy(schema.stockEntries.productId);
 
-  const soldGroup = await db
+  const globalSoldGroup = await db
     .select({
       productId: schema.saleItems.productId,
       totalSold: sql`SUM(${schema.saleItems.quantity})`
@@ -220,7 +220,7 @@ async function fetchTenantStockMetrics(tenantId: number) {
     .where(eq(schema.saleItems.tenantId, tenantId))
     .groupBy(schema.saleItems.productId);
 
-  const returnedGroup = await db
+  const globalReturnedGroup = await db
     .select({
       productId: schema.returnItems.productId,
       totalReturned: sql`SUM(${schema.returnItems.quantity})`
@@ -234,7 +234,7 @@ async function fetchTenantStockMetrics(tenantId: number) {
     )
     .groupBy(schema.returnItems.productId);
 
-  const vendorReturnsGroup = await db
+  const globalVendorReturnsGroup = await db
     .select({
       productId: schema.vendorReturnItems.productId,
       totalReturned: sql`SUM(${schema.vendorReturnItems.quantity})`
@@ -243,6 +243,116 @@ async function fetchTenantStockMetrics(tenantId: number) {
     .where(eq(schema.vendorReturnItems.tenantId, tenantId))
     .groupBy(schema.vendorReturnItems.productId);
 
+  // Map global groups
+  const globalRestockedMap = new Map<number, number>();
+  globalRestockedGroup.forEach(g => globalRestockedMap.set(g.productId, parseFloat((g.totalRestocked as string) || "0")));
+
+  const globalSoldMap = new Map<number, number>();
+  globalSoldGroup.forEach(g => globalSoldMap.set(g.productId, parseFloat((g.totalSold as string) || "0")));
+
+  const globalReturnedMap = new Map<number, number>();
+  globalReturnedGroup.forEach(g => globalReturnedMap.set(g.productId, parseFloat((g.totalReturned as string) || "0")));
+
+  const globalVendorReturnedMap = new Map<number, number>();
+  globalVendorReturnsGroup.forEach(g => globalVendorReturnedMap.set(g.productId, parseFloat((g.totalReturned as string) || "0")));
+
+  // 3. Setup warehouse-specific or global variables for local stock level
+  const restockedMap = new Map<number, number>();
+  const soldMap = new Map<number, number>();
+  const returnedMap = new Map<number, number>();
+  const vendorReturnedMap = new Map<number, number>();
+  const transferredOutMap = new Map<number, number>();
+  const transferredInMap = new Map<number, number>();
+
+  if (warehouseId) {
+    // Restocked for warehouse W
+    const restockedGroup = await db
+      .select({
+        productId: schema.stockEntries.productId,
+        totalRestocked: sql`SUM(${schema.stockEntries.quantity})`
+      })
+      .from(schema.stockEntries)
+      .where(and(eq(schema.stockEntries.tenantId, tenantId), eq(schema.stockEntries.warehouseId, warehouseId)))
+      .groupBy(schema.stockEntries.productId);
+    restockedGroup.forEach(g => restockedMap.set(g.productId, parseFloat((g.totalRestocked as string) || "0")));
+
+    // Sold for warehouse W
+    const soldGroup = await db
+      .select({
+        productId: schema.saleItems.productId,
+        totalSold: sql`SUM(${schema.saleItems.quantity})`
+      })
+      .from(schema.saleItems)
+      .innerJoin(schema.sales, eq(schema.saleItems.saleId, schema.sales.id))
+      .where(and(eq(schema.saleItems.tenantId, tenantId), eq(schema.sales.warehouseId, warehouseId)))
+      .groupBy(schema.saleItems.productId);
+    soldGroup.forEach(g => soldMap.set(g.productId, parseFloat((g.totalSold as string) || "0")));
+
+    // Customer returned for warehouse W
+    const returnedGroup = await db
+      .select({
+        productId: schema.returnItems.productId,
+        totalReturned: sql`SUM(${schema.returnItems.quantity})`
+      })
+      .from(schema.returnItems)
+      .innerJoin(schema.returns, eq(schema.returnItems.returnId, schema.returns.id))
+      .where(
+        and(
+          eq(schema.returnItems.tenantId, tenantId),
+          eq(schema.returnItems.status, "returned_to_stock"),
+          eq(schema.returns.warehouseId, warehouseId)
+        )
+      )
+      .groupBy(schema.returnItems.productId);
+    returnedGroup.forEach(g => returnedMap.set(g.productId, parseFloat((g.totalReturned as string) || "0")));
+
+    // Vendor returned for warehouse W
+    const vendorReturnsGroup = await db
+      .select({
+        productId: schema.vendorReturnItems.productId,
+        totalReturned: sql`SUM(${schema.vendorReturnItems.quantity})`
+      })
+      .from(schema.vendorReturnItems)
+      .innerJoin(schema.vendorReturns, eq(schema.vendorReturnItems.vendorReturnId, schema.vendorReturns.id))
+      .where(and(eq(schema.vendorReturnItems.tenantId, tenantId), eq(schema.vendorReturns.warehouseId, warehouseId)))
+      .groupBy(schema.vendorReturnItems.productId);
+    vendorReturnsGroup.forEach(g => vendorReturnedMap.set(g.productId, parseFloat((g.totalReturned as string) || "0")));
+
+    // Transfers out for warehouse W
+    const outGroup = await db
+      .select({
+        productId: schema.stockTransfers.productId,
+        totalQty: sql`SUM(${schema.stockTransfers.quantity})`
+      })
+      .from(schema.stockTransfers)
+      .where(and(eq(schema.stockTransfers.tenantId, tenantId), eq(schema.stockTransfers.fromWarehouseId, warehouseId)))
+      .groupBy(schema.stockTransfers.productId);
+    outGroup.forEach(g => transferredOutMap.set(g.productId, parseFloat((g.totalQty as string) || "0")));
+
+    // Transfers in for warehouse W
+    const inGroup = await db
+      .select({
+        productId: schema.stockTransfers.productId,
+        totalQty: sql`SUM(${schema.stockTransfers.quantity})`
+      })
+      .from(schema.stockTransfers)
+      .where(and(eq(schema.stockTransfers.tenantId, tenantId), eq(schema.stockTransfers.toWarehouseId, warehouseId)))
+      .groupBy(schema.stockTransfers.productId);
+    inGroup.forEach(g => transferredInMap.set(g.productId, parseFloat((g.totalQty as string) || "0")));
+  } else {
+    // If no warehouse filter, use global sums
+    allProducts.forEach(product => {
+      const pid = product.id;
+      restockedMap.set(pid, globalRestockedMap.get(pid) || 0);
+      soldMap.set(pid, globalSoldMap.get(pid) || 0);
+      returnedMap.set(pid, globalReturnedMap.get(pid) || 0);
+      vendorReturnedMap.set(pid, globalVendorReturnedMap.get(pid) || 0);
+      transferredOutMap.set(pid, 0);
+      transferredInMap.set(pid, 0);
+    });
+  }
+
+  // 4. Fetch all stock entries globally for FIFO valuation
   const allEntries = await db
     .select({
       id: schema.stockEntries.id,
@@ -255,20 +365,6 @@ async function fetchTenantStockMetrics(tenantId: number) {
     .where(eq(schema.stockEntries.tenantId, tenantId))
     .orderBy(asc(schema.stockEntries.productId), asc(schema.stockEntries.entryDate), asc(schema.stockEntries.id));
 
-  // Map groups
-  const restockedMap = new Map<number, number>();
-  restockedGroup.forEach(g => restockedMap.set(g.productId, parseFloat((g.totalRestocked as string) || "0")));
-
-  const soldMap = new Map<number, number>();
-  soldGroup.forEach(g => soldMap.set(g.productId, parseFloat((g.totalSold as string) || "0")));
-
-  const returnedMap = new Map<number, number>();
-  returnedGroup.forEach(g => returnedMap.set(g.productId, parseFloat((g.totalReturned as string) || "0")));
-
-  const vendorReturnedMap = new Map<number, number>();
-  vendorReturnsGroup.forEach(g => vendorReturnedMap.set(g.productId, parseFloat((g.totalReturned as string) || "0")));
-
-  // Vendor returns per stock entry to subtract in FIFO calculation
   const vendorReturnsPerEntry = await db
     .select({
       stockEntryId: schema.vendorReturnItems.stockEntryId,
@@ -291,7 +387,7 @@ async function fetchTenantStockMetrics(tenantId: number) {
     entriesMap.get(entry.productId)!.push(entry);
   });
 
-  // Calculate metrics per product
+  // 5. Compute metrics for each product
   const metrics = new Map<number, {
     currentQuantity: number;
     totalValue: number;
@@ -301,17 +397,30 @@ async function fetchTenantStockMetrics(tenantId: number) {
 
   for (const product of allProducts) {
     const productId = product.id;
+
+    // A. Warehouse specific quantity
     const totalRestocked = restockedMap.get(productId) || 0;
     const totalSold = soldMap.get(productId) || 0;
     const totalReturned = returnedMap.get(productId) || 0;
     const totalVendorReturned = vendorReturnedMap.get(productId) || 0;
-    const currentQuantity = totalRestocked - totalSold + totalReturned - totalVendorReturned;
+    const totalTransferredOut = transferredOutMap.get(productId) || 0;
+    const totalTransferredIn = transferredInMap.get(productId) || 0;
 
+    const currentQuantity = totalRestocked - totalSold + totalReturned - totalVendorReturned - totalTransferredOut + totalTransferredIn;
+
+    // B. Global quantity (needed to scale the FIFO value)
+    const gRestocked = globalRestockedMap.get(productId) || 0;
+    const gSold = globalSoldMap.get(productId) || 0;
+    const gReturned = globalReturnedMap.get(productId) || 0;
+    const gVendorReturned = globalVendorReturnedMap.get(productId) || 0;
+    const globalQuantity = gRestocked - gSold + gReturned - gVendorReturned;
+
+    // C. Global FIFO value and next unit cost calculation
     const productEntries = entriesMap.get(productId) || [];
-    const netSold = Math.max(0, totalSold - totalReturned);
+    const netSold = Math.max(0, gSold - gReturned);
 
     let soldRemaining = netSold;
-    let totalValue = 0;
+    let globalTotalValue = 0;
     let nextUnitCost = 0;
     let foundNextUnit = false;
 
@@ -325,7 +434,7 @@ async function fetchTenantStockMetrics(tenantId: number) {
       } else {
         const qtyLeft = adjustedQuantity - soldRemaining;
         soldRemaining = 0;
-        totalValue += qtyLeft * entry.purchasePrice;
+        globalTotalValue += qtyLeft * entry.purchasePrice;
         if (!foundNextUnit) {
           nextUnitCost = entry.purchasePrice;
           foundNextUnit = true;
@@ -338,6 +447,16 @@ async function fetchTenantStockMetrics(tenantId: number) {
     }
 
     const lastPurchaseDate = productEntries.length > 0 ? productEntries[productEntries.length - 1].entryDate : null;
+
+    // D. Final value scaling
+    let totalValue = globalTotalValue;
+    if (warehouseId) {
+      if (globalQuantity > 0) {
+        totalValue = (currentQuantity / globalQuantity) * globalTotalValue;
+      } else {
+        totalValue = currentQuantity * nextUnitCost;
+      }
+    }
 
     metrics.set(productId, {
       currentQuantity,
@@ -352,6 +471,245 @@ async function fetchTenantStockMetrics(tenantId: number) {
     metrics
   };
 }
+
+// Warehouse CRUD API
+router.get("/warehouses", async (req, res) => {
+  try {
+    const list = await db
+      .select()
+      .from(schema.warehouses)
+      .where(eq(schema.warehouses.tenantId, req.tenantId))
+      .orderBy(schema.warehouses.id);
+    res.json(list);
+  } catch (error: any) {
+    res.status(500).json({ message: "Anbarları çəkərkən xəta baş verdi: " + error.message });
+  }
+});
+
+router.post("/warehouses", requireAdmin, async (req, res) => {
+  try {
+    const { name, location, isDefault } = req.body;
+    if (!name) {
+      return res.status(400).json({ message: "Anbar adı mütləqdir" });
+    }
+
+    if (isDefault === 1) {
+      await db.update(schema.warehouses)
+        .set({ isDefault: 0 })
+        .where(eq(schema.warehouses.tenantId, req.tenantId));
+    }
+
+    const [newWarehouse] = await db
+      .insert(schema.warehouses)
+      .values({
+        tenantId: req.tenantId,
+        name,
+        location: location || null,
+        isDefault: isDefault || 0,
+        createdAt: new Date().toISOString(),
+      })
+      .returning();
+
+    res.json(newWarehouse);
+  } catch (error: any) {
+    res.status(500).json({ message: "Anbar yaradılarkən xəta baş verdi: " + error.message });
+  }
+});
+
+router.put("/warehouses/:id", requireAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { name, location, isDefault } = req.body;
+
+    const existing = await db.query.warehouses.findFirst({
+      where: (w, { eq, and }) => and(eq(w.tenantId, req.tenantId), eq(w.id, id))
+    });
+    if (!existing) {
+      return res.status(404).json({ message: "Anbar tapılmadı" });
+    }
+
+    if (isDefault === 1) {
+      await db.update(schema.warehouses)
+        .set({ isDefault: 0 })
+        .where(eq(schema.warehouses.tenantId, req.tenantId));
+    }
+
+    const [updated] = await db
+      .update(schema.warehouses)
+      .set({
+        name: name !== undefined ? name : existing.name,
+        location: location !== undefined ? location : existing.location,
+        isDefault: isDefault !== undefined ? isDefault : existing.isDefault,
+      })
+      .where(eq(schema.warehouses.id, id))
+      .returning();
+
+    res.json(updated);
+  } catch (error: any) {
+    res.status(500).json({ message: "Anbar yenilənərkən xəta baş verdi: " + error.message });
+  }
+});
+
+router.delete("/warehouses/:id", requireAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+
+    const warehouse = await db.query.warehouses.findFirst({
+      where: (w, { eq, and }) => and(eq(w.tenantId, req.tenantId), eq(w.id, id))
+    });
+    if (!warehouse) {
+      return res.status(404).json({ message: "Anbar tapılmadı" });
+    }
+
+    if (warehouse.isDefault === 1) {
+      return res.status(400).json({ message: "Default anbar silinə bilməz. Əvvəlcə başqa anbarı default edin." });
+    }
+
+    const tablesToCheck = [
+      { table: schema.stockEntries, name: "mədaxil" },
+      { table: schema.sales, name: "satış" },
+      { table: schema.returns, name: "geri qaytarış" },
+      { table: schema.vendorReturns, name: "tədarükçüyə qaytarış" },
+      { table: schema.productSerials, name: "seriya nömrəsi" },
+      { table: schema.users, name: "istifadəçi" }
+    ];
+
+    for (const item of tablesToCheck) {
+      const records = await db
+        .select({ id: item.table.id })
+        .from(item.table)
+        .where(and(eq(item.table.tenantId, req.tenantId), eq(item.table.warehouseId, id)))
+        .limit(1);
+      if (records.length > 0) {
+        return res.status(400).json({
+          message: `Bu anbarda aktiv ${item.name} məlumatları mövcuddur, silmək olmaz.`
+        });
+      }
+    }
+
+    await db.delete(schema.warehouses).where(eq(schema.warehouses.id, id));
+    res.json({ success: true, message: "Anbar uğurla silindi" });
+  } catch (error: any) {
+    res.status(500).json({ message: "Anbar silinərkən xəta baş verdi: " + error.message });
+  }
+});
+
+// Transfer API
+router.get("/stock/transfers", async (req, res) => {
+  try {
+    const transfers = await db
+      .select({
+        id: schema.stockTransfers.id,
+        tenantId: schema.stockTransfers.tenantId,
+        fromWarehouseId: schema.stockTransfers.fromWarehouseId,
+        toWarehouseId: schema.stockTransfers.toWarehouseId,
+        productId: schema.stockTransfers.productId,
+        quantity: schema.stockTransfers.quantity,
+        transferDate: schema.stockTransfers.transferDate,
+        transferredBy: schema.stockTransfers.transferredBy,
+        notes: schema.stockTransfers.notes,
+        serialNumbers: schema.stockTransfers.serialNumbers,
+        productName: schema.products.name,
+        fromWarehouseName: sql`(SELECT name FROM warehouses WHERE id = ${schema.stockTransfers.fromWarehouseId})`,
+        toWarehouseName: sql`(SELECT name FROM warehouses WHERE id = ${schema.stockTransfers.toWarehouseId})`,
+      })
+      .from(schema.stockTransfers)
+      .innerJoin(schema.products, eq(schema.stockTransfers.productId, schema.products.id))
+      .where(eq(schema.stockTransfers.tenantId, req.tenantId))
+      .orderBy(desc(schema.stockTransfers.id));
+    res.json(transfers);
+  } catch (error: any) {
+    res.status(500).json({ message: "Yerdəyişmə tarixçəsini çəkərkən xəta: " + error.message });
+  }
+});
+
+router.post("/stock/transfers", async (req, res) => {
+  try {
+    const { fromWarehouseId, toWarehouseId, productId, quantity, notes, serialNumbers } = req.body;
+    if (!fromWarehouseId || !toWarehouseId || !productId || !quantity) {
+      return res.status(400).json({ message: "Məlumatlar tam doldurulmayıb" });
+    }
+    if (fromWarehouseId === toWarehouseId) {
+      return res.status(400).json({ message: "Eyni anbardan eyni anbara yerdəyişmə edilə bilməz" });
+    }
+
+    const product = await db.query.products.findFirst({
+      where: (p, { eq, and }) => and(eq(p.tenantId, req.tenantId), eq(p.id, productId))
+    });
+    if (!product) {
+      return res.status(404).json({ message: "Məhsul tapılmadı" });
+    }
+
+    const sourceMetrics = await fetchTenantStockMetrics(req.tenantId, fromWarehouseId);
+    const productMetric = sourceMetrics.metrics.get(productId);
+    const currentQtyInSource = productMetric ? productMetric.currentQuantity : 0;
+    if (currentQtyInSource < quantity) {
+      return res.status(400).json({ message: `Göndərən anbarda kifayət qədər məhsul yoxdur (Mövcuddur: ${currentQtyInSource})` });
+    }
+
+    let serialsList: string[] = [];
+    if (product.trackingType === "serial") {
+      if (!serialNumbers || !Array.isArray(serialNumbers) || serialNumbers.length !== quantity) {
+        return res.status(400).json({ message: `Serial nömrələri düzgün təqdim edilməyib. ${quantity} ədəd serial lazımdır.` });
+      }
+      serialsList = serialNumbers;
+
+      const existingSerials = await db
+        .select()
+        .from(schema.productSerials)
+        .where(
+          and(
+            eq(schema.productSerials.tenantId, req.tenantId),
+            eq(schema.productSerials.productId, productId),
+            eq(schema.productSerials.warehouseId, fromWarehouseId),
+            eq(schema.productSerials.status, "in_stock")
+          )
+        );
+
+      const existingSerialsSet = new Set(existingSerials.map(s => s.serialNumber));
+      const invalidSerials = serialsList.filter(s => !existingSerialsSet.has(s));
+      if (invalidSerials.length > 0) {
+        return res.status(400).json({
+          message: `Konkret seriallar göndərən anbarda tapılmadı və ya stokda deyil: ${invalidSerials.join(", ")}`
+        });
+      }
+
+      for (const s of serialsList) {
+        await db
+          .update(schema.productSerials)
+          .set({ warehouseId: toWarehouseId })
+          .where(
+            and(
+              eq(schema.productSerials.tenantId, req.tenantId),
+              eq(schema.productSerials.productId, productId),
+              eq(schema.productSerials.serialNumber, s)
+            )
+          );
+      }
+    }
+
+    const [transfer] = await db
+      .insert(schema.stockTransfers)
+      .values({
+        tenantId: req.tenantId,
+        fromWarehouseId,
+        toWarehouseId,
+        productId,
+        quantity,
+        transferDate: new Date().toISOString(),
+        transferredBy: String(req.headers["x-user-username"] || req.query.username || "Sistem"),
+        notes: notes || null,
+        serialNumbers: serialsList.length > 0 ? JSON.stringify(serialsList) : null,
+      })
+      .returning();
+
+    await logActivity(req, "STOCK_TRANSFER", `${quantity} ədəd '${product.name}' məhsulu yerdəyişmə edildi. Anbar: ${fromWarehouseId} -> ${toWarehouseId}`);
+
+    res.json(transfer);
+  } catch (error: any) {
+    res.status(500).json({ message: "Yerdəyişmə zamanı xəta baş verdi: " + error.message });
+  }
+});
 
 async function computeFIFOSaleCost(productId: number, tenantId: number, quantityToSell: number): Promise<number> {
   const entries = await db
@@ -1163,7 +1521,7 @@ router.post("/stock/entries", async (req, res) => {
       return res.status(403).json({ message: "Anbara mədaxil etmək səlahiyyətiniz yoxdur" });
     }
 
-    const { productId, quantity, purchasePrice, supplier, notes, paymentType, creditDueDate, vendorId, serialNumbers, bankName, applyEdv } = req.body;
+    const { productId, quantity, purchasePrice, supplier, notes, paymentType, creditDueDate, vendorId, serialNumbers, bankName, applyEdv, warehouseId } = req.body;
 
     if (!productId || !quantity || !purchasePrice || !paymentType) {
       return res.status(400).json({ message: "Məcburi sahələri doldurun" });
@@ -1172,6 +1530,16 @@ router.post("/stock/entries", async (req, res) => {
     const isCredit = paymentType === "Nisyə";
     if (isCredit && !creditDueDate) {
       return res.status(400).json({ message: "Nisyə üçün son tarix daxil edilməlidir" });
+    }
+
+    let targetWarehouseId = warehouseId ? parseInt(warehouseId) : null;
+    if (!targetWarehouseId) {
+      const defaultWarehouse = await db.query.warehouses.findFirst({
+        where: (w, { eq, and }) => and(eq(w.tenantId, req.tenantId), eq(w.isDefault, 1))
+      });
+      if (defaultWarehouse) {
+        targetWarehouseId = defaultWarehouse.id;
+      }
     }
 
     // 1. Fetch product to check trackingType
@@ -1238,6 +1606,7 @@ router.post("/stock/entries", async (req, res) => {
           entryDate: new Date().toISOString(),
           paidStatus: isCredit ? "credit" : "paid",
           applyEdv: applyEdv !== undefined && applyEdv !== null ? (applyEdv ? 1 : 0) : 1,
+          warehouseId: targetWarehouseId,
         })
         .returning();
 
@@ -1253,6 +1622,7 @@ router.post("/stock/entries", async (req, res) => {
             serialNumber: sNum.trim().toUpperCase(),
             status: "in_stock",
             createdAt: new Date().toISOString(),
+            warehouseId: targetWarehouseId,
           });
         }
       }
@@ -1281,7 +1651,10 @@ router.post("/stock/entries", async (req, res) => {
 // Fetch stock levels (current quantities, latest purchase prices, total value)
 router.get("/stock/levels", async (req, res) => {
   try {
-    const { allProducts, metrics } = await fetchTenantStockMetrics(req.tenantId);
+    const warehouseIdStr = req.query.warehouseId as string;
+    const warehouseId = warehouseIdStr ? parseInt(warehouseIdStr) : undefined;
+
+    const { allProducts, metrics } = await fetchTenantStockMetrics(req.tenantId, warehouseId);
 
     // Get latest sale prices in bulk
     const maxSaleIds = db
@@ -1306,18 +1679,21 @@ router.get("/stock/levels", async (req, res) => {
     latestSales.forEach(s => latestSalesMap.set(s.productId, s.price));
 
     // Get active serials in bulk
+    const serialsConditions = [
+      eq(schema.productSerials.tenantId, req.tenantId),
+      eq(schema.productSerials.status, "in_stock")
+    ];
+    if (warehouseId) {
+      serialsConditions.push(eq(schema.productSerials.warehouseId, warehouseId));
+    }
+
     const allSerials = await db
       .select({
         productId: schema.productSerials.productId,
         serialNumber: schema.productSerials.serialNumber
       })
       .from(schema.productSerials)
-      .where(
-        and(
-          eq(schema.productSerials.tenantId, req.tenantId),
-          eq(schema.productSerials.status, "in_stock")
-        )
-      );
+      .where(and(...serialsConditions));
 
     const serialsMap = new Map<number, string[]>();
     allSerials.forEach(s => {
@@ -1794,7 +2170,7 @@ router.get("/sales", async (req, res) => {
 // Process a POS sale / checkout
 router.post("/sales", async (req, res) => {
   try {
-    const { customerId, paymentType, creditDueDate, notes, items, totalAmount, totalCost, paidAmount, offlineId, salesChannel, marketplaceFee, bankName, applyEdv } = req.body;
+    const { customerId, paymentType, creditDueDate, notes, items, totalAmount, totalCost, paidAmount, offlineId, salesChannel, marketplaceFee, bankName, applyEdv, warehouseId } = req.body;
 
     if (!items || items.length === 0 || !paymentType) {
       return res.status(400).json({ message: "Çek məlumatları boş ola bilməz" });
@@ -1827,6 +2203,16 @@ router.post("/sales", async (req, res) => {
     const isCredit = paymentType === "Nisyə";
     if (isCredit && !creditDueDate) {
       return res.status(400).json({ message: "Nisyə satış üçün ödəniş tarixi mütləqdir" });
+    }
+
+    let targetWarehouseId = warehouseId ? parseInt(warehouseId) : null;
+    if (!targetWarehouseId) {
+      const defaultWarehouse = await db.query.warehouses.findFirst({
+        where: (w, { eq, and }) => and(eq(w.tenantId, req.tenantId), eq(w.isDefault, 1))
+      });
+      if (defaultWarehouse) {
+        targetWarehouseId = defaultWarehouse.id;
+      }
     }
 
     let customerName = "Anonim Müştəri";
@@ -1889,6 +2275,7 @@ router.post("/sales", async (req, res) => {
           marketplaceFee: marketplaceFee ? parseFloat(marketplaceFee) : 0,
           sellerName,
           applyEdv: applyEdv !== undefined && applyEdv !== null ? (applyEdv ? 1 : 0) : 1,
+          warehouseId: targetWarehouseId,
         })
         .returning();
 
@@ -1909,6 +2296,14 @@ router.post("/sales", async (req, res) => {
         if (item.serialNumbers && Array.isArray(item.serialNumbers) && item.serialNumbers.length > 0) {
           for (const sNum of item.serialNumbers) {
             const cleaned = sNum.trim().toUpperCase();
+            const serialConditions = [
+              eq(schema.productSerials.serialNumber, cleaned),
+              eq(schema.productSerials.tenantId, req.tenantId),
+              eq(schema.productSerials.status, "in_stock")
+            ];
+            if (targetWarehouseId) {
+              serialConditions.push(eq(schema.productSerials.warehouseId, targetWarehouseId));
+            }
             await tx
               .update(schema.productSerials)
               .set({
@@ -1916,13 +2311,7 @@ router.post("/sales", async (req, res) => {
                 saleId,
                 soldAt: new Date().toISOString(),
               })
-              .where(
-                and(
-                  eq(schema.productSerials.serialNumber, cleaned),
-                  eq(schema.productSerials.tenantId, req.tenantId),
-                  eq(schema.productSerials.status, "in_stock")
-                )
-              );
+              .where(and(...serialConditions));
           }
         }
       }
@@ -2297,13 +2686,31 @@ router.get("/returns/:id", async (req, res) => {
 // Process a return
 router.post("/returns", async (req, res) => {
   try {
-    const { saleId, reason, items } = req.body;
+    const { saleId, reason, items, warehouseId } = req.body;
 
     if (!items || items.length === 0) {
       return res.status(400).json({ message: "Qaytarılan məhsullar daxil edilməlidir" });
     }
 
     let calculatedTotalAmount = 0;
+
+    let targetWarehouseId = warehouseId ? parseInt(warehouseId) : null;
+    if (!targetWarehouseId && saleId) {
+      const sale = await db.query.sales.findFirst({
+        where: and(eq(schema.sales.id, saleId), eq(schema.sales.tenantId, req.tenantId))
+      });
+      if (sale) {
+        targetWarehouseId = sale.warehouseId;
+      }
+    }
+    if (!targetWarehouseId) {
+      const defaultWarehouse = await db.query.warehouses.findFirst({
+        where: (w, { eq, and }) => and(eq(w.tenantId, req.tenantId), eq(w.isDefault, 1))
+      });
+      if (defaultWarehouse) {
+        targetWarehouseId = defaultWarehouse.id;
+      }
+    }
 
     // 1. If linked to a sale, validate quantities
     if (saleId) {
@@ -2361,6 +2768,7 @@ router.post("/returns", async (req, res) => {
           returnDate: new Date().toISOString(),
           totalAmount: calculatedTotalAmount,
           reason: reason || null,
+          warehouseId: targetWarehouseId,
         })
         .returning();
 
@@ -2387,6 +2795,7 @@ router.post("/returns", async (req, res) => {
               .set({
                 status: item.status === "returned_to_stock" ? "in_stock" : "defective",
                 returnId,
+                warehouseId: targetWarehouseId,
               })
               .where(
                 and(
@@ -2474,7 +2883,7 @@ router.get("/vendor-returns/:id", async (req, res) => {
 // Process a vendor return
 router.post("/vendor-returns", async (req, res) => {
   try {
-    const { vendorId, paymentType, notes, items } = req.body;
+    const { vendorId, paymentType, notes, items, warehouseId } = req.body;
 
     if (!vendorId) {
       return res.status(400).json({ message: "Tədarükçü seçilməlidir" });
@@ -2486,8 +2895,18 @@ router.post("/vendor-returns", async (req, res) => {
       return res.status(400).json({ message: "Qaytarılan məhsullar daxil edilməlidir" });
     }
 
-    // Validate quantities and stock levels
-    const { metrics } = await fetchTenantStockMetrics(req.tenantId);
+    let targetWarehouseId: number | undefined = warehouseId ? parseInt(warehouseId) : undefined;
+    if (!targetWarehouseId) {
+      const defaultWarehouse = await db.query.warehouses.findFirst({
+        where: (w, { eq, and }) => and(eq(w.tenantId, req.tenantId), eq(w.isDefault, 1))
+      });
+      if (defaultWarehouse) {
+        targetWarehouseId = defaultWarehouse.id;
+      }
+    }
+
+    // Validate quantities and stock levels in target warehouse
+    const { metrics } = await fetchTenantStockMetrics(req.tenantId, targetWarehouseId);
 
     for (const returnItem of items) {
       const productId = parseInt(returnItem.productId);
@@ -2498,7 +2917,7 @@ router.post("/vendor-returns", async (req, res) => {
         return res.status(400).json({ message: "Daxil edilmiş miqdar keçərsizdir" });
       }
 
-      // Check overall stock level
+      // Check overall stock level in target warehouse
       const metric = metrics.get(productId);
       const currentStock = metric ? metric.currentQuantity : 0;
       if (qtyToReturn > currentStock) {
@@ -2550,6 +2969,7 @@ router.post("/vendor-returns", async (req, res) => {
           totalAmount,
           paymentType,
           notes: notes || null,
+          warehouseId: targetWarehouseId,
         })
         .returning();
 
@@ -2566,6 +2986,25 @@ router.post("/vendor-returns", async (req, res) => {
           purchasePrice: parseFloat(item.purchasePrice),
           notes: item.notes || null,
         });
+
+        // Link and update serial numbers for vendor returns
+        if (item.serialNumbers && Array.isArray(item.serialNumbers) && item.serialNumbers.length > 0) {
+          for (const sNum of item.serialNumbers) {
+            const cleaned = sNum.trim().toUpperCase();
+            await tx
+              .update(schema.productSerials)
+              .set({
+                status: "written_off",
+              })
+              .where(
+                and(
+                  eq(schema.productSerials.serialNumber, cleaned),
+                  eq(schema.productSerials.tenantId, req.tenantId),
+                  eq(schema.productSerials.productId, parseInt(item.productId))
+                )
+              );
+          }
+        }
       }
 
       return newReturn[0];

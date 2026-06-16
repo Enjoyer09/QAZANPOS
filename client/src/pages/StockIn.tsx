@@ -301,6 +301,7 @@ export default function StockIn() {
       vendorId: formData.vendorId ? parseInt(formData.vendorId) : null,
       serialNumbers: isSerialized ? parsedSerials : null,
       applyEdv: formData.applyEdv ? 1 : 0,
+      warehouseId: currentUser?.warehouseId || 1,
     };
 
     createMutation.mutate(payload);

@@ -144,13 +144,16 @@ export default function POS() {
 
   // Queries
   const { data: stockLevels, isLoading: isStockLoading } = useQuery<any[]>({
-    queryKey: ["/api/stock/levels"],
+    queryKey: ["/api/stock/levels", currentUser?.warehouseId],
     queryFn: async () => {
-      const res = await fetch("/api/stock/levels");
+      const url = currentUser?.warehouseId 
+        ? `/api/stock/levels?warehouseId=${currentUser.warehouseId}` 
+        : "/api/stock/levels";
+      const res = await fetch(url);
       if (!res.ok) throw new Error();
       return res.json();
     },
-    enabled: isOnline,
+    enabled: isOnline && currentUser !== undefined,
   });
 
   const { data: customers } = useQuery<any[]>({
@@ -824,6 +827,7 @@ export default function POS() {
       offlineId: `ONL-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       salesChannel,
       marketplaceFee,
+      warehouseId: currentUser?.warehouseId || 1,
       items: basket.map((item) => ({
         productId: item.productId,
         quantity: item.quantity,

@@ -3,7 +3,7 @@ import cors from "cors";
 import router from "./routes.js";
 import path from "path";
 import { fileURLToPath } from "url";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, isNull, and } from "drizzle-orm";
 import fs from "fs";
 import https from "https";
 
@@ -139,6 +139,81 @@ async function ensureDefaultTenantsAndUsers() {
         password: "superadmin123",
         role: "Admin",
       });
+    }
+
+    // 7. Ensure Default Warehouses and Migrate NULL values
+    console.log("Startup seeder: Checking default warehouses...");
+    let demoWarehouse = await db.query.warehouses.findFirst({
+      where: (w, { eq, and }) => and(eq(w.tenantId, 1), eq(w.isDefault, 1))
+    });
+    if (!demoWarehouse) {
+      console.log("Creating default warehouse for demo tenant...");
+      const result = await db.insert(schema.warehouses).values({
+        tenantId: 1,
+        name: "Əsas Anbar",
+        location: "Mərkəz",
+        isDefault: 1,
+        createdAt: new Date().toISOString(),
+      }).returning();
+      demoWarehouse = result[0];
+    }
+
+    let superWarehouse = await db.query.warehouses.findFirst({
+      where: (w, { eq, and }) => and(eq(w.tenantId, 2), eq(w.isDefault, 1))
+    });
+    if (!superWarehouse) {
+      console.log("Creating default warehouse for super tenant...");
+      const result = await db.insert(schema.warehouses).values({
+        tenantId: 2,
+        name: "Əsas Anbar",
+        location: "Mərkəz",
+        isDefault: 1,
+        createdAt: new Date().toISOString(),
+      }).returning();
+      superWarehouse = result[0];
+    }
+
+    // Auto-migrate null warehouseIds
+    if (demoWarehouse) {
+      const tablesToMigrate = [
+        schema.stockEntries,
+        schema.sales,
+        schema.returns,
+        schema.vendorReturns,
+        schema.productSerials,
+        schema.users
+      ];
+      for (const table of tablesToMigrate) {
+        await db.update(table)
+          .set({ warehouseId: demoWarehouse.id })
+          .where(
+            and(
+              eq(table.tenantId, 1),
+              isNull(table.warehouseId)
+            )
+          );
+      }
+    }
+
+    if (superWarehouse) {
+      const tablesToMigrateSuper = [
+        schema.stockEntries,
+        schema.sales,
+        schema.returns,
+        schema.vendorReturns,
+        schema.productSerials,
+        schema.users
+      ];
+      for (const table of tablesToMigrateSuper) {
+        await db.update(table)
+          .set({ warehouseId: superWarehouse.id })
+          .where(
+            and(
+              eq(table.tenantId, 2),
+              isNull(table.warehouseId)
+            )
+          );
+      }
     }
 
     console.log("Startup seeder: All default records verified/initialized.");

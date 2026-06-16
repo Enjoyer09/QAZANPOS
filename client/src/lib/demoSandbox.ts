@@ -148,6 +148,28 @@ const DEFAULT_LOGS = [
   { id: 3, username: "admin", action: "Yeni satış tamamlandı: #00001 (Kartla)", timestamp: getPastIsoDate(2) }
 ];
 
+const DEFAULT_WAREHOUSES = [
+  { id: 1, name: "Əsas Anbar", location: "Mərkəz", isDefault: 1, createdAt: getPastIsoDate(30) },
+  { id: 2, name: "Filial Anbar", location: "Nərimanov", isDefault: 0, createdAt: getPastIsoDate(30) }
+];
+
+const DEFAULT_STOCK_TRANSFERS: any[] = [];
+
+const DEFAULT_PRODUCT_SERIALS = [
+  { id: 1, productId: 1, serialNumber: "IMEI10000000001", status: "in_stock", warehouseId: 1, createdAt: getPastIsoDate(10) },
+  { id: 2, productId: 1, serialNumber: "IMEI10000000002", status: "in_stock", warehouseId: 1, createdAt: getPastIsoDate(10) },
+  { id: 3, productId: 1, serialNumber: "IMEI10000000003", status: "in_stock", warehouseId: 1, createdAt: getPastIsoDate(10) },
+  { id: 4, productId: 1, serialNumber: "IMEI10000000004", status: "in_stock", warehouseId: 1, createdAt: getPastIsoDate(10) },
+  { id: 5, productId: 1, serialNumber: "IMEI10000000005", status: "in_stock", warehouseId: 1, createdAt: getPastIsoDate(10) },
+  { id: 6, productId: 1, serialNumber: "IMEI10000000006", status: "in_stock", warehouseId: 1, createdAt: getPastIsoDate(10) },
+  { id: 7, productId: 1, serialNumber: "IMEI10000000007", status: "in_stock", warehouseId: 1, createdAt: getPastIsoDate(10) },
+  { id: 8, productId: 1, serialNumber: "IMEI10000000008", status: "in_stock", warehouseId: 1, createdAt: getPastIsoDate(10) },
+  { id: 9, productId: 1, serialNumber: "IMEI10000000009", status: "in_stock", warehouseId: 1, createdAt: getPastIsoDate(10) },
+  { id: 10, productId: 1, serialNumber: "IMEI10000000010", status: "in_stock", warehouseId: 1, createdAt: getPastIsoDate(10) },
+  { id: 11, productId: 1, serialNumber: "IMEI10000000011", status: "in_stock", warehouseId: 1, createdAt: getPastIsoDate(10) },
+  { id: 12, productId: 1, serialNumber: "IMEI10000000012", status: "in_stock", warehouseId: 2, createdAt: getPastIsoDate(10) },
+];
+
 const normalizeName = (text: string): string => {
   return text
     .trim()
@@ -164,16 +186,23 @@ const normalizeName = (text: string): string => {
 export function initDemoDatabase() {
   if (sessionStorage.getItem("birsaas_demo_db_initialized") === "true") return;
 
-  sessionStorage.setItem("birsaas_demo_products", JSON.stringify(DEFAULT_PRODUCTS));
+  const seededProducts = DEFAULT_PRODUCTS.map(p => ({ ...p, warehouseId: 1 }));
+  const seededEntries = DEFAULT_STOCK_ENTRIES.map(e => ({ ...e, warehouseId: 1 }));
+  const seededSales = DEFAULT_SALES.map(s => ({ ...s, warehouseId: 1 }));
+
+  sessionStorage.setItem("birsaas_demo_products", JSON.stringify(seededProducts));
   sessionStorage.setItem("birsaas_demo_customers", JSON.stringify(DEFAULT_CUSTOMERS));
   sessionStorage.setItem("birsaas_demo_vendors", JSON.stringify(DEFAULT_VENDORS));
-  sessionStorage.setItem("birsaas_demo_stock_entries", JSON.stringify(DEFAULT_STOCK_ENTRIES));
-  sessionStorage.setItem("birsaas_demo_sales", JSON.stringify(DEFAULT_SALES));
+  sessionStorage.setItem("birsaas_demo_stock_entries", JSON.stringify(seededEntries));
+  sessionStorage.setItem("birsaas_demo_sales", JSON.stringify(seededSales));
   sessionStorage.setItem("birsaas_demo_returns", JSON.stringify(DEFAULT_RETURNS));
   sessionStorage.setItem("birsaas_demo_vendor_returns", JSON.stringify(DEFAULT_VENDOR_RETURNS));
   sessionStorage.setItem("birsaas_demo_expenses", JSON.stringify(DEFAULT_EXPENSES));
   sessionStorage.setItem("birsaas_demo_settings", JSON.stringify(DEFAULT_SETTINGS));
   sessionStorage.setItem("birsaas_demo_logs", JSON.stringify(DEFAULT_LOGS));
+  sessionStorage.setItem("birsaas_demo_warehouses", JSON.stringify(DEFAULT_WAREHOUSES));
+  sessionStorage.setItem("birsaas_demo_stock_transfers", JSON.stringify(DEFAULT_STOCK_TRANSFERS));
+  sessionStorage.setItem("birsaas_demo_product_serials", JSON.stringify(DEFAULT_PRODUCT_SERIALS));
   sessionStorage.setItem("birsaas_demo_db_initialized", "true");
 }
 
@@ -192,6 +221,57 @@ const logActivity = (action: string) => {
   };
   logs.unshift(newLog);
   saveDb("logs", logs);
+};
+
+// Helper to calculate warehouse-specific product quantity
+const getWarehouseQuantity = (productId: number, warehouseId?: number): number => {
+  const entries = getDb("stock_entries").filter((e: any) => e.productId === productId);
+  const sales = getDb("sales");
+  const returns = getDb("returns");
+  const vendorReturns = getDb("vendor_returns");
+  const transfers = getDb("stock_transfers").filter((t: any) => t.productId === productId);
+
+  let restocked = entries
+    .filter((e: any) => !warehouseId || e.warehouseId === warehouseId)
+    .reduce((sum: number, e: any) => sum + e.quantity, 0);
+
+  let sold = 0;
+  sales.forEach((s: any) => {
+    if (!warehouseId || s.warehouseId === warehouseId) {
+      s.items?.forEach((item: any) => {
+        if (item.productId === productId) sold += item.quantity;
+      });
+    }
+  });
+
+  let returned = 0;
+  returns.forEach((r: any) => {
+    if (!warehouseId || r.warehouseId === warehouseId) {
+      r.items?.forEach((item: any) => {
+        if (item.productId === productId) returned += item.quantity;
+      });
+    }
+  });
+
+  let vendorReturned = 0;
+  vendorReturns.forEach((vr: any) => {
+    if (!warehouseId || vr.warehouseId === warehouseId) {
+      vr.items?.forEach((item: any) => {
+        if (item.productId === productId) vendorReturned += item.quantity;
+      });
+    }
+  });
+
+  let transferredOut = 0;
+  let transferredIn = 0;
+  if (warehouseId) {
+    transfers.forEach((t: any) => {
+      if (t.fromWarehouseId === warehouseId) transferredOut += t.quantity;
+      if (t.toWarehouseId === warehouseId) transferredIn += t.quantity;
+    });
+  }
+
+  return restocked - sold + returned - vendorReturned - transferredOut + transferredIn;
 };
 
 // 2. Mock Fetch Interceptor
@@ -251,6 +331,174 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
       sessionStorage.setItem("birsaas_demo_settings", JSON.stringify(updated));
       logActivity("Tənzimləmələr yeniləndi");
       return jsonResponse(updated);
+    }
+  }
+
+  // 1b. Warehouses CRUD Endpoints
+  if (path === "/api/warehouses") {
+    const warehouses = getDb("warehouses");
+    if (method === "GET") {
+      return jsonResponse(warehouses);
+    }
+    if (method === "POST") {
+      const body = getBody();
+      if (!body.name) {
+        return jsonResponse({ message: "Anbar adı mütləqdir" }, 400);
+      }
+      if (body.isDefault === 1) {
+        warehouses.forEach((w: any) => w.isDefault = 0);
+      }
+      const newWarehouse = {
+        id: warehouses.length > 0 ? Math.max(...warehouses.map((w: any) => w.id)) + 1 : 1,
+        name: body.name,
+        location: body.location || null,
+        isDefault: body.isDefault || 0,
+        createdAt: new Date().toISOString()
+      };
+      warehouses.push(newWarehouse);
+      saveDb("warehouses", warehouses);
+      logActivity(`Anbar yaradıldı: ${body.name}`);
+      return jsonResponse(newWarehouse);
+    }
+  }
+
+  if (path.startsWith("/api/warehouses/")) {
+    const id = parseInt(path.split("/").pop() || "0");
+    const warehouses = getDb("warehouses");
+    const idx = warehouses.findIndex((w: any) => w.id === id);
+    if (idx === -1) {
+      return jsonResponse({ message: "Anbar tapılmadı" }, 404);
+    }
+
+    if (method === "PUT") {
+      const body = getBody();
+      if (body.isDefault === 1) {
+        warehouses.forEach((w: any) => w.isDefault = 0);
+      }
+      warehouses[idx] = {
+        ...warehouses[idx],
+        name: body.name !== undefined ? body.name : warehouses[idx].name,
+        location: body.location !== undefined ? body.location : warehouses[idx].location,
+        isDefault: body.isDefault !== undefined ? body.isDefault : warehouses[idx].isDefault
+      };
+      saveDb("warehouses", warehouses);
+      logActivity(`Anbar yeniləndi: ${warehouses[idx].name}`);
+      return jsonResponse(warehouses[idx]);
+    }
+
+    if (method === "DELETE") {
+      const warehouse = warehouses[idx];
+      if (warehouse.isDefault === 1) {
+        return jsonResponse({ message: "Default anbar silinə bilməz. Əvvəlcə başqa anbarı default edin." }, 400);
+      }
+
+      const stockEntries = getDb("stock_entries");
+      const sales = getDb("sales");
+      const returns = getDb("returns");
+      const vendorReturns = getDb("vendor_returns");
+      const serials = getDb("product_serials");
+
+      const hasEntries = stockEntries.some((e: any) => e.warehouseId === id);
+      const hasSales = sales.some((s: any) => s.warehouseId === id);
+      const hasReturns = returns.some((r: any) => r.warehouseId === id);
+      const hasVendorReturns = vendorReturns.some((vr: any) => vr.warehouseId === id);
+      const hasSerials = serials.some((s: any) => s.warehouseId === id && s.status === "in_stock");
+
+      if (hasEntries || hasSales || hasReturns || hasVendorReturns || hasSerials) {
+        return jsonResponse({ message: "Bu anbarda aktiv məlumatlar mövcuddur, silmək olmaz." }, 400);
+      }
+
+      warehouses.splice(idx, 1);
+      saveDb("warehouses", warehouses);
+      logActivity(`Anbar silindi: ${warehouse.name}`);
+      return jsonResponse({ success: true, message: "Anbar uğurla silindi" });
+    }
+  }
+
+  // 1c. Transfers Endpoints
+  if (path === "/api/stock/transfers") {
+    if (method === "GET") {
+      const transfers = getDb("stock_transfers");
+      const products = getDb("products");
+      const warehouses = getDb("warehouses");
+
+      const enriched = transfers.map((t: any) => {
+        const prod = products.find((p: any) => p.id === t.productId);
+        const fromW = warehouses.find((w: any) => w.id === t.fromWarehouseId);
+        const toW = warehouses.find((w: any) => w.id === t.toWarehouseId);
+        return {
+          ...t,
+          productName: prod ? prod.name : `Product ID: ${t.productId}`,
+          fromWarehouseName: fromW ? fromW.name : `Anbar ID: ${t.fromWarehouseId}`,
+          toWarehouseName: toW ? toW.name : `Anbar ID: ${t.toWarehouseId}`,
+        };
+      });
+      return jsonResponse(enriched);
+    }
+
+    if (method === "POST") {
+      const body = getBody();
+      const { fromWarehouseId, toWarehouseId, productId, quantity, notes, serialNumbers } = body;
+      if (!fromWarehouseId || !toWarehouseId || !productId || !quantity) {
+        return jsonResponse({ message: "Məlumatlar tam doldurulmayıb" }, 400);
+      }
+      if (fromWarehouseId === toWarehouseId) {
+        return jsonResponse({ message: "Eyni anbardan eyni anbara yerdəyişmə edilə bilməz" }, 400);
+      }
+
+      const products = getDb("products");
+      const product = products.find((p: any) => p.id === productId);
+      if (!product) {
+        return jsonResponse({ message: "Məhsul tapılmadı" }, 404);
+      }
+
+      const currentQty = getWarehouseQuantity(productId, fromWarehouseId);
+      if (currentQty < quantity) {
+        return jsonResponse({ message: `Göndərən anbarda kifayət qədər məhsul yoxdur (Mövcuddur: ${currentQty})` }, 400);
+      }
+
+      let serialsList: string[] = [];
+      if (product.trackingType === "serial" || product.trackingType === "serialized") {
+        if (!serialNumbers || !Array.isArray(serialNumbers) || serialNumbers.length !== quantity) {
+          return jsonResponse({ message: `Serial nömrələri düzgün təqdim edilməyib. ${quantity} ədəd serial lazımdır.` }, 400);
+        }
+        serialsList = serialNumbers;
+
+        const serials = getDb("product_serials");
+        const matchingSerials = serials.filter(
+          (s: any) => s.productId === productId && s.warehouseId === fromWarehouseId && s.status === "in_stock"
+        );
+        const matchingSerialsSet = new Set(matchingSerials.map((s: any) => s.serialNumber));
+        const invalidSerials = serialsList.filter(s => !matchingSerialsSet.has(s));
+        if (invalidSerials.length > 0) {
+          return jsonResponse({ message: `Konkret seriallar göndərən anbarda tapılmadı və ya stokda deyil: ${invalidSerials.join(", ")}` }, 400);
+        }
+
+        serials.forEach((s: any) => {
+          if (s.productId === productId && serialsList.includes(s.serialNumber)) {
+            s.warehouseId = toWarehouseId;
+          }
+        });
+        saveDb("product_serials", serials);
+      }
+
+      const transfers = getDb("stock_transfers");
+      const newTransfer = {
+        id: transfers.length > 0 ? Math.max(...transfers.map((t: any) => t.id)) + 1 : 1,
+        fromWarehouseId,
+        toWarehouseId,
+        productId,
+        quantity,
+        transferDate: new Date().toISOString(),
+        transferredBy: userUsername || "demo_admin",
+        notes: notes || null,
+        serialNumbers: serialsList.length > 0 ? JSON.stringify(serialsList) : null,
+      };
+      transfers.push(newTransfer);
+      saveDb("stock_transfers", transfers);
+
+      logActivity(`${quantity} ədəd '${product.name}' yerdəyişmə edildi (Anbar: ${fromWarehouseId} -> ${toWarehouseId})`);
+      return jsonResponse(newTransfer);
     }
   }
 
@@ -506,6 +754,7 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
       const body = getBody();
       const sales = getDb("sales");
       const nextId = sales.length > 0 ? Math.max(...sales.map(s => s.id)) + 1 : 1;
+      const warehouseId = body.warehouseId ? parseInt(body.warehouseId) : 1;
       
       // Calculate derived variables
       const customers = getDb("customers");
@@ -544,11 +793,29 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
         items: enrichedItems,
         payments: body.paymentType === "credit" ? [] : [{ id: 1, amount: totalAmount, paymentDate: new Date().toISOString(), paymentType: body.paymentType }],
         sellerName: userUsername ? userUsername.trim().toLowerCase() : (userRole === "Admin" ? "admin" : "satici"),
-        applyEdv: body.applyEdv !== undefined && body.applyEdv !== null ? (body.applyEdv ? 1 : 0) : 1
+        applyEdv: body.applyEdv !== undefined && body.applyEdv !== null ? (body.applyEdv ? 1 : 0) : 1,
+        warehouseId,
       };
 
       sales.unshift(newSale);
       saveDb("sales", sales);
+
+      // Link and update serials to sold
+      const serials = getDb("product_serials");
+      body.items.forEach((item: any) => {
+        if (item.serialNumbers && Array.isArray(item.serialNumbers) && item.serialNumbers.length > 0) {
+          item.serialNumbers.forEach((sNum: string) => {
+            const cleaned = sNum.trim().toUpperCase();
+            const serialObj = serials.find((s: any) => s.productId === item.productId && s.serialNumber === cleaned && s.status === "in_stock" && s.warehouseId === warehouseId);
+            if (serialObj) {
+              serialObj.status = "sold";
+              serialObj.saleId = nextId;
+              serialObj.soldAt = new Date().toISOString();
+            }
+          });
+        }
+      });
+      saveDb("product_serials", serials);
 
       // Stock levels deduction
       const updatedProducts = products.map(prod => {
@@ -739,6 +1006,13 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
       const body = getBody();
       const returns = getDb("returns");
       const nextId = returns.length > 0 ? Math.max(...returns.map(r => r.id)) + 1 : 1;
+      
+      let warehouseId = body.warehouseId ? parseInt(body.warehouseId) : 1;
+      if (!body.warehouseId && body.saleId) {
+        const sales = getDb("sales");
+        const sale = sales.find(s => s.id === body.saleId);
+        if (sale && sale.warehouseId) warehouseId = sale.warehouseId;
+      }
 
       const products = getDb("products");
       const enrichedItems = body.items.map((item: any, index: number) => {
@@ -763,18 +1037,35 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
         saleId: body.saleId || null,
         totalAmount: totalRefunded,
         reason: body.reason || "Müştəri qaytarışı",
-        items: enrichedItems
+        items: enrichedItems,
+        warehouseId,
       };
 
       returns.unshift(newReturn);
       saveDb("returns", returns);
+
+      // Link and update returned serials to in_stock
+      const serials = getDb("product_serials");
+      body.items.forEach((item: any) => {
+        if (item.serialNumbers && Array.isArray(item.serialNumbers) && item.serialNumbers.length > 0) {
+          item.serialNumbers.forEach((sNum: string) => {
+            const cleaned = sNum.trim().toUpperCase();
+            const serialObj = serials.find((s: any) => s.productId === item.productId && s.serialNumber === cleaned);
+            if (serialObj) {
+              serialObj.status = item.status === "returned_to_stock" ? "in_stock" : "defective";
+              serialObj.returnId = nextId;
+              serialObj.warehouseId = warehouseId;
+            }
+          });
+        }
+      });
+      saveDb("product_serials", serials);
 
       // If online / linked to a sale, update the sale details and stock levels
       if (body.saleId) {
         const sales = getDb("sales");
         const saleIdx = sales.findIndex(s => s.id === body.saleId);
         if (saleIdx !== -1) {
-          // Change payment status to "partially_refunded" or "refunded"
           sales[saleIdx].paymentStatus = "refunded";
           saveDb("sales", sales);
         }
@@ -826,6 +1117,7 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
       const body = getBody();
       const returns = getDb("vendor_returns");
       const nextId = returns.length > 0 ? Math.max(...returns.map(r => r.id)) + 1 : 1;
+      const warehouseId = body.warehouseId ? parseInt(body.warehouseId) : 1;
 
       const products = getDb("products");
       const enrichedItems = body.items.map((item: any, index: number) => {
@@ -851,11 +1143,27 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
         totalAmount: totalReturnAmount,
         paymentType: body.paymentType,
         notes: body.notes || null,
-        items: enrichedItems
+        items: enrichedItems,
+        warehouseId,
       };
 
       returns.unshift(newReturn);
       saveDb("vendor_returns", returns);
+
+      // Link and update returned serials to written_off
+      const serials = getDb("product_serials");
+      body.items.forEach((item: any) => {
+        if (item.serialNumbers && Array.isArray(item.serialNumbers) && item.serialNumbers.length > 0) {
+          item.serialNumbers.forEach((sNum: string) => {
+            const cleaned = sNum.trim().toUpperCase();
+            const serialObj = serials.find((s: any) => s.productId === item.productId && s.serialNumber === cleaned && s.status === "in_stock" && s.warehouseId === warehouseId);
+            if (serialObj) {
+              serialObj.status = "written_off";
+            }
+          });
+        }
+      });
+      saveDb("product_serials", serials);
 
       // Decrease product quantities
       const updatedProducts = products.map(prod => {
@@ -1077,6 +1385,7 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
       staffCanViewStockBalances: 1,
       staffCanViewDebts: 1,
       staffCanManageCatalog: 1,
+      warehouseId: 1,
     });
   }
 
@@ -1121,6 +1430,7 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
       const productsList = getDb("products");
       const p = productsList.find(prod => prod.id === body.productId);
       const productName = p ? (p.productName || p.name) : "Məhsul";
+      const warehouseId = body.warehouseId ? parseInt(body.warehouseId) : 1;
       
       const newEntry = {
         id: nextId,
@@ -1136,7 +1446,8 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
         creditDueDate: body.creditDueDate || null,
         entryDate: new Date().toISOString(),
         paidStatus: body.paymentType === "Nisyə" ? "credit" : "paid",
-        applyEdv: body.applyEdv !== undefined && body.applyEdv !== null ? (body.applyEdv ? 1 : 0) : 1
+        applyEdv: body.applyEdv !== undefined && body.applyEdv !== null ? (body.applyEdv ? 1 : 0) : 1,
+        warehouseId,
       };
       
       entriesList.unshift(newEntry);
@@ -1147,6 +1458,18 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
         p.currentQuantity = (p.currentQuantity || 0) + newEntry.quantity;
         p.purchasePrice = newEntry.purchasePrice;
         if (body.serialNumbers && Array.isArray(body.serialNumbers)) {
+          const serials = getDb("product_serials");
+          body.serialNumbers.forEach((sNum: string) => {
+            serials.push({
+              id: serials.length > 0 ? Math.max(...serials.map((s: any) => s.id)) + 1 : 1,
+              productId: body.productId,
+              serialNumber: sNum.trim().toUpperCase(),
+              status: "in_stock",
+              warehouseId,
+              createdAt: new Date().toISOString()
+            });
+          });
+          saveDb("product_serials", serials);
           p.activeSerials = [...(p.activeSerials || []), ...body.serialNumbers];
         }
         saveDb("products", productsList);
@@ -1211,6 +1534,9 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
 
   // 14. Stock Levels & Debts
   if (path === "/api/stock/levels") {
+    const warehouseIdStr = parsedUrl.searchParams.get("warehouseId");
+    const warehouseId = warehouseIdStr ? parseInt(warehouseIdStr) : undefined;
+
     const productsList = getDb("products");
     const entriesList = getDb("stock_entries");
     const salesList = getDb("sales");
@@ -1230,7 +1556,15 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
         }
       }
 
-      const currentQuantity = product.currentQuantity !== undefined ? product.currentQuantity : 0;
+      const currentQuantity = getWarehouseQuantity(product.id, warehouseId);
+
+      let activeSerials = product.activeSerials || [];
+      if (product.trackingType === "serial" || product.trackingType === "serialized") {
+        const serials = getDb("product_serials");
+        activeSerials = serials
+          .filter((s: any) => s.productId === product.id && (!warehouseId || s.warehouseId === warehouseId) && s.status === "in_stock")
+          .map((s: any) => s.serialNumber);
+      }
 
       return {
         productId: product.id,
@@ -1242,7 +1576,7 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
         lastSalePrice,
         totalValue: currentQuantity * lastPurchasePrice,
         trackingType: product.trackingType || "none",
-        activeSerials: product.activeSerials || [],
+        activeSerials,
         lastPurchaseDate,
         barcode: product.barcode || "",
         description: product.description || product.notes || "",

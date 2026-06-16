@@ -12,6 +12,42 @@ export const tenants = pgTable("tenants", {
   createdAt: text("created_at").notNull(),
 });
 
+// 0b. Warehouses Table
+export const warehouses = pgTable("warehouses", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" })
+    .default(1),
+  name: text("name").notNull(),
+  location: text("location"),
+  isDefault: integer("is_default").notNull().default(0), // 1 = default, 0 = regular
+  createdAt: text("created_at").notNull(),
+});
+
+// 0c. Stock Transfers Table
+export const stockTransfers = pgTable("stock_transfers", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" })
+    .default(1),
+  fromWarehouseId: integer("from_warehouse_id")
+    .notNull()
+    .references(() => warehouses.id, { onDelete: "cascade" }),
+  toWarehouseId: integer("to_warehouse_id")
+    .notNull()
+    .references(() => warehouses.id, { onDelete: "cascade" }),
+  productId: integer("product_id")
+    .notNull()
+    .references(() => products.id, { onDelete: "cascade" }),
+  quantity: doublePrecision("quantity").notNull(),
+  transferDate: text("transfer_date").notNull(),
+  transferredBy: text("transferred_by").notNull(),
+  notes: text("notes"),
+  serialNumbers: text("serial_numbers"), // Comma-separated serial numbers or JSON string
+});
+
 // 1. Products Directory
 export const products = pgTable("products", {
   id: serial("id").primaryKey(),
@@ -68,6 +104,8 @@ export const stockEntries = pgTable("stock_entries", {
   entryDate: text("entry_date").notNull(), // ISO timestamp
   paidStatus: text("paid_status").notNull().default("paid"), // "paid" (ödənilib), "credit" (tədarükçüyə borc)
   applyEdv: integer("apply_edv").notNull().default(1),
+  warehouseId: integer("warehouse_id")
+    .references(() => warehouses.id, { onDelete: "set null" }),
 });
 
 // 2b. Vendor Payments (Wholesale payment history ledger)
@@ -181,6 +219,8 @@ export const sales = pgTable("sales", {
   marketplaceFee: doublePrecision("marketplace_fee").default(0.0).notNull(),
   sellerName: text("seller_name").default("Sistem"),
   applyEdv: integer("apply_edv").notNull().default(1),
+  warehouseId: integer("warehouse_id")
+    .references(() => warehouses.id, { onDelete: "set null" }),
 }, (table) => ({
   salesTenantOfflineIdIdx: uniqueIndex("sales_tenant_offline_id_idx").on(table.tenantId, table.offlineId)
 }));
@@ -296,6 +336,8 @@ export const users = pgTable("users", {
   staffCanViewStockBalances: integer("staff_can_view_stock_balances").notNull().default(1),
   staffCanViewDebts: integer("staff_can_view_debts").notNull().default(1),
   staffCanManageCatalog: integer("staff_can_manage_catalog").notNull().default(1),
+  warehouseId: integer("warehouse_id")
+    .references(() => warehouses.id, { onDelete: "set null" }),
 }, (table) => ({
   usersTenantUsernameIdx: uniqueIndex("users_tenant_username_idx").on(table.tenantId, table.username)
 }));
@@ -326,6 +368,8 @@ export const returns = pgTable("returns", {
   returnDate: text("return_date").notNull(), // ISO timestamp
   totalAmount: doublePrecision("total_amount").notNull(), // Total refunded money to customer
   reason: text("reason"),
+  warehouseId: integer("warehouse_id")
+    .references(() => warehouses.id, { onDelete: "set null" }),
 });
 
 // 12. Return Items Table
@@ -367,6 +411,8 @@ export const productSerials = pgTable("product_serials", {
   status: text("status").notNull().default("in_stock"), // "in_stock", "sold", "defective", "written_off"
   createdAt: text("created_at").notNull(),
   soldAt: text("sold_at"),
+  warehouseId: integer("warehouse_id")
+    .references(() => warehouses.id, { onDelete: "set null" }),
 }, (table) => ({
   productSerialsTenantSerialIdx: uniqueIndex("product_serials_tenant_serial_idx").on(table.tenantId, table.serialNumber)
 }));
@@ -381,6 +427,8 @@ export const tenantsRelations = relations(tenants, ({ many }) => ({
   users: many(users),
   returns: many(returns),
   productSerials: many(productSerials),
+  warehouses: many(warehouses),
+  stockTransfers: many(stockTransfers),
 }));
 
 export const productsRelations = relations(products, ({ one, many }) => ({
@@ -392,6 +440,7 @@ export const productsRelations = relations(products, ({ one, many }) => ({
   saleItems: many(saleItems),
   returnItems: many(returnItems),
   serials: many(productSerials),
+  stockTransfers: many(stockTransfers),
 }));
 
 export const stockEntriesRelations = relations(stockEntries, ({ one, many }) => ({
@@ -404,6 +453,10 @@ export const stockEntriesRelations = relations(stockEntries, ({ one, many }) => 
     references: [products.id],
   }),
   serials: many(productSerials),
+  warehouse: one(warehouses, {
+    fields: [stockEntries.warehouseId],
+    references: [warehouses.id],
+  }),
 }));
 
 export const customersRelations = relations(customers, ({ one, many }) => ({
@@ -427,6 +480,10 @@ export const salesRelations = relations(sales, ({ one, many }) => ({
   payments: many(creditPayments),
   returns: many(returns),
   serials: many(productSerials),
+  warehouse: one(warehouses, {
+    fields: [sales.warehouseId],
+    references: [warehouses.id],
+  }),
 }));
 
 export const saleItemsRelations = relations(saleItems, ({ one }) => ({
@@ -474,6 +531,10 @@ export const usersRelations = relations(users, ({ one }) => ({
     fields: [users.tenantId],
     references: [tenants.id],
   }),
+  warehouse: one(warehouses, {
+    fields: [users.warehouseId],
+    references: [warehouses.id],
+  }),
 }));
 
 export const activityLogsRelations = relations(activityLogs, ({ one }) => ({
@@ -494,6 +555,10 @@ export const returnsRelations = relations(returns, ({ one, many }) => ({
   }),
   items: many(returnItems),
   serials: many(productSerials),
+  warehouse: one(warehouses, {
+    fields: [returns.warehouseId],
+    references: [warehouses.id],
+  }),
 }));
 
 export const returnItemsRelations = relations(returnItems, ({ one }) => ({
@@ -563,6 +628,10 @@ export const productSerialsRelations = relations(productSerials, ({ one }) => ({
     fields: [productSerials.returnId],
     references: [returns.id],
   }),
+  warehouse: one(warehouses, {
+    fields: [productSerials.warehouseId],
+    references: [warehouses.id],
+  }),
 }));
 
 // 14. Vendor Returns Table (Tədarükçüyə Qaytarışlar)
@@ -579,6 +648,8 @@ export const vendorReturns = pgTable("vendor_returns", {
   totalAmount: doublePrecision("total_amount").notNull(),
   paymentType: text("payment_type").notNull(), // "Nəğd", "Kart", "Borcdan Silinmə", "Köçürmə"
   notes: text("notes"),
+  warehouseId: integer("warehouse_id")
+    .references(() => warehouses.id, { onDelete: "set null" }),
 });
 
 // 15. Vendor Return Items Table
@@ -611,6 +682,10 @@ export const vendorReturnsRelations = relations(vendorReturns, ({ one, many }) =
     references: [vendors.id],
   }),
   items: many(vendorReturnItems),
+  warehouse: one(warehouses, {
+    fields: [vendorReturns.warehouseId],
+    references: [warehouses.id],
+  }),
 }));
 
 export const vendorReturnItemsRelations = relations(vendorReturnItems, ({ one }) => ({
@@ -629,6 +704,42 @@ export const vendorReturnItemsRelations = relations(vendorReturnItems, ({ one })
   stockEntry: one(stockEntries, {
     fields: [vendorReturnItems.stockEntryId],
     references: [stockEntries.id],
+  }),
+}));
+
+export const warehousesRelations = relations(warehouses, ({ one, many }) => ({
+  tenant: one(tenants, {
+    fields: [warehouses.tenantId],
+    references: [tenants.id],
+  }),
+  stockEntries: many(stockEntries),
+  sales: many(sales),
+  returns: many(returns),
+  vendorReturns: many(vendorReturns),
+  serials: many(productSerials),
+  users: many(users),
+  transfersFrom: many(stockTransfers, { relationName: "transfersFrom" }),
+  transfersTo: many(stockTransfers, { relationName: "transfersTo" }),
+}));
+
+export const stockTransfersRelations = relations(stockTransfers, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [stockTransfers.tenantId],
+    references: [tenants.id],
+  }),
+  fromWarehouse: one(warehouses, {
+    fields: [stockTransfers.fromWarehouseId],
+    references: [warehouses.id],
+    relationName: "transfersFrom",
+  }),
+  toWarehouse: one(warehouses, {
+    fields: [stockTransfers.toWarehouseId],
+    references: [warehouses.id],
+    relationName: "transfersTo",
+  }),
+  product: one(products, {
+    fields: [stockTransfers.productId],
+    references: [products.id],
   }),
 }));
 
