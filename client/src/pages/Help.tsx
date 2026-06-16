@@ -18,7 +18,8 @@ import {
   RotateCcw,
   Globe,
   CreditCard,
-  Calendar
+  Calendar,
+  Warehouse
 } from "lucide-react";
 
 interface HelpTopic {
@@ -546,6 +547,77 @@ export default function Help() {
             </li>
             <li>
               <b>Açar Söz Toqquşmasının Qarşısının Alınması:</b> Yeni yaradılan məhsulun açar sözlərindən biri mövcud olan digər məhsulun adı və ya açar sözü ilə eyni ola bilməz.
+            </li>
+          </ol>
+        </div>
+      )
+    },
+    {
+      id: "multi-anbar",
+      title: "🏢 Multi-Anbar İdarəetməsi və Anbarlararası Yerdəyişmə",
+      category: "anbar",
+      icon: Warehouse,
+      content: (
+        <div className="space-y-3 leading-relaxed text-gray-700">
+          <p>
+            QAZANPOS platformasında eyni mağaza üçün <b>birdən çox fiziki anbar</b> (məsələn: <i>Nərimanov filialı</i>, <i>Mərkəzi Depo</i>) yarada və bu anbarlar arasında malların transferini həyata keçirə bilərsiniz.
+          </p>
+          <div className="bg-primary/5 border border-primary/10 rounded-xl p-3.5 space-y-1">
+            <span className="text-[10px] font-black text-primary uppercase block tracking-wider">Əsas Mexanizm</span>
+            <span className="text-xs text-primary/90 font-semibold block">
+              Məhsulların anbarlararası hərəkəti tamamilə izlənilir. Hər hansı bir anbar seçildikdə, məhsulun həmin anbarda olan qalığı göstərilir. Ümumi (Hamısı) rejimdə isə bütün anbarların qalıqları cəmlənir və anbarlararası yerdəyişmələr (transferlər) bir-birini kompensasiya etdiyi üçün ümumi cəm dəyişməz qalır.
+            </span>
+          </div>
+          <h4 className="font-extrabold text-gray-900 text-xs mt-3 uppercase tracking-wider">Addım-Addım Təlimat:</h4>
+          <ol className="list-decimal pl-4 space-y-2 text-xs font-semibold">
+            <li>
+              <b>Anbarların Yaradılması:</b> <a href="/ayarlar" className="text-primary hover:underline font-bold">Ayarlar</a> səhifəsində <b>"Anbar Ayarları"</b> bölməsinə keçərək yeni anbarlar əlavə edə bilərsiniz. Yaradılan ilk anbar avtomatik olaraq default (Əsas) anbar kimi təyin olunur.
+            </li>
+            <li>
+              <b>İstifadəçilərin Təhkim Edilməsi:</b> Yenə eyni səhifədə kassirlərə (satıcılara) fərdi default anbar təyin edə bilərsiniz. Beləliklə, həmin satıcı kassa (POS) ekranından satış etdikdə və ya anbara daxil etdikdə, əməliyyat avtomatik olaraq onun təhkim olunduğu anbar üzrə qeydə alınacaq.
+            </li>
+            <li>
+              <b>Anbarlararası Yerdəyişmə (Transfer):</b> <a href="/anbar" className="text-primary hover:underline font-bold">Anbar Qalıqları</a> səhifəsinin yuxarısındakı <b>"Yerdəyişmə Et"</b> düyməsinə klikləyin. Göndərən anbarı, qəbul edən anbarı və məhsulu seçin.
+            </li>
+            <li>
+              <b>Seriallı (IMEI) Məhsulların Transferi:</b> Əgər transfer olunan məhsul seriallıdırsa, sistem sizə göndərən anbarda olan konkret serial nömrələrinin siyahısını checkbox şəklində göstərəcək. Siz sadəcə transfer etmək istədiyiniz cihazların serial nömrələrini işarələməklə yerdəyişməni təsdiqləyə bilərsiniz.
+            </li>
+            <li>
+              <b>Tarixçəyə Nəzarət:</b> Bütün yerdəyişmə əməliyyatları <b>"Yerdəyişmə Tarixçəsi"</b> tabında tarix, məhsul adı, miqdar, göndərən/qəbul edən anbarlar və məsul şəxsin adı ilə birlikdə saxlanılır.
+            </li>
+          </ol>
+        </div>
+      )
+    },
+    {
+      id: "arxivleme",
+      title: "🗄️ Kateqoriya və Məhsulların Arxivləşdirilməsi (Silinmənin Qarşısının Alınması)",
+      category: "anbar",
+      icon: RotateCcw,
+      content: (
+        <div className="space-y-3 leading-relaxed text-gray-700">
+          <p>
+            QAZANPOS platformasında verilənlərin tamlığını qorumaq üçün keçmiş tranzaksiya tarixçəsi (satış, qaytarış, mədaxil) olan məhsul və kateqoriyaların bazadan tamamilə silinməsinə <b>icazə verilmir</b>. Bunun əvəzinə, ağıllı <b>arxivləşdirmə sistemi</b> istifadə olunur.
+          </p>
+          <div className="bg-amber-50 border border-amber-100 rounded-xl p-3.5 space-y-1">
+            <span className="text-[10px] font-black text-amber-700 uppercase block tracking-wider">Niyə Birbaşa Silinmir?</span>
+            <span className="text-xs text-amber-900 font-semibold block">
+              Məhsulu birbaşa bazadan sildikdə, həmin məhsulun keçmişdə iştirak etdiyi bütün satış və hesabat sənədlərində boşluq (null reference) yaranır və mağazanın ümumi maliyyə balansı pozulur. Arxivləşdirmə isə tarixçəni tam qoruyaraq malı satışdan çıxarır.
+            </span>
+          </div>
+          <h4 className="font-extrabold text-gray-900 text-xs mt-3 uppercase tracking-wider">İstifadə və İşləmə Qaydası:</h4>
+          <ol className="list-decimal pl-4 space-y-2 text-xs font-semibold">
+            <li>
+              <b>Ağıllı Sil düyməsi:</b> <a href="/mehsullar" className="text-primary hover:underline font-bold">Məhsullar</a> səhifəsində hər hansı məhsulun yanındakı "Sil" düyməsinə kliklədikdə, sistem avtomatik olaraq həmin malın tarixçəsini yoxlayır. Əgər malın keçmiş tranzaksiyası varsa, "Sil" düyməsi yerinə **"Arxivə Göndər"** modalı açılır.
+            </li>
+            <li>
+              <b>Kataloqdan Gizlədilmə:</b> Arxivə göndərilən məhsullar POS (kassa) satış ekranında, mədaxil pəncərəsində və aktiv anbar siyahılarında gizlədilir. Onlar yalnız arxiv bölməsində qalırlar.
+            </li>
+            <li>
+              <b>Arxiv Tabı:</b> Məhsullar səhifəsində sol tərəfdəki kateqoriyalar menyusunun üstündə <b>"Aktiv"</b> və <b>"Arxiv"</b> tabları mövcuddur. "Arxiv" tabına keçdikdə bütün arxivlənmiş kateqoriyaları və həmin kateqoriyalara aid arxivləşdirilmiş malları görə bilərsiniz.
+            </li>
+            <li>
+              <b>Geri Bərpa Etmə (Restore):</b> Arxivləşdirilmiş hər hansı məhsulu və ya kateqoriyanı istənilən vaxt arxiv siyahısından tapıb yanındakı <b>"Bərpa Et"</b> (geri qaytarmaq) düyməsini sıxaraq yenidən aktiv kataloqa qaytara bilərsiniz.
             </li>
           </ol>
         </div>
