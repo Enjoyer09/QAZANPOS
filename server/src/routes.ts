@@ -195,8 +195,11 @@ async function computeFIFOMetrics(productId: number, tenantId: number) {
 }
 
 async function fetchTenantStockMetrics(tenantId: number) {
-  // 1. Fetch all products
-  const allProducts = await db.select().from(schema.products).where(eq(schema.products.tenantId, tenantId));
+  // 1. Fetch all products (active only)
+  const allProducts = await db
+    .select()
+    .from(schema.products)
+    .where(and(eq(schema.products.tenantId, tenantId), eq(schema.products.isArchived, 0)));
 
   // 2. Fetch bulk sums
   const restockedGroup = await db
@@ -495,7 +498,7 @@ async function verifyTenantLimit(tenantId: number, type: "products" | "sales" | 
     const result = await db
       .select({ count: sql`COUNT(id)` })
       .from(schema.products)
-      .where(eq(schema.products.tenantId, tenantId));
+      .where(and(eq(schema.products.tenantId, tenantId), eq(schema.products.isArchived, 0)));
     currentCount = parseInt((result[0]?.count as string) || "0");
   } else if (type === "sales") {
     const result = await db
@@ -807,7 +810,28 @@ router.get("/products", async (req, res) => {
       .select()
       .from(schema.products)
       .where(eq(schema.products.tenantId, req.tenantId));
-    res.json(list);
+
+    // Get product transaction history in bulk to map hasHistory
+    const soldItems = await db
+      .select({ productId: schema.saleItems.productId })
+      .from(schema.saleItems)
+      .where(eq(schema.saleItems.tenantId, req.tenantId));
+
+    const returnedItems = await db
+      .select({ productId: schema.returnItems.productId })
+      .from(schema.returnItems)
+      .where(eq(schema.returnItems.tenantId, req.tenantId));
+
+    const historySet = new Set<number>();
+    soldItems.forEach(item => historySet.add(item.productId));
+    returnedItems.forEach(item => historySet.add(item.productId));
+
+    const mapped = list.map(p => ({
+      ...p,
+      hasHistory: historySet.has(p.id)
+    }));
+
+    res.json(mapped);
   } catch (error) {
     res.status(500).json({ message: "Məhsulları gətirərkən xəta baş verdi" });
   }
@@ -827,7 +851,7 @@ router.post("/products", async (req, res) => {
     const newKeywords = description ? description.split(/[,;]+/).map((k: string) => normalizeName(k)).filter(Boolean) : [];
 
     const allProducts = await db.query.products.findMany({
-      where: eq(schema.products.tenantId, req.tenantId)
+      where: and(eq(schema.products.tenantId, req.tenantId), eq(schema.products.isArchived, 0))
     });
 
     for (const p of allProducts) {
@@ -959,7 +983,7 @@ router.put("/products/:id", async (req, res) => {
       return res.status(403).json({ message: "Bu əməliyyat üçün səlahiyyətiniz yoxdur." });
     }
     const id = parseInt(req.params.id);
-    const { name, category, unit, description, barcode, trackingType, warrantyMonths } = req.body;
+    const { name, category, unit, description, barcode, trackingType, warrantyMonths, isArchived } = req.body;
 
     // Fetch existing product to resolve current name/description if missing in req.body
     const currentProduct = await db.query.products.findFirst({
@@ -974,11 +998,11 @@ router.put("/products/:id", async (req, res) => {
 
     if (resolvedName) {
       const normalizedNewName = normalizeName(resolvedName);
-      const newKeywords = resolvedDescription ? resolvedDescription.split(/[,;]+/).map((k: string) => normalizeName(k)).filter(Boolean) : [];
 
       const allProducts = await db.query.products.findMany({
         where: and(
           eq(schema.products.tenantId, req.tenantId),
+          eq(schema.products.isArchived, 0),
           sql`${schema.products.id} != ${id}`
         )
       });
@@ -1000,7 +1024,6 @@ router.put("/products/:id", async (req, res) => {
             message: `Bu məhsul artıq mövcuddur (Açar sözlər ilə eşləşdi: '${p.name}'). Təkrarlanmanın qarşısını almaq üçün fərqli bir ad seçin.` 
           });
         }
-
       }
     }
 
@@ -1028,6 +1051,7 @@ router.put("/products/:id", async (req, res) => {
         barcode: barcode || null,
         trackingType: trackingType || "none",
         warrantyMonths: warrantyMonths ? parseInt(String(warrantyMonths)) : null,
+        isArchived: isArchived !== undefined ? parseInt(String(isArchived)) : undefined,
       })
       .where(and(eq(schema.products.id, id), eq(schema.products.tenantId, req.tenantId)))
       .returning();
@@ -1035,10 +1059,19 @@ router.put("/products/:id", async (req, res) => {
     if (updated.length === 0)
       return res.status(404).json({ message: "Məhsul tapılmadı" });
 
-    await logActivity(req, "UPDATE_PRODUCT", `'${name}' (ID: ${id}) məhsulunun məlumatlarını yenilədi`);
+    if (isArchived !== undefined && parseInt(String(isArchived)) !== currentProduct.isArchived) {
+      if (parseInt(String(isArchived)) === 1) {
+        await logActivity(req, "ARCHIVE_PRODUCT", `'${resolvedName}' (ID: ${id}) məhsulunu arxivə göndərdi`);
+      } else {
+        await logActivity(req, "RESTORE_PRODUCT", `'${resolvedName}' (ID: ${id}) məhsulunu arxivdən bərpa etdi`);
+      }
+    } else {
+      await logActivity(req, "UPDATE_PRODUCT", `'${resolvedName}' (ID: ${id}) məhsulunun məlumatlarını yenilədi`);
+    }
 
     res.json(updated[0]);
   } catch (error) {
+    console.error("Update product error:", error);
     res.status(500).json({ message: "Məhsul yenilənərkən xəta baş verdi" });
   }
 });
@@ -1050,6 +1083,26 @@ router.delete("/products/:id", async (req, res) => {
       return res.status(403).json({ message: "Bu əməliyyat üçün səlahiyyətiniz yoxdur." });
     }
     const id = parseInt(req.params.id);
+
+    // Let's check history first to give a very clean response
+    const hasSales = await db
+      .select({ id: schema.saleItems.id })
+      .from(schema.saleItems)
+      .where(and(eq(schema.saleItems.productId, id), eq(schema.saleItems.tenantId, req.tenantId)))
+      .limit(1);
+
+    const hasReturns = await db
+      .select({ id: schema.returnItems.id })
+      .from(schema.returnItems)
+      .where(and(eq(schema.returnItems.productId, id), eq(schema.returnItems.tenantId, req.tenantId)))
+      .limit(1);
+
+    if (hasSales.length > 0 || hasReturns.length > 0) {
+      return res.status(400).json({
+        message: "Bu məhsulu silmək mümkün deyil, çünki onunla bağlı keçmiş satış, qaytarış və ya mədaxil əməliyyatları mövcuddur. Tarixçənin qorunması üçün onu arxivləşdirə bilərsiniz."
+      });
+    }
+
     const deleted = await db
       .delete(schema.products)
       .where(and(eq(schema.products.id, id), eq(schema.products.tenantId, req.tenantId)))
@@ -1061,8 +1114,9 @@ router.delete("/products/:id", async (req, res) => {
     await logActivity(req, "DELETE_PRODUCT", `'${deleted[0].name}' (ID: ${id}) məhsulunu kataloqdan sildi`);
 
     res.json({ message: "Məhsul silindi" });
-  } catch (error) {
-    res.status(500).json({ message: "Məhsul silinərkən xəta baş verdi" });
+  } catch (error: any) {
+    console.error("Delete product error:", error);
+    res.status(500).json({ message: "Məhsul silinərkən xəta baş verdi: " + (error.message || "") });
   }
 });
 

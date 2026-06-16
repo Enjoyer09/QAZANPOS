@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Edit2, Trash2, X, Tag, Sliders, Info, Lock } from "lucide-react";
+import { Plus, Edit2, Trash2, X, Tag, Sliders, Info, Lock, Archive, RotateCcw } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
 import { generateValidEAN13 } from "../components/Barcode.tsx";
 import LabelPrintModal from "../components/LabelPrintModal.tsx";
@@ -14,6 +14,8 @@ interface Product {
   barcode: string | null;
   trackingType?: string;
   warrantyMonths?: number | null;
+  isArchived?: number;
+  hasHistory?: boolean;
 }
 
 const emptyProduct = {
@@ -53,8 +55,16 @@ export default function Products() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [formData, setFormData] = useState(emptyProduct);
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [archiveId, setArchiveId] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState<"active" | "archived">("active");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedProductForLabel, setSelectedProductForLabel] = useState<Product | null>(null);
+
+  const handleTabChange = (tab: "active" | "archived") => {
+    setActiveTab(tab);
+    setSelectedCategory("all");
+  };
 
   // Fetch settings dynamically to get store name for labels
   const { data: settings } = useQuery<any>({
@@ -91,6 +101,18 @@ export default function Products() {
   };
 
   const filteredList = (list || []).filter((item) => {
+    // 1. Filter by Active vs Archived status
+    const itemArchived = (item as any).isArchived || 0;
+    const isTabMatch = activeTab === "active" ? itemArchived === 0 : itemArchived === 1;
+    if (!isTabMatch) return false;
+
+    // 2. Filter by Category
+    if (selectedCategory !== "all") {
+      const itemCat = item.category?.trim() || "Kateqoriyasız";
+      if (itemCat !== selectedCategory) return false;
+    }
+
+    // 3. Filter by Search Query
     const q = searchQuery.trim();
     if (!q) return true;
     const words = normalizeSearchText(q).split(/\s+/).filter(Boolean);
@@ -156,7 +178,10 @@ export default function Products() {
       const res = await fetch(`/api/products/${id}`, {
         method: "DELETE",
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.message || "Məhsul silinərkən xəta baş verdi.");
+      }
       return res.json();
     },
     onSuccess: () => {
@@ -164,8 +189,35 @@ export default function Products() {
       toast({ title: "Silindi!", description: "Məhsul kataloqdan silindi.", variant: "success" });
       setDeleteId(null);
     },
-    onError: () => {
-      toast({ title: "Xəta!", description: "Məhsul silinərkən xəta baş verdi.", variant: "destructive" });
+    onError: (error: any) => {
+      toast({ title: "Xəta!", description: error.message || "Məhsul silinərkən xəta baş verdi.", variant: "destructive" });
+    },
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: async ({ id, isArchived }: { id: number; isArchived: number }) => {
+      const res = await fetch(`/api/products/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isArchived }),
+      });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || "Əməliyyat uğursuz oldu");
+      }
+      return res.json();
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      toast({
+        title: variables.isArchived === 1 ? "Arxivləndi!" : "Bərpa edildi!",
+        description: variables.isArchived === 1 ? "Məhsul arxivə göndərildi." : "Məhsul yenidən aktiv kataloqa qaytarıldı.",
+        variant: "success"
+      });
+      setArchiveId(null);
+    },
+    onError: (error: any) => {
+      toast({ title: "Xəta!", description: error.message || "Əməliyyat zamanı xəta baş verdi.", variant: "destructive" });
     },
   });
 
@@ -232,117 +284,250 @@ export default function Products() {
     );
   }
 
+  // Calculate active and archived products and category maps
+  const activeProducts = (list || []).filter(p => (p as any).isArchived !== 1);
+  const archivedProducts = (list || []).filter(p => (p as any).isArchived === 1);
+
+  const activeCatCounts = new Map<string, number>();
+  activeProducts.forEach(p => {
+    const cat = p.category?.trim() || "Kateqoriyasız";
+    activeCatCounts.set(cat, (activeCatCounts.get(cat) || 0) + 1);
+  });
+
+  const archivedCatCounts = new Map<string, number>();
+  archivedProducts.forEach(p => {
+    const cat = p.category?.trim() || "Kateqoriyasız";
+    archivedCatCounts.set(cat, (archivedCatCounts.get(cat) || 0) + 1);
+  });
+
+  const activeCategories = Array.from(activeCatCounts.keys()).sort();
+  const archivedCategories = Array.from(archivedCatCounts.keys()).sort();
+
+  const totalActiveCount = activeProducts.length;
+  const totalArchivedCount = archivedProducts.length;
+
   return (
-    <div className="space-y-6 animate-in fade-in-0">
-      {/* Top action header */}
-      <div className="flex items-center justify-between">
+    <div className="flex flex-col lg:flex-row gap-6 items-start animate-in fade-in-0">
+      {/* Sol Sidebar: Kateqoriyalar */}
+      <div className="w-full lg:w-60 bg-white border border-gray-100 p-4 rounded-2xl shadow-xs glass-card space-y-4 shrink-0">
         <div>
-          <h2 className="text-2xl font-black text-gray-900 tracking-tight">Məhsul Kataloqu</h2>
-          <p className="text-xs text-gray-400 mt-1">Sistemdəki bütün məhsulların siyahısı və idarəedilməsi</p>
+          <h3 className="text-sm font-black text-gray-950 tracking-tight">Kateqoriyalar</h3>
+          <p className="text-[10px] text-gray-400 font-semibold mt-0.5">Filterləmək üçün seçin</p>
         </div>
 
-        <button
-          onClick={handleOpenNew}
-          className="px-4 py-2.5 bg-primary text-white font-semibold text-sm rounded-xl hover:bg-primary/90 cursor-pointer flex items-center gap-2 shadow-md shadow-primary/10 transition-all hover-elevate"
-        >
-          <Plus className="w-4 h-4" /> Yeni Məhsul
-        </button>
-      </div>
+        {/* Aktiv / Arxiv Tabları */}
+        <div className="flex bg-gray-50 p-1 rounded-xl border border-gray-100/50 text-xs">
+          <button
+            onClick={() => handleTabChange("active")}
+            className={`flex-1 py-1.5 text-center text-[10px] font-extrabold rounded-lg transition-all cursor-pointer ${
+              activeTab === "active"
+                ? "bg-primary text-white shadow-xs"
+                : "text-gray-400 hover:text-gray-600"
+            }`}
+          >
+            Aktiv ({totalActiveCount})
+          </button>
+          <button
+            onClick={() => handleTabChange("archived")}
+            className={`flex-1 py-1.5 text-center text-[10px] font-extrabold rounded-lg transition-all cursor-pointer ${
+              activeTab === "archived"
+                ? "bg-red-600 text-white shadow-xs"
+                : "text-gray-400 hover:text-gray-600"
+            }`}
+          >
+            Arxiv ({totalArchivedCount})
+          </button>
+        </div>
 
-      {/* Search Input bar */}
-      <div className="bg-white border border-gray-100 p-4 rounded-2xl shadow-xs glass-card text-xs font-semibold max-w-md">
-        <div className="space-y-1">
-          <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Məhsul Axtar</label>
-          <input
-            type="text"
-            placeholder="Məhsul adı, kateqoriya və ya təsvir..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50"
-          />
+        {/* Kateqoriyalar Siyahısı */}
+        <div className="space-y-1 max-h-[400px] overflow-y-auto pr-1">
+          <button
+            onClick={() => setSelectedCategory("all")}
+            className={`w-full text-left px-3 py-2 rounded-xl text-[11px] font-semibold flex justify-between items-center transition-all cursor-pointer border ${
+              selectedCategory === "all"
+                ? (activeTab === "active" ? "bg-primary/10 text-primary border-primary/20" : "bg-red-50 text-red-600 border-red-100")
+                : "text-gray-600 hover:bg-gray-50 border-transparent"
+            }`}
+          >
+            <span>Hamısı</span>
+            <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold ${
+              selectedCategory === "all"
+                ? (activeTab === "active" ? "bg-primary text-white" : "bg-red-600 text-white")
+                : "bg-gray-100 text-gray-400"
+            }`}>
+              {activeTab === "active" ? totalActiveCount : totalArchivedCount}
+            </span>
+          </button>
+
+          {(activeTab === "active" ? activeCategories : archivedCategories).map(cat => {
+            const count = (activeTab === "active" ? activeCatCounts : archivedCatCounts).get(cat) || 0;
+            const isSelected = selectedCategory === cat;
+            return (
+              <button
+                key={cat}
+                onClick={() => setSelectedCategory(cat)}
+                className={`w-full text-left px-3 py-2 rounded-xl text-[11px] font-semibold flex justify-between items-center transition-all cursor-pointer border ${
+                  isSelected
+                    ? (activeTab === "active" ? "bg-primary/10 text-primary border-primary/20" : "bg-red-50 text-red-600 border-red-100")
+                    : "text-gray-600 hover:bg-gray-50/50 border-transparent"
+                }`}
+              >
+                <span className="truncate pr-2">{cat}</span>
+                <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold shrink-0 ${
+                  isSelected
+                    ? (activeTab === "active" ? "bg-primary text-white" : "bg-red-600 text-white")
+                    : "bg-gray-100 text-gray-400"
+                }`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Main product table card */}
-      <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-xs glass-card">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm border-collapse min-w-[650px]">
-            <thead>
-              <tr className="border-b border-gray-100 bg-gray-50/50 text-xs font-bold text-gray-400 uppercase tracking-wider">
-                <th className="p-4 w-12 text-center">#</th>
-                <th className="p-4">Ad</th>
-                <th className="p-4">Barkod</th>
-                <th className="p-4">Kateqoriya</th>
-                <th className="p-4">Ölçü Vahidi</th>
-                <th className="p-4">Təsvir (Qeyd)</th>
-                <th className="p-4 text-right pr-6">Əməliyyatlar</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
-                <tr>
-                  <td colSpan={7} className="p-10 text-center text-xs text-gray-400">
-                    Yüklənir...
-                  </td>
+      {/* Sağ Hissə: Məhsul Siyahısı */}
+      <div className="flex-1 w-full space-y-6">
+        {/* Top action header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-black text-gray-900 tracking-tight">
+              {activeTab === "active" ? "Məhsul Kataloqu" : "Arxivlənmiş Məhsullar"}
+            </h2>
+            <p className="text-xs text-gray-400 mt-1">
+              {activeTab === "active" 
+                ? "Sistemdəki bütün məhsulların siyahısı və idarəedilməsi" 
+                : "Tarixçəsi qorunan, lakin aktiv dövriyyədən çıxarılmış məhsullar"}
+            </p>
+          </div>
+
+          {activeTab === "active" && (
+            <button
+              onClick={handleOpenNew}
+              className="px-4 py-2.5 bg-primary text-white font-semibold text-sm rounded-xl hover:bg-primary/90 cursor-pointer flex items-center gap-2 shadow-md shadow-primary/10 transition-all hover-elevate"
+            >
+              <Plus className="w-4 h-4" /> Yeni Məhsul
+            </button>
+          )}
+        </div>
+
+        {/* Search Input bar */}
+        <div className="bg-white border border-gray-100 p-4 rounded-2xl shadow-xs glass-card text-xs font-semibold max-w-md">
+          <div className="space-y-1">
+            <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Məhsul Axtar</label>
+            <input
+              type="text"
+              placeholder="Məhsul adı, kateqoriya və ya təsvir..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50"
+            />
+          </div>
+        </div>
+
+        {/* Main product table card */}
+        <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-xs glass-card">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm border-collapse min-w-[650px]">
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50/50 text-xs font-bold text-gray-400 uppercase tracking-wider">
+                  <th className="p-4 w-12 text-center">#</th>
+                  <th className="p-4">Ad</th>
+                  <th className="p-4">Barkod</th>
+                  <th className="p-4">Kateqoriya</th>
+                  <th className="p-4">Ölçü Vahidi</th>
+                  <th className="p-4">Təsvir (Qeyd)</th>
+                  <th className="p-4 text-right pr-6">Əməliyyatlar</th>
                 </tr>
-              ) : filteredList.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="p-16 text-center text-xs text-gray-400">
-                    {searchQuery ? "Axtarışa uyğun məhsul tapılmadı." : "Kataloq boşdur. Yeni məhsul əlavə edin."}
-                  </td>
-                </tr>
-              ) : (
-                filteredList.map((item, idx) => (
-                  <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/30 transition-all text-xs">
-                    <td className="p-4 text-center font-mono text-gray-400">{idx + 1}</td>
-                    <td className="p-4 font-bold text-gray-900">
-                      <div>{item.name}</div>
-                      {item.warrantyMonths ? (
-                        <span className="inline-block bg-blue-50 text-blue-600 border border-blue-100 px-1.5 py-0.5 rounded-md text-[9px] font-bold mt-1 select-none animate-in fade-in duration-200">
-                          🛡️ {item.warrantyMonths} ay zəmanət
-                        </span>
-                      ) : null}
-                    </td>
-                    <td className="p-4 font-mono text-[10px] text-gray-500 font-bold">{item.barcode || "—"}</td>
-                    <td className="p-4 font-medium text-gray-600">
-                      {item.category ? (
-                        <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-md text-[10px] font-bold">
-                          {item.category}
-                        </span>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td className="p-4 text-gray-500 font-medium">{item.unit}</td>
-                    <td className="p-4 text-gray-400 truncate max-w-xs">{item.description || "—"}</td>
-                    <td className="p-4 text-right pr-6">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => setSelectedProductForLabel(item)}
-                          className="p-2 border border-amber-100 hover:border-amber-200 text-amber-600 hover:text-amber-700 rounded-xl cursor-pointer transition-all bg-white"
-                          title="Qiymət Kağızı Çap Et"
-                        >
-                          <Tag className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleOpenEdit(item)}
-                          className="p-2 border border-gray-100 hover:border-gray-200 text-gray-500 hover:text-gray-900 rounded-xl cursor-pointer transition-all bg-white"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => setDeleteId(item.id)}
-                          className="p-2 border border-red-50 hover:bg-red-50 text-red-500 rounded-xl cursor-pointer transition-all bg-white"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+              </thead>
+              <tbody>
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={7} className="p-10 text-center text-xs text-gray-400">
+                      Yüklənir...
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : filteredList.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="p-16 text-center text-xs text-gray-400">
+                      {searchQuery ? "Axtarışa uyğun məhsul tapılmadı." : "Bu bölmədə məhsul yoxdur."}
+                    </td>
+                  </tr>
+                ) : (
+                  filteredList.map((item, idx) => (
+                    <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/30 transition-all text-xs">
+                      <td className="p-4 text-center font-mono text-gray-400">{idx + 1}</td>
+                      <td className="p-4 font-bold text-gray-900">
+                        <div>{item.name}</div>
+                        {item.warrantyMonths ? (
+                          <span className="inline-block bg-blue-50 text-blue-600 border border-blue-100 px-1.5 py-0.5 rounded-md text-[9px] font-bold mt-1 select-none animate-in fade-in duration-200">
+                            🛡️ {item.warrantyMonths} ay zəmanət
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className="p-4 font-mono text-[10px] text-gray-500 font-bold">{item.barcode || "—"}</td>
+                      <td className="p-4 font-medium text-gray-600">
+                        {item.category ? (
+                          <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-md text-[10px] font-bold">
+                            {item.category}
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td className="p-4 text-gray-500 font-medium">{item.unit}</td>
+                      <td className="p-4 text-gray-400 truncate max-w-xs">{item.description || "—"}</td>
+                      <td className="p-4 text-right pr-6">
+                        <div className="flex items-center justify-end gap-2">
+                          {item.isArchived === 1 ? (
+                            <button
+                              onClick={() => archiveMutation.mutate({ id: item.id, isArchived: 0 })}
+                              className="p-2 border border-green-100 hover:border-green-200 text-green-600 hover:text-green-700 rounded-xl cursor-pointer transition-all bg-white flex items-center gap-1 text-[10px] font-bold"
+                              title="Arxivdən Bərpa Et"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" /> Bərpa Et
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => setSelectedProductForLabel(item)}
+                                className="p-2 border border-amber-100 hover:border-amber-200 text-amber-600 hover:text-amber-700 rounded-xl cursor-pointer transition-all bg-white"
+                                title="Qiymət Kağızı Çap Et"
+                              >
+                                <Tag className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleOpenEdit(item)}
+                                className="p-2 border border-gray-100 hover:border-gray-200 text-gray-500 hover:text-gray-900 rounded-xl cursor-pointer transition-all bg-white"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              {(item as any).hasHistory ? (
+                                <button
+                                  onClick={() => setArchiveId(item.id)}
+                                  className="p-2 border border-blue-100 hover:border-blue-200 hover:bg-blue-50 text-blue-600 rounded-xl cursor-pointer transition-all bg-white flex items-center gap-1 text-[10px] font-bold"
+                                  title="Arxivə Göndər (Tarixçəsi var)"
+                                >
+                                  <Archive className="w-3.5 h-3.5" /> Arxivlə
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => setDeleteId(item.id)}
+                                  className="p-2 border border-red-50 hover:bg-red-50 text-red-500 rounded-xl cursor-pointer transition-all bg-white"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -510,6 +695,33 @@ export default function Products() {
                 className="px-4 py-2 bg-red-600 text-white font-semibold text-xs rounded-xl hover:bg-red-700 cursor-pointer"
               >
                 Sil
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. CONFIRM ARCHIVE MODAL */}
+      {archiveId !== null && (
+        <div className="liquid-glass-overlay">
+          <div className="liquid-glass-card max-w-sm p-6">
+            <h3 className="font-bold text-gray-950 text-base leading-tight font-black">Arxivləşdirməyi təsdiqləyin</h3>
+            <p className="text-xs text-gray-600 mt-2 leading-relaxed font-semibold">
+              Bu məhsulun keçmiş satış/mədaxil tarixçəsi var. Sistemdəki hesabatların pozulmaması üçün o, bazadan tamamilə silinməyəcək, lakin **Arxivə** göndərilərək POS satış və anbar siyahılarından çıxarılacaq.
+            </p>
+
+            <div className="flex gap-3 justify-end pt-5 mt-5 border-t border-gray-50">
+              <button
+                onClick={() => setArchiveId(null)}
+                className="px-4 py-2 border border-gray-200 text-gray-500 font-semibold text-xs rounded-xl hover:bg-gray-50 cursor-pointer"
+              >
+                Ləğv et
+              </button>
+              <button
+                onClick={() => archiveId !== null && archiveMutation.mutate({ id: archiveId, isArchived: 1 })}
+                className="px-4 py-2 bg-primary text-white font-semibold text-xs rounded-xl hover:bg-primary/90 cursor-pointer shadow-md shadow-primary/10 transition-all"
+              >
+                Arxivə Göndər
               </button>
             </div>
           </div>

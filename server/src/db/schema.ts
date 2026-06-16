@@ -26,6 +26,7 @@ export const products = pgTable("products", {
   barcode: text("barcode"),
   trackingType: text("tracking_type").notNull().default("none"),
   warrantyMonths: integer("warranty_months"),
+  isArchived: integer("is_archived").notNull().default(0), // 0 = Active, 1 = Archived
 }, (table) => ({
   productsTenantBarcodeIdx: uniqueIndex("products_tenant_barcode_idx").on(table.tenantId, table.barcode)
 }));

@@ -265,10 +265,30 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
   if (path === "/api/products") {
     if (method === "GET") {
       const rawProducts = getDb("products");
+      const sales = getDb("sales") || [];
+      const returns = getDb("returns") || [];
+
+      // Determine product history
+      const soldProductIds = new Set<number>();
+      sales.forEach((s: any) => {
+        (s.items || []).forEach((item: any) => {
+          if (item.productId) soldProductIds.add(item.productId);
+        });
+      });
+
+      const returnedProductIds = new Set<number>();
+      returns.forEach((r: any) => {
+        (r.items || []).forEach((item: any) => {
+          if (item.productId) returnedProductIds.add(item.productId);
+        });
+      });
+
       const mapped = rawProducts.map(p => ({
         ...p,
         name: p.name || p.productName || "",
-        productName: p.productName || p.name || ""
+        productName: p.productName || p.name || "",
+        isArchived: p.isArchived !== undefined ? p.isArchived : 0,
+        hasHistory: soldProductIds.has(p.id) || returnedProductIds.has(p.id)
       }));
       return jsonResponse(mapped);
     }
@@ -277,11 +297,10 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
       const products = getDb("products");
       const nameVal = body.name || body.productName || "";
 
-      // Validate product name uniqueness and keyword collision (case-insensitive, normalized)
+      // Validate product name uniqueness and keyword collision (case-insensitive, normalized, active only)
       const normalizedNewName = normalizeName(nameVal);
-      const newKeywords = (body.description || "").split(/[,;]+/).map((k: string) => normalizeName(k)).filter(Boolean);
-
       for (const p of products) {
+        if (p.isArchived === 1) continue; // Skip archived products
         const existingNameNormalized = normalizeName(p.name || p.productName || "");
         const existingKeywords = (p.description || p.notes || "").split(/[,;]+/).map((k: string) => normalizeName(k)).filter(Boolean);
 
@@ -319,7 +338,8 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
         salePrice: parseFloat(body.salePrice || 0),
         purchasePrice: parseFloat(body.purchasePrice || 0),
         supplierName: body.supplierName || "",
-        notes: body.description || body.notes || ""
+        notes: body.description || body.notes || "",
+        isArchived: 0
       };
       products.push(newProduct);
       saveDb("products", products);
@@ -340,10 +360,10 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
         const resolvedDescription = body.description !== undefined ? body.description : (products[idx].description || products[idx].notes || "");
 
         const normalizedNewName = normalizeName(resolvedName);
-        const newKeywords = resolvedDescription.split(/[,;]+/).map((k: string) => normalizeName(k)).filter(Boolean);
 
         for (let i = 0; i < products.length; i++) {
           if (products[i].id === id) continue;
+          if (products[i].isArchived === 1) continue; // Skip archived products
           
           const p = products[i];
           const existingNameNormalized = normalizeName(p.name || p.productName || "");
@@ -359,16 +379,30 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
         }
 
         const nameVal = resolvedName;
+        const oldArchived = products[idx].isArchived !== undefined ? products[idx].isArchived : 0;
+        const newArchived = body.isArchived !== undefined ? parseInt(String(body.isArchived)) : oldArchived;
+
         products[idx] = { 
           ...products[idx], 
           ...body,
           name: nameVal,
           productName: nameVal,
           description: resolvedDescription,
-          notes: resolvedDescription
+          notes: resolvedDescription,
+          isArchived: newArchived
         };
         saveDb("products", products);
-        logActivity(`Məhsul yeniləndi: ${products[idx].productName}`);
+
+        if (newArchived !== oldArchived) {
+          if (newArchived === 1) {
+            logActivity(`Məhsul arxivləşdirildi: ${products[idx].productName}`);
+          } else {
+            logActivity(`Məhsul arxivdən bərpa edildi: ${products[idx].productName}`);
+          }
+        } else {
+          logActivity(`Məhsul yeniləndi: ${products[idx].productName}`);
+        }
+
         return jsonResponse(products[idx]);
       }
       return jsonResponse({ message: "Məhsul tapılmadı" }, 404);
@@ -376,6 +410,17 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
     if (method === "DELETE") {
       const idx = products.findIndex(p => p.id === id);
       if (idx !== -1) {
+        // Check history
+        const sales = getDb("sales") || [];
+        const returns = getDb("returns") || [];
+        const hasHistory = sales.some((s: any) => (s.items || []).some((item: any) => item.productId === id)) ||
+                           returns.some((r: any) => (r.items || []).some((item: any) => item.productId === id));
+        if (hasHistory) {
+          return jsonResponse({
+            message: "Bu məhsulu silmək mümkün deyil, çünki onunla bağlı keçmiş satış, qaytarış və ya mədaxil əməliyyatları mövcuddur. Tarixçənin qorunması üçün onu arxivləşdirə bilərsiniz."
+          }, 400);
+        }
+
         const deleted = products.splice(idx, 1)[0];
         saveDb("products", products);
         logActivity(`Məhsul silindi: ${deleted.productName || deleted.name}`);
@@ -1170,7 +1215,8 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
     const entriesList = getDb("stock_entries");
     const salesList = getDb("sales");
     
-    const stockLevels = productsList.map(product => {
+    const activeProducts = productsList.filter(p => p.isArchived !== 1);
+    const stockLevels = activeProducts.map(product => {
       const productEntries = entriesList.filter(e => e.productId === product.id);
       const lastPurchasePrice = productEntries.length > 0 ? productEntries[0].purchasePrice : (product.purchasePrice || 0);
       const lastPurchaseDate = productEntries.length > 0 ? productEntries[0].entryDate : null;
