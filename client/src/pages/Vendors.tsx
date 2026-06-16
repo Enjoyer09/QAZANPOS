@@ -11,6 +11,7 @@ import {
   AlertCircle, 
   DollarSign, 
   FileText,
+  Printer,
   Calendar,
   CreditCard,
   Notebook,
@@ -308,6 +309,132 @@ export default function Vendors() {
       </div>
     );
   }
+
+  const handlePrintPurchase = (purchase: any) => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+
+    const formattedDate = purchase.entryDate ? new Date(purchase.entryDate).toLocaleDateString("az-AZ") : "-";
+    const creditDueDateStr = purchase.creditDueDate ? new Date(purchase.creditDueDate).toLocaleDateString("az-AZ") : "";
+    
+    let serialsHtml = "";
+    if (purchase.serialNumbers && purchase.serialNumbers.length > 0) {
+      serialsHtml = `
+        <div style="margin-top: 20px;">
+          <h3 style="font-size: 12px; font-weight: bold; margin-bottom: 5px; color: #475569; text-transform: uppercase;">Mədaxil Edilən Serial Nömrələri (IMEI):</h3>
+          <div style="display: flex; flex-wrap: wrap; gap: 5px;">
+            ${purchase.serialNumbers.map((sn: string) => `
+              <span style="font-family: monospace; font-size: 10px; font-weight: bold; padding: 3px 6px; border: 1px solid #cbd5e1; border-radius: 4px; background-color: #f8fafc;">${sn}</span>
+            `).join("")}
+          </div>
+        </div>
+      `;
+    }
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Alış Qaiməsi №${purchase.id.toString().padStart(5, "0")}</title>
+          <style>
+            body { font-family: sans-serif; padding: 40px; color: #1e293b; line-height: 1.5; }
+            .header { display: flex; justify-content: space-between; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 20px; }
+            .title { font-size: 24px; font-weight: 900; margin: 0; }
+            .date { font-family: monospace; font-size: 14px; color: #64748b; }
+            .details-table { width: 100%; border-collapse: collapse; margin-top: 20px; margin-bottom: 20px; }
+            .details-table th, .details-table td { padding: 10px; border: 1px solid #e2e8f0; font-size: 12px; }
+            .details-table th { background-color: #f8fafc; font-weight: bold; }
+            .summary-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            .summary-table td { padding: 8px 12px; font-size: 12px; border-bottom: 1px solid #f1f5f9; }
+            .label { color: #64748b; font-weight: bold; }
+            .val { font-weight: bold; text-align: right; }
+            .footer { margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 20px; font-size: 10px; color: #94a3b8; text-align: center; text-transform: uppercase; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <div style="font-size: 10px; font-weight: 800; color: #2563eb; text-transform: uppercase; tracking-wider: 1px;">QAZANPOS MƏDAXİL</div>
+              <h1 class="title">Alış Qaiməsi №${purchase.id.toString().padStart(5, "0")}</h1>
+            </div>
+            <div class="date">${formattedDate}</div>
+          </div>
+
+          <table class="summary-table">
+            <tr>
+              <td class="label">Tədarükçü:</td>
+              <td class="val" style="color: #0f172a;">${selectedVendor?.name || purchase.supplier || "Qeyd olunmayıb"}</td>
+            </tr>
+            <tr>
+              <td class="label">Ödəniş Növü:</td>
+              <td class="val">${purchase.paymentType}</td>
+            </tr>
+            ${purchase.paymentType === "Kart" && purchase.bankName ? `
+              <tr>
+                <td class="label">Bank:</td>
+                <td class="val">${purchase.bankName}</td>
+              </tr>
+            ` : ""}
+            ${purchase.paymentType === "Nisyə" && creditDueDateStr ? `
+              <tr>
+                <td class="label">Son Ödəniş Tarixi:</td>
+                <td class="val">${creditDueDateStr}</td>
+              </tr>
+            ` : ""}
+            <tr>
+              <td class="label">Vergi Rejimi:</td>
+              <td class="val">${purchase.applyEdv === 1 ? "18% ƏDV Daxil" : "ƏDV-siz (Azad)"}</td>
+            </tr>
+            <tr>
+              <td class="label">Ödəniş Statusu:</td>
+              <td class="val" style="color: ${purchase.paymentType === "Nisyə" && purchase.paidStatus !== "paid" ? "#dc2626" : "#16a34a"};">
+                ${purchase.paymentType === "Nisyə" && purchase.paidStatus !== "paid" ? "Borc (Ödənilməyib)" : "Ödənilib"}
+              </td>
+            </tr>
+          </table>
+
+          <h3 style="font-size: 14px; font-weight: bold; margin-top: 30px; margin-bottom: 10px;">Məhsulların Siyahısı:</h3>
+          <table class="details-table">
+            <thead>
+              <tr>
+                <th>Məhsul</th>
+                <th style="text-align: right;">Miqdar</th>
+                <th style="text-align: right;">Alış Qiyməti</th>
+                <th style="text-align: right;">Toplam</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>${purchase.productName}</td>
+                <td style="text-align: right; font-family: monospace;">${purchase.quantity} ${purchase.unit || "ədəd"}</td>
+                <td style="text-align: right; font-family: monospace;">${parseFloat(purchase.purchasePrice || 0).toFixed(2)} ₼</td>
+                <td style="text-align: right; font-family: monospace; font-weight: bold;">${(parseFloat(purchase.quantity) * parseFloat(purchase.purchasePrice || 0)).toFixed(2)} ₼</td>
+              </tr>
+            </tbody>
+          </table>
+
+          ${serialsHtml}
+
+          ${purchase.notes ? `
+            <div style="margin-top: 30px; border-top: 1px dashed #e2e8f0; padding-top: 15px;">
+              <h4 style="font-size: 11px; font-weight: bold; color: #64748b; margin-bottom: 5px; text-transform: uppercase;">Mədaxil Qeydi:</h4>
+              <p style="font-size: 12px; margin: 0; color: #475569; font-style: italic;">${purchase.notes}</p>
+            </div>
+          ` : ""}
+
+          <div class="footer">
+            QAZANPOS Təhlükəsiz Müdaxil Uçotu Sistemi
+          </div>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 250);
+  };
 
   return (
     <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6 select-none">
@@ -1011,7 +1138,7 @@ export default function Vendors() {
 
       {/* MODAL 4: ALIŞ QAİMƏSİ / İCMAL */}
       {selectedPurchase && (
-        <div className="liquid-glass-overlay !z-[99] animate-in fade-in-0 duration-200">
+        <div className="liquid-glass-overlay !z-[150] animate-in fade-in-0 duration-200">
           <div className="liquid-glass-card max-w-lg w-full p-6 space-y-6 text-left relative overflow-hidden">
             <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-primary to-emerald-500"></div>
             
@@ -1121,12 +1248,22 @@ export default function Vendors() {
               </div>
             )}
 
-            <button
-              onClick={() => setSelectedPurchase(null)}
-              className="w-full py-3 bg-gray-950 text-white font-bold rounded-xl text-xs uppercase tracking-wide hover:bg-black transition-all cursor-pointer shadow-md shadow-black/10 hover-elevate"
-            >
-              Bağla
-            </button>
+            <div className="flex gap-2 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => handlePrintPurchase(selectedPurchase)}
+                className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs uppercase tracking-wide transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/10 hover-elevate"
+              >
+                <Printer className="w-3.5 h-3.5" /> Çap Et
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedPurchase(null)}
+                className="flex-1 py-3 bg-gray-900 text-white font-bold rounded-xl text-xs uppercase tracking-wide hover:bg-black transition-all cursor-pointer shadow-md shadow-black/10 hover-elevate text-center"
+              >
+                Bağla
+              </button>
+            </div>
           </div>
         </div>
       )}
