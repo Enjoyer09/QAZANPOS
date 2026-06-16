@@ -1489,7 +1489,7 @@ router.get("/stock/entries", async (req, res) => {
     }
     const entries = await db.query.stockEntries.findMany({
       where: eq(schema.stockEntries.tenantId, req.tenantId),
-      with: { product: true },
+      with: { product: true, serials: true },
       orderBy: [desc(schema.stockEntries.entryDate)],
     });
 
@@ -1506,6 +1506,9 @@ router.get("/stock/entries", async (req, res) => {
       creditDueDate: entry.creditDueDate,
       entryDate: entry.entryDate,
       paidStatus: entry.paidStatus,
+      applyEdv: entry.applyEdv,
+      warehouseId: entry.warehouseId,
+      serialNumbers: entry.serials ? entry.serials.map(s => s.serialNumber) : [],
     }));
 
     res.json(result);

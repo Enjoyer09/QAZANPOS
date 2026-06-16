@@ -78,6 +78,7 @@ export default function Vendors() {
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
   const [isPurchasesModalOpen, setIsPurchasesModalOpen] = useState(false);
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
+  const [selectedPurchase, setSelectedPurchase] = useState<any | null>(null);
 
   // Form states
   const [formData, setFormData] = useState({
@@ -950,10 +951,16 @@ export default function Vendors() {
                       <tbody className="divide-y divide-gray-50 font-bold text-gray-600">
                         {vendorPurchases.map((entry: any) => (
                           <tr key={entry.id} className="hover:bg-gray-50/50 transition-colors">
-                            <td className="py-3 px-4 font-mono font-bold text-gray-900">
+                            <td 
+                              onClick={() => setSelectedPurchase(entry)}
+                              className="py-3 px-4 font-mono font-bold text-primary cursor-pointer hover:underline"
+                            >
                               #{entry.id.toString().padStart(5, "0")}
                             </td>
-                            <td className="py-3 px-4 text-gray-500 font-mono">
+                            <td 
+                              onClick={() => setSelectedPurchase(entry)}
+                              className="py-3 px-4 text-primary font-mono cursor-pointer hover:underline"
+                            >
                               {entry.entryDate ? new Date(entry.entryDate).toLocaleDateString("az-AZ") : "-"}
                             </td>
                             <td className="py-3 px-4 text-gray-900">
@@ -1001,6 +1008,128 @@ export default function Vendors() {
           </div>
         );
       })()}
+
+      {/* MODAL 4: ALIŞ QAİMƏSİ / İCMAL */}
+      {selectedPurchase && (
+        <div className="liquid-glass-overlay !z-[99] animate-in fade-in-0 duration-200">
+          <div className="liquid-glass-card max-w-lg w-full p-6 space-y-6 text-left relative overflow-hidden">
+            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-primary to-emerald-500"></div>
+            
+            <div className="flex justify-between items-start">
+              <div>
+                <span className="text-[9px] font-black text-primary uppercase tracking-wider block">Mədaxil İcmalı</span>
+                <h3 className="text-lg font-black text-gray-950 tracking-tight mt-0.5">
+                  Alış Qaiməsi №{selectedPurchase.id.toString().padStart(5, "0")}
+                </h3>
+              </div>
+              <span className="text-xs text-gray-400 font-mono font-bold">
+                {selectedPurchase.entryDate ? new Date(selectedPurchase.entryDate).toLocaleDateString("az-AZ") : "-"}
+              </span>
+            </div>
+
+            <div className="bg-gray-50/50 border border-gray-100 rounded-2xl p-4 space-y-3 text-xs font-bold text-gray-600">
+              <div className="flex justify-between border-b border-gray-50 pb-2">
+                <span className="text-gray-400">Tədarükçü:</span>
+                <span className="text-gray-900">{selectedVendor?.name || selectedPurchase.supplier || "Qeyd olunmayıb"}</span>
+              </div>
+              <div className="flex justify-between border-b border-gray-50 pb-2">
+                <span className="text-gray-400">Ödəniş Növü:</span>
+                <span className="text-gray-900">{selectedPurchase.paymentType}</span>
+              </div>
+              {selectedPurchase.paymentType === "Kart" && selectedPurchase.bankName && (
+                <div className="flex justify-between border-b border-gray-50 pb-2">
+                  <span className="text-gray-400">Bank:</span>
+                  <span className="text-gray-900">{selectedPurchase.bankName}</span>
+                </div>
+              )}
+              {selectedPurchase.paymentType === "Nisyə" && selectedPurchase.creditDueDate && (
+                <div className="flex justify-between border-b border-gray-50 pb-2">
+                  <span className="text-gray-400">Son Ödəniş Tarixi:</span>
+                  <span className="text-gray-900 font-mono">
+                    {new Date(selectedPurchase.creditDueDate).toLocaleDateString("az-AZ")}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between border-b border-gray-50 pb-2">
+                <span className="text-gray-400">Vergi Rejimi (ƏDV):</span>
+                <span className="text-gray-900">
+                  {selectedPurchase.applyEdv === 1 ? "18% ƏDV Daxil" : "ƏDV-siz (Azad)"}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Ödəniş Statusu:</span>
+                <span className={selectedPurchase.paymentType === "Nisyə" && selectedPurchase.paidStatus !== "paid" ? "text-red-600" : "text-emerald-600"}>
+                  {selectedPurchase.paymentType === "Nisyə" && selectedPurchase.paidStatus !== "paid" ? "Borc (Ödənilməyib)" : "Ödənilib"}
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">Məhsulların Siyahısı</span>
+              <div className="border border-gray-100 rounded-2xl overflow-hidden">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="bg-gray-50 text-[9px] font-black text-gray-400 uppercase tracking-wider border-b border-gray-100">
+                      <th className="py-2.5 px-4">Məhsul</th>
+                      <th className="py-2.5 px-4 text-right">Miqdar</th>
+                      <th className="py-2.5 px-4 text-right">Alış Qiyməti</th>
+                      <th className="py-2.5 px-4 text-right">Toplam</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50 font-bold text-gray-700">
+                    <tr>
+                      <td className="py-3 px-4 text-gray-950">{selectedPurchase.productName}</td>
+                      <td className="py-3 px-4 text-right font-mono text-gray-800">
+                        {selectedPurchase.quantity} {selectedPurchase.unit || "ədəd"}
+                      </td>
+                      <td className="py-3 px-4 text-right font-mono text-gray-750">
+                        {parseFloat(selectedPurchase.purchasePrice || 0).toFixed(2)} ₼
+                      </td>
+                      <td className="py-3 px-4 text-right font-mono text-gray-950">
+                        {(parseFloat(selectedPurchase.quantity) * parseFloat(selectedPurchase.purchasePrice || 0)).toFixed(2)} ₼
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Serial Numbers / IMEIs if present */}
+            {selectedPurchase.serialNumbers && selectedPurchase.serialNumbers.length > 0 && (
+              <div className="space-y-2">
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">
+                  Mədaxil Edilən Serial Nömrələri (IMEI)
+                </span>
+                <div className="bg-blue-50/30 border border-blue-100/50 rounded-2xl p-3 max-h-[120px] overflow-y-auto">
+                  <div className="flex flex-wrap gap-1.5">
+                    {selectedPurchase.serialNumbers.map((sn: string, idx: number) => (
+                      <span key={idx} className="px-2 py-0.5 bg-white border border-blue-100 text-blue-700 font-mono font-bold text-[9px] rounded-lg shadow-2xs">
+                        {sn}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {selectedPurchase.notes && (
+              <div className="space-y-1">
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">Məxaric / Mədaxil Qeydi</span>
+                <p className="text-xs text-gray-500 font-semibold bg-gray-50 border border-gray-100 rounded-xl p-3 leading-relaxed">
+                  {selectedPurchase.notes}
+                </p>
+              </div>
+            )}
+
+            <button
+              onClick={() => setSelectedPurchase(null)}
+              className="w-full py-3 bg-gray-950 text-white font-bold rounded-xl text-xs uppercase tracking-wide hover:bg-black transition-all cursor-pointer shadow-md shadow-black/10 hover-elevate"
+            >
+              Bağla
+            </button>
+          </div>
+        </div>
+      )}
 
     </div>
   );

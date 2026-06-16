@@ -1448,6 +1448,7 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
         paidStatus: body.paymentType === "Nisyə" ? "credit" : "paid",
         applyEdv: body.applyEdv !== undefined && body.applyEdv !== null ? (body.applyEdv ? 1 : 0) : 1,
         warehouseId,
+        serialNumbers: body.serialNumbers || [],
       };
       
       entriesList.unshift(newEntry);
@@ -1466,6 +1467,7 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
               serialNumber: sNum.trim().toUpperCase(),
               status: "in_stock",
               warehouseId,
+              stockEntryId: newEntry.id,
               createdAt: new Date().toISOString()
             });
           });
