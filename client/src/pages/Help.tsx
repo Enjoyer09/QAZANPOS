@@ -622,6 +622,60 @@ export default function Help() {
           </ol>
         </div>
       )
+    },
+    {
+      id: "qaime-duzelis",
+      title: "Keçmiş Mədaxil Qaimələrində Düzəliş (Admin Nəzarəti) 🔒",
+      category: "tehlukesizlik",
+      icon: Lock,
+      content: (
+        <div className="space-y-3 leading-relaxed text-gray-700">
+          <p>
+            Mədaxil zamanı səhv edildikdə, sistem verilənlərin tamlığını qorumaq üçün adi işçilərin qaiməni dəyişməsinə icazə vermir. Düzəliş yalnız <b>Administrator Şifrəsi</b> ilə edilə bilər.
+          </p>
+          <div className="bg-blue-50 border border-blue-100 rounded-xl p-3.5 space-y-1">
+            <span className="text-[10px] font-black text-blue-700 uppercase block tracking-wider">İşləmə Mexanizmi</span>
+            <span className="text-xs text-blue-900 font-semibold block">
+              Admin düzəlişi təsdiqlədiyi an, sistem köhnə mədaxil miqdarını stokdan çıxır, yeni miqdarı əlavə edir və tədarükçü balansındakı nisyə qalıq borcunu avtomatik olaraq yenidən hesablayır.
+            </span>
+          </div>
+          <h4 className="font-extrabold text-gray-900 text-xs mt-3 uppercase tracking-wider">Addım-addım düzəliş qaydası:</h4>
+          <ol className="list-decimal pl-4 space-y-2 text-xs font-semibold">
+            <li><b>Tədarükçü profilinə keçin:</b> Tədarükçülər səhifəsində müvafiq tədarükçünün qarşısındakı <b>"Alışlar"</b> düyməsini sıxın.</li>
+            <li><b>Qaiməni seçin:</b> Açılan siyahıdan səhv olan alış qaiməsinin №-sinə klikləyərək mədaxil icmalını açın.</li>
+            <li><b>Düzəliş et düyməsini sıxın:</b> Modalın altındakı <b>"Düzəliş Et ✏️"</b> düyməsinə klikləyin.</li>
+            <li><b>Dəyişiklikləri daxil edin:</b> Miqdar, alış qiyməti, ödəniş növü və ƏDV statusunu düzəldin.</li>
+            <li><b>Şifrə ilə təsdiqləyin:</b> Düzəlişi saxlamaq üçün administrator şifrəsini yazaraq <b>"Saxla 💾"</b> düyməsinə klikləyin. Fəaliyyət loqlarda avtomatik qeyd olunacaq.</li>
+          </ol>
+        </div>
+      )
+    },
+    {
+      id: "satis-kassir-icmali",
+      title: "Satış Tarixçəsində İşçi və Tarix İcmalı 📊",
+      category: "maliyye",
+      icon: History,
+      content: (
+        <div className="space-y-3 leading-relaxed text-gray-700">
+          <p>
+            Administrator hər bir kassir və ya satıcının mağazada etdiyi satışların dövriyyəsini və qazandırdığı mənfəəti fərdi şəkildə izləyə bilər.
+          </p>
+          <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3.5 space-y-1">
+            <span className="text-[10px] font-black text-emerald-700 uppercase block tracking-wider">İdarəçi İmkanı</span>
+            <span className="text-xs text-emerald-900 font-semibold block">
+              Tarix aralığı və satıcı süzgəci eyni anda tətbiq olunduqda, yuxarıdakı Dövr Gəliri, Dövr Mayası və Dövr Mənfəəti kartları yalnız həmin işçinin seçilmiş tarixlərdəki fəaliyyətinə əsasən avtomatik yenilənir.
+            </span>
+          </div>
+          <h4 className="font-extrabold text-gray-900 text-xs mt-3 uppercase tracking-wider">İstifadə qaydası:</h4>
+          <ol className="list-decimal pl-4 space-y-2 text-xs font-semibold">
+            <li><b>Satış Tarixçəsinə keçin:</b> Menyudan "Satışlar" bölməsinə daxil olun.</li>
+            <li><b>Satıcı süzgəcini seçin:</b> Üstdəki <b>"Satıcı (İşçi)"</b> dropdown menyusundan müvafiq işçinin adını seçin.</li>
+            <li><b>Tarix aralığını müəyyən edin:</b> Başlanğıc və Son tarixlərini yazaraq <b>"Filtrlə"</b> düyməsini sıxın.</li>
+            <li><b>KPI kartları və siyahı:</b> Siyahıda yalnız həmin işçinin satışları görünəcək və yuxarıdakı mənfəət/gəlir məbləğləri həmin süzgəcə uyğun hesablanacaq.</li>
+            <li><b>Sıfırlama:</b> Süzgəci ləğv etmək üçün <b>"Sıfırla"</b> düyməsinə klikləməyiniz kifayətdir.</li>
+          </ol>
+        </div>
+      )
     }
   ];
 

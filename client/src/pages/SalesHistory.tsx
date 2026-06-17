@@ -53,6 +53,7 @@ export default function SalesHistory() {
   const [toDate, setToDate] = useState("");
   const [filterActive, setFilterActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedSeller, setSelectedSeller] = useState("");
 
   // Warranty Lookup Tab States
   const [lookupQuery, setLookupQuery] = useState("");
@@ -91,6 +92,15 @@ export default function SalesHistory() {
     enabled: activeTab === "sales",
   });
 
+  const sellerNames = React.useMemo(() => {
+    if (!sales) return [];
+    const names = new Set<string>();
+    sales.forEach(sale => {
+      if (sale.sellerName) names.add(sale.sellerName);
+    });
+    return Array.from(names).sort();
+  }, [sales]);
+
   const handleFilter = () => {
     setFilterActive(true);
   };
@@ -100,9 +110,16 @@ export default function SalesHistory() {
     setToDate("");
     setFilterActive(false);
     setSearchQuery("");
+    setSelectedSeller("");
   };
 
   const filteredSales = (sales || []).filter((sale) => {
+    // 1. Employee Filter
+    if (selectedSeller && sale.sellerName !== selectedSeller) {
+      return false;
+    }
+
+    // 2. Text Search
     const q = searchQuery.trim().toLowerCase();
     if (!q) return true;
     const formattedId = `#${sale.id.toString().padStart(5, "0")}`;
@@ -267,15 +284,32 @@ export default function SalesHistory() {
               </div>
             </div>
 
-            {/* Date Filter Controls */}
+            {/* Date & Seller Filter Controls */}
             <div className="flex flex-wrap items-end gap-3 bg-white p-3 rounded-2xl border border-gray-100 shadow-xs glass w-full md:w-auto">
+              {isAdmin && (
+                <div className="space-y-1 flex-1 min-w-[140px] sm:flex-initial">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Satıcı (İşçi)</label>
+                  <select
+                    value={selectedSeller}
+                    onChange={(e) => setSelectedSeller(e.target.value)}
+                    className="px-3 py-1.5 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary w-full sm:w-44 bg-gray-50/50 cursor-pointer font-bold text-gray-700"
+                  >
+                    <option value="">Hamısı (Bütün İşçilər)</option>
+                    {sellerNames.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className="space-y-1 flex-1 min-w-[120px] sm:flex-initial">
                 <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Başlanğıc</label>
                 <input
                   type="date"
                   value={fromDate}
                   onChange={(e) => setFromDate(e.target.value)}
-                  className="px-3 py-1.5 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary w-full sm:w-36 bg-gray-50/50"
+                  className="px-3 py-1.5 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary w-full sm:w-36 bg-gray-50/50 font-bold"
                 />
               </div>
               <div className="space-y-1 flex-1 min-w-[120px] sm:flex-initial">
@@ -284,7 +318,7 @@ export default function SalesHistory() {
                   type="date"
                   value={toDate}
                   onChange={(e) => setToDate(e.target.value)}
-                  className="px-3 py-1.5 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary w-full sm:w-36 bg-gray-50/50"
+                  className="px-3 py-1.5 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary w-full sm:w-36 bg-gray-50/50 font-bold"
                 />
               </div>
               <button
@@ -294,7 +328,7 @@ export default function SalesHistory() {
               >
                 Filtrlə
               </button>
-              {filterActive && (
+              {(filterActive || selectedSeller) && (
                 <button
                   onClick={handleReset}
                   className="px-4 py-2 border border-gray-200 text-gray-500 font-semibold text-xs rounded-xl hover:bg-gray-50 cursor-pointer w-full sm:w-auto transition-all"
