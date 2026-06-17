@@ -436,6 +436,110 @@ export default function Vendors() {
     }, 250);
   };
 
+  const handlePrintConsolidatedPurchases = (vendor: any, purchases: any[]) => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+
+    const formattedDate = new Date().toLocaleDateString("az-AZ");
+    const totalVolume = purchases.reduce((acc, entry) => acc + (parseFloat(entry.quantity) * parseFloat(entry.purchasePrice || 0)), 0);
+    const totalPaid = vendor.totalPaid || 0;
+    const remainingDebt = vendor.balance || 0;
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Alış İcmal Qaiməsi: ${vendor.name}</title>
+          <style>
+            body { font-family: sans-serif; padding: 40px; color: #1e293b; line-height: 1.5; }
+            .header { display: flex; justify-content: space-between; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 20px; }
+            .title { font-size: 20px; font-weight: 900; margin: 0; }
+            .date { font-family: monospace; font-size: 14px; color: #64748b; }
+            .details-table { width: 100%; border-collapse: collapse; margin-top: 20px; margin-bottom: 20px; }
+            .details-table th, .details-table td { padding: 10px; border: 1px solid #e2e8f0; font-size: 11px; }
+            .details-table th { background-color: #f8fafc; font-weight: bold; }
+            .summary-table { width: 100%; border-collapse: collapse; margin-top: 20px; margin-bottom: 20px; }
+            .summary-table td { padding: 8px 12px; font-size: 12px; border-bottom: 1px solid #f1f5f9; }
+            .label { color: #64748b; font-weight: bold; }
+            .val { font-weight: bold; text-align: right; }
+            .footer { margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 20px; font-size: 10px; color: #94a3b8; text-align: center; text-transform: uppercase; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <div style="font-size: 10px; font-weight: 800; color: #2563eb; text-transform: uppercase; tracking-wider: 1px;">QAZANPOS HESABAT</div>
+              <h1 class="title">Tədarükçü Alış İcmal Qaiməsi</h1>
+              <div style="font-size: 12px; font-weight: bold; color: #0f172a; margin-top: 5px;">Tədarükçü: ${vendor.name}</div>
+            </div>
+            <div class="date">Çap Tarixi: ${formattedDate}</div>
+          </div>
+
+          <table class="summary-table">
+            <tr>
+              <td class="label">Cəmi Alış Dövriyyəsi:</td>
+              <td class="val" style="color: #0f172a;">${totalVolume.toFixed(2)} ₼</td>
+            </tr>
+            <tr>
+              <td class="label">Ödənilən Ümumi Məbləğ:</td>
+              <td class="val" style="color: #16a34a;">${totalPaid.toFixed(2)} ₼</td>
+            </tr>
+            <tr>
+              <td class="label">Qalıq Borc:</td>
+              <td class="val" style="color: ${remainingDebt > 0 ? "#dc2626" : "#475569"};">
+                ${remainingDebt.toFixed(2)} ₼ ${remainingDebt > 0 ? "(Borcumuz Var)" : "(Ödənilib)"}
+              </td>
+            </tr>
+          </table>
+
+          <h3 style="font-size: 14px; font-weight: bold; margin-top: 30px; margin-bottom: 10px;">Bütün Satınalmaların Siyahısı:</h3>
+          <table class="details-table">
+            <thead>
+              <tr>
+                <th>Mədaxil №</th>
+                <th>Tarix</th>
+                <th>Məhsul</th>
+                <th style="text-align: right;">Miqdar</th>
+                <th style="text-align: right;">Alış Qiyməti</th>
+                <th style="text-align: right;">Cəmi</th>
+                <th>Ödəniş Tipi</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${purchases.map((entry: any) => {
+                const total = parseFloat(entry.quantity) * parseFloat(entry.purchasePrice || 0);
+                const status = entry.paymentType === "Nisyə" && entry.paidStatus !== "paid" ? "Borc" : "Ödənilib";
+                return `
+                  <tr>
+                    <td style="font-family: monospace; font-weight: bold;">#${entry.id.toString().padStart(5, "0")}</td>
+                    <td style="font-family: monospace;">${entry.entryDate ? new Date(entry.entryDate).toLocaleDateString("az-AZ") : "-"}</td>
+                    <td>${entry.productName}</td>
+                    <td style="text-align: right; font-family: monospace;">${entry.quantity} ${entry.unit || "ədəd"}</td>
+                    <td style="text-align: right; font-family: monospace;">${parseFloat(entry.purchasePrice || 0).toFixed(2)} ₼</td>
+                    <td style="text-align: right; font-family: monospace; font-weight: bold;">${total.toFixed(2)} ₼</td>
+                    <td>${entry.paymentType}</td>
+                    <td style="font-weight: bold; color: ${status === "Borc" ? "#dc2626" : "#16a34a"};">${status}</td>
+                  </tr>
+                `;
+              }).join("")}
+            </tbody>
+          </table>
+
+          <div class="footer">
+            QAZANPOS Təhlükəsiz Müdaxil Uçotu Sistemi
+          </div>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 250);
+  };
+
   return (
     <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6 select-none">
       
@@ -1052,7 +1156,30 @@ export default function Vendors() {
                 <span>Alış Tarixçəsi: {selectedVendor.name}</span>
               </h3>
 
-              <div className="py-4 text-left">
+              {vendorPurchases.length > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-3">
+                  <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4 text-left">
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">Cəmi Alış Dövriyyəsi</span>
+                    <span className="text-base font-black text-gray-900 block mt-1">
+                      {vendorPurchases.reduce((acc, entry) => acc + (parseFloat(entry.quantity) * parseFloat(entry.purchasePrice || 0)), 0).toFixed(2)} ₼
+                    </span>
+                  </div>
+                  <div className="bg-emerald-50/50 border border-emerald-100 rounded-2xl p-4 text-left">
+                    <span className="text-[10px] font-black text-emerald-700 uppercase tracking-wider block">Ödənilən Məbləğ</span>
+                    <span className="text-base font-black text-emerald-700 block mt-1">
+                      {(selectedVendor.totalPaid || 0).toFixed(2)} ₼
+                    </span>
+                  </div>
+                  <div className={`${selectedVendor.balance > 0 ? "bg-red-50 border-red-100" : "bg-gray-50 border-gray-100"} border rounded-2xl p-4 text-left`}>
+                    <span className={`text-[10px] font-black ${selectedVendor.balance > 0 ? "text-red-700" : "text-gray-400"} uppercase tracking-wider block`}>Qalıq Borc Statusu</span>
+                    <span className={`text-base font-black ${selectedVendor.balance > 0 ? "text-red-600 animate-pulse" : "text-gray-500"} block mt-1`}>
+                      {selectedVendor.balance > 0 ? `${selectedVendor.balance.toFixed(2)} ₼ (Borc)` : "Tam Ödənilib"}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <div className="py-2 text-left">
                 {isEntriesLoading ? (
                   <div className="text-center py-8 text-xs text-gray-400 font-bold uppercase tracking-wider">
                     Məlumatlar yüklənir...
@@ -1119,7 +1246,16 @@ export default function Vendors() {
                 )}
               </div>
 
-              <div className="flex justify-end pt-3 border-t border-gray-100">
+              <div className="flex justify-end pt-3 border-t border-gray-100 gap-2">
+                {vendorPurchases.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => handlePrintConsolidatedPurchases(selectedVendor, vendorPurchases)}
+                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs uppercase tracking-wide transition-all cursor-pointer text-center flex items-center gap-1.5 shadow-md shadow-emerald-600/10 hover-elevate"
+                  >
+                    <Printer className="w-3.5 h-3.5" /> İcmal Qaiməni Çap Et
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {
