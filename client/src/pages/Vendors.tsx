@@ -80,6 +80,18 @@ export default function Vendors() {
   const [isPurchasesModalOpen, setIsPurchasesModalOpen] = useState(false);
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
   const [selectedPurchase, setSelectedPurchase] = useState<any | null>(null);
+  const [isEditingPurchase, setIsEditingPurchase] = useState(false);
+  const [editPurchaseForm, setEditPurchaseForm] = useState({
+    quantity: "",
+    purchasePrice: "",
+    paymentType: "",
+    bankName: "",
+    creditDueDate: "",
+    supplier: "",
+    notes: "",
+    applyEdv: true,
+    adminPassword: ""
+  });
 
   // Form states
   const [formData, setFormData] = useState({
@@ -202,6 +214,63 @@ export default function Vendors() {
       });
     }
   });
+
+  // Mutation to update stock entry
+  const updatePurchaseMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      const res = await fetch(`/api/stock/entries/${selectedPurchase?.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Mədaxili redaktə edərkən xəta baş verdi");
+      }
+      return res.json();
+    },
+    onSuccess: (updatedEntry) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/stock/entries"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/vendors"] });
+      
+      // Update selectedPurchase dynamically with the new values
+      setSelectedPurchase((prev: any) => ({
+        ...prev,
+        ...updatedEntry,
+        productName: prev?.productName
+      }));
+      
+      setIsEditingPurchase(false);
+      
+      toast({
+        title: "Düzəliş Uğurla Saxlanıldı ✏️",
+        description: "Mədaxil qaiməsi və anbar qalıqları yeniləndi.",
+        variant: "success",
+      });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Xəta Baş Verdi ❌",
+        description: err.message || "Daxil edilən Admin şifrəsi yanlışdır və ya məlumatlar səhvdir.",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const startEditingPurchase = (purchase: any) => {
+    setEditPurchaseForm({
+      quantity: purchase.quantity.toString(),
+      purchasePrice: purchase.purchasePrice.toString(),
+      paymentType: purchase.paymentType,
+      bankName: purchase.bankName || "",
+      creditDueDate: purchase.creditDueDate ? purchase.creditDueDate.split("T")[0] : "",
+      supplier: purchase.supplier || "",
+      notes: purchase.notes || "",
+      applyEdv: purchase.applyEdv !== 0,
+      adminPassword: ""
+    });
+    setIsEditingPurchase(true);
+  };
 
   // Handle Add Supplier Submission
   const handleAddSubmit = (e: React.FormEvent) => {
@@ -1278,128 +1347,296 @@ export default function Vendors() {
           <div className="liquid-glass-card max-w-lg w-full p-6 space-y-6 text-left relative overflow-hidden">
             <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-primary to-emerald-500"></div>
             
-            <div className="flex justify-between items-start">
-              <div>
-                <span className="text-[9px] font-black text-primary uppercase tracking-wider block">Mədaxil İcmalı</span>
-                <h3 className="text-lg font-black text-gray-950 tracking-tight mt-0.5">
-                  Alış Qaiməsi №{selectedPurchase.id.toString().padStart(5, "0")}
-                </h3>
-              </div>
-              <span className="text-xs text-gray-400 font-mono font-bold">
-                {selectedPurchase.entryDate ? new Date(selectedPurchase.entryDate).toLocaleDateString("az-AZ") : "-"}
-              </span>
-            </div>
-
-            <div className="bg-gray-50/50 border border-gray-100 rounded-2xl p-4 space-y-3 text-xs font-bold text-gray-600">
-              <div className="flex justify-between border-b border-gray-50 pb-2">
-                <span className="text-gray-400">Tədarükçü:</span>
-                <span className="text-gray-900">{selectedVendor?.name || selectedPurchase.supplier || "Qeyd olunmayıb"}</span>
-              </div>
-              <div className="flex justify-between border-b border-gray-50 pb-2">
-                <span className="text-gray-400">Ödəniş Növü:</span>
-                <span className="text-gray-900">{selectedPurchase.paymentType}</span>
-              </div>
-              {selectedPurchase.paymentType === "Kart" && selectedPurchase.bankName && (
-                <div className="flex justify-between border-b border-gray-50 pb-2">
-                  <span className="text-gray-400">Bank:</span>
-                  <span className="text-gray-900">{selectedPurchase.bankName}</span>
+            {isEditingPurchase ? (
+              /* EDIT FORM WORKSPACE */
+              <form 
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const payload = {
+                    quantity: parseFloat(editPurchaseForm.quantity),
+                    purchasePrice: parseFloat(editPurchaseForm.purchasePrice),
+                    paymentType: editPurchaseForm.paymentType,
+                    bankName: editPurchaseForm.paymentType === "Kart" ? editPurchaseForm.bankName : null,
+                    creditDueDate: editPurchaseForm.paymentType === "Nisyə" ? editPurchaseForm.creditDueDate : null,
+                    supplier: editPurchaseForm.supplier || null,
+                    notes: editPurchaseForm.notes || null,
+                    vendorId: selectedVendor?.id || null,
+                    applyEdv: editPurchaseForm.applyEdv ? 1 : 0,
+                    adminPassword: editPurchaseForm.adminPassword
+                  };
+                  updatePurchaseMutation.mutate(payload);
+                }}
+                className="space-y-4"
+              >
+                <div>
+                  <span className="text-[9px] font-black text-primary uppercase tracking-wider block">Düzəliş Rejimi</span>
+                  <h3 className="text-lg font-black text-gray-950 tracking-tight mt-0.5">
+                    Qaimə Redaktəsi №{selectedPurchase.id.toString().padStart(5, "0")}
+                  </h3>
+                  <p className="text-[10px] text-gray-400 font-semibold mt-0.5">
+                    Məhsul: {selectedPurchase.productName}
+                  </p>
                 </div>
-              )}
-              {selectedPurchase.paymentType === "Nisyə" && selectedPurchase.creditDueDate && (
-                <div className="flex justify-between border-b border-gray-50 pb-2">
-                  <span className="text-gray-400">Son Ödəniş Tarixi:</span>
-                  <span className="text-gray-900 font-mono">
-                    {new Date(selectedPurchase.creditDueDate).toLocaleDateString("az-AZ")}
-                  </span>
-                </div>
-              )}
-              <div className="flex justify-between border-b border-gray-50 pb-2">
-                <span className="text-gray-400">Vergi Rejimi (ƏDV):</span>
-                <span className="text-gray-900">
-                  {selectedPurchase.applyEdv === 1 ? "18% ƏDV Daxil" : "ƏDV-siz (Azad)"}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Ödəniş Statusu:</span>
-                <span className={selectedPurchase.paymentType === "Nisyə" && selectedPurchase.paidStatus !== "paid" ? "text-red-600" : "text-emerald-600"}>
-                  {selectedPurchase.paymentType === "Nisyə" && selectedPurchase.paidStatus !== "paid" ? "Borc (Ödənilməyib)" : "Ödənilib"}
-                </span>
-              </div>
-            </div>
 
-            <div className="space-y-2">
-              <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">Məhsulların Siyahısı</span>
-              <div className="border border-gray-100 rounded-2xl overflow-hidden">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="bg-gray-50 text-[9px] font-black text-gray-400 uppercase tracking-wider border-b border-gray-100">
-                      <th className="py-2.5 px-4">Məhsul</th>
-                      <th className="py-2.5 px-4 text-right">Miqdar</th>
-                      <th className="py-2.5 px-4 text-right">Alış Qiyməti</th>
-                      <th className="py-2.5 px-4 text-right">Toplam</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50 font-bold text-gray-700">
-                    <tr>
-                      <td className="py-3 px-4 text-gray-950">{selectedPurchase.productName}</td>
-                      <td className="py-3 px-4 text-right font-mono text-gray-800">
-                        {selectedPurchase.quantity} {selectedPurchase.unit || "ədəd"}
-                      </td>
-                      <td className="py-3 px-4 text-right font-mono text-gray-750">
-                        {parseFloat(selectedPurchase.purchasePrice || 0).toFixed(2)} ₼
-                      </td>
-                      <td className="py-3 px-4 text-right font-mono text-gray-950">
-                        {(parseFloat(selectedPurchase.quantity) * parseFloat(selectedPurchase.purchasePrice || 0)).toFixed(2)} ₼
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Serial Numbers / IMEIs if present */}
-            {selectedPurchase.serialNumbers && selectedPurchase.serialNumbers.length > 0 && (
-              <div className="space-y-2">
-                <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">
-                  Mədaxil Edilən Serial Nömrələri (IMEI)
-                </span>
-                <div className="bg-blue-50/30 border border-blue-100/50 rounded-2xl p-3 max-h-[120px] overflow-y-auto">
-                  <div className="flex flex-wrap gap-1.5">
-                    {selectedPurchase.serialNumbers.map((sn: string, idx: number) => (
-                      <span key={idx} className="px-2 py-0.5 bg-white border border-blue-100 text-blue-700 font-mono font-bold text-[9px] rounded-lg shadow-2xs">
-                        {sn}
-                      </span>
-                    ))}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-gray-700 block mb-1">Miqdar ({selectedPurchase.unit || "ədəd"}) *</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      required
+                      value={editPurchaseForm.quantity}
+                      onChange={(e) => setEditPurchaseForm({ ...editPurchaseForm, quantity: e.target.value })}
+                      className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary focus:bg-white text-gray-900 transition-all font-mono"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-gray-700 block mb-1">Alış Qiyməti (₼) *</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      required
+                      value={editPurchaseForm.purchasePrice}
+                      onChange={(e) => setEditPurchaseForm({ ...editPurchaseForm, purchasePrice: e.target.value })}
+                      className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary focus:bg-white text-gray-900 transition-all font-mono"
+                    />
                   </div>
                 </div>
-              </div>
-            )}
 
-            {selectedPurchase.notes && (
-              <div className="space-y-1">
-                <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">Məxaric / Mədaxil Qeydi</span>
-                <p className="text-xs text-gray-500 font-semibold bg-gray-50 border border-gray-100 rounded-xl p-3 leading-relaxed">
-                  {selectedPurchase.notes}
-                </p>
-              </div>
-            )}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-gray-700 block mb-1">Ödəniş Üsulu</label>
+                    <select
+                      value={editPurchaseForm.paymentType}
+                      onChange={(e) => setEditPurchaseForm({ ...editPurchaseForm, paymentType: e.target.value })}
+                      className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary focus:bg-white text-gray-900 transition-all cursor-pointer"
+                    >
+                      <option value="Nəğd">Nəğd Pul 💵</option>
+                      <option value="Kart">Bank Kartı 💳</option>
+                      <option value="Kart2Kart">Kartdan-Karta 📲</option>
+                      <option value="Köçürmə">Bank Köçürməsi 🏢</option>
+                      <option value="Nisyə">Nisyə (Borc) ⏳</option>
+                    </select>
+                  </div>
+                  
+                  {editPurchaseForm.paymentType === "Kart" ? (
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-gray-700 block mb-1">Bank Adı</label>
+                      <input
+                        type="text"
+                        value={editPurchaseForm.bankName}
+                        onChange={(e) => setEditPurchaseForm({ ...editPurchaseForm, bankName: e.target.value })}
+                        placeholder="Məs. Kapital, ABB"
+                        className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary focus:bg-white text-gray-900 transition-all"
+                      />
+                    </div>
+                  ) : editPurchaseForm.paymentType === "Nisyə" ? (
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-gray-700 block mb-1">Son Ödəniş Tarixi</label>
+                      <input
+                        type="date"
+                        required
+                        value={editPurchaseForm.creditDueDate}
+                        onChange={(e) => setEditPurchaseForm({ ...editPurchaseForm, creditDueDate: e.target.value })}
+                        className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary focus:bg-white text-gray-900 transition-all font-mono"
+                      />
+                    </div>
+                  ) : null}
+                </div>
 
-            <div className="flex gap-2 pt-2 border-t border-gray-100">
-              <button
-                type="button"
-                onClick={() => handlePrintPurchase(selectedPurchase)}
-                className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs uppercase tracking-wide transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/10 hover-elevate"
-              >
-                <Printer className="w-3.5 h-3.5" /> Çap Et
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedPurchase(null)}
-                className="flex-1 py-3 bg-gray-900 text-white font-bold rounded-xl text-xs uppercase tracking-wide hover:bg-black transition-all cursor-pointer shadow-md shadow-black/10 hover-elevate text-center"
-              >
-                Bağla
-              </button>
-            </div>
+                <div className="flex items-center gap-2 py-1">
+                  <input
+                    type="checkbox"
+                    id="editApplyEdv"
+                    checked={editPurchaseForm.applyEdv}
+                    onChange={(e) => setEditPurchaseForm({ ...editPurchaseForm, applyEdv: e.target.checked })}
+                    className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary cursor-pointer"
+                  />
+                  <label htmlFor="editApplyEdv" className="text-xs font-bold text-gray-750 cursor-pointer select-none">
+                    18% ƏDV Tətbiq Edilsin
+                  </label>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-gray-700 block mb-1">Qeyd / Şərh</label>
+                  <input
+                    type="text"
+                    value={editPurchaseForm.notes}
+                    onChange={(e) => setEditPurchaseForm({ ...editPurchaseForm, notes: e.target.value })}
+                    placeholder="Qeydlər..."
+                    className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary focus:bg-white text-gray-900 transition-all"
+                  />
+                </div>
+
+                <div className="p-3 bg-red-50/50 border border-red-100 rounded-2xl space-y-2">
+                  <div className="flex items-center gap-1.5 text-[10px] font-black text-red-700 uppercase tracking-wider">
+                    <Lock className="w-3.5 h-3.5 text-red-600" />
+                    <span>Düzəlişin Təsdiqlənməsi</span>
+                  </div>
+                  <div className="space-y-1 text-left">
+                    <label className="text-[9px] font-black text-red-600 block mb-0.5">Admin Şifrəsi *</label>
+                    <input
+                      type="password"
+                      required
+                      value={editPurchaseForm.adminPassword}
+                      onChange={(e) => setEditPurchaseForm({ ...editPurchaseForm, adminPassword: e.target.value })}
+                      placeholder="Təsdiqləmək üçün Admin şifrəsini yazın..."
+                      className="w-full px-3 py-1.5 bg-white border border-red-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-red-500 focus:border-red-500 text-gray-950 font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-2 border-t border-gray-100">
+                  <button
+                    type="submit"
+                    disabled={updatePurchaseMutation.isPending}
+                    className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs uppercase tracking-wide transition-all cursor-pointer text-center shadow-md shadow-emerald-600/10 hover-elevate"
+                  >
+                    {updatePurchaseMutation.isPending ? "Saxlanılır..." : "Saxla 💾"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingPurchase(false)}
+                    className="flex-1 py-3 bg-gray-950 text-white font-bold rounded-xl text-xs uppercase tracking-wide hover:bg-black transition-all cursor-pointer shadow-md shadow-black/10 hover-elevate text-center"
+                  >
+                    Geri
+                  </button>
+                </div>
+              </form>
+            ) : (
+              /* VIEW MODE */
+              <>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <span className="text-[9px] font-black text-primary uppercase tracking-wider block">Mədaxil İcmalı</span>
+                    <h3 className="text-lg font-black text-gray-950 tracking-tight mt-0.5">
+                      Alış Qaiməsi №{selectedPurchase.id.toString().padStart(5, "0")}
+                    </h3>
+                  </div>
+                  <span className="text-xs text-gray-400 font-mono font-bold">
+                    {selectedPurchase.entryDate ? new Date(selectedPurchase.entryDate).toLocaleDateString("az-AZ") : "-"}
+                  </span>
+                </div>
+
+                <div className="bg-gray-50/50 border border-gray-100 rounded-2xl p-4 space-y-3 text-xs font-bold text-gray-600">
+                  <div className="flex justify-between border-b border-gray-50 pb-2">
+                    <span className="text-gray-400">Tədarükçü:</span>
+                    <span className="text-gray-900">{selectedVendor?.name || selectedPurchase.supplier || "Qeyd olunmayıb"}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-gray-50 pb-2">
+                    <span className="text-gray-400">Ödəniş Növü:</span>
+                    <span className="text-gray-900">{selectedPurchase.paymentType}</span>
+                  </div>
+                  {selectedPurchase.paymentType === "Kart" && selectedPurchase.bankName && (
+                    <div className="flex justify-between border-b border-gray-50 pb-2">
+                      <span className="text-gray-400">Bank:</span>
+                      <span className="text-gray-900">{selectedPurchase.bankName}</span>
+                    </div>
+                  )}
+                  {selectedPurchase.paymentType === "Nisyə" && selectedPurchase.creditDueDate && (
+                    <div className="flex justify-between border-b border-gray-50 pb-2">
+                      <span className="text-gray-400">Son Ödəniş Tarixi:</span>
+                      <span className="text-gray-900 font-mono">
+                        {new Date(selectedPurchase.creditDueDate).toLocaleDateString("az-AZ")}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex justify-between border-b border-gray-50 pb-2">
+                    <span className="text-gray-400">Vergi Rejimi (ƏDV):</span>
+                    <span className="text-gray-900">
+                      {selectedPurchase.applyEdv === 1 ? "18% ƏDV Daxil" : "ƏDV-siz (Azad)"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Ödəniş Statusu:</span>
+                    <span className={selectedPurchase.paymentType === "Nisyə" && selectedPurchase.paidStatus !== "paid" ? "text-red-600" : "text-emerald-600"}>
+                      {selectedPurchase.paymentType === "Nisyə" && selectedPurchase.paidStatus !== "paid" ? "Borc (Ödənilməyib)" : "Ödənilib"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">Məhsulların Siyahısı</span>
+                  <div className="border border-gray-100 rounded-2xl overflow-hidden">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="bg-gray-50 text-[9px] font-black text-gray-400 uppercase tracking-wider border-b border-gray-100">
+                          <th className="py-2.5 px-4">Məhsul</th>
+                          <th className="py-2.5 px-4 text-right">Miqdar</th>
+                          <th className="py-2.5 px-4 text-right">Alış Qiyməti</th>
+                          <th className="py-2.5 px-4 text-right">Toplam</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50 font-bold text-gray-700">
+                        <tr>
+                          <td className="py-3 px-4 text-gray-950">{selectedPurchase.productName}</td>
+                          <td className="py-3 px-4 text-right font-mono text-gray-800">
+                            {selectedPurchase.quantity} {selectedPurchase.unit || "ədəd"}
+                          </td>
+                          <td className="py-3 px-4 text-right font-mono text-gray-750">
+                            {parseFloat(selectedPurchase.purchasePrice || 0).toFixed(2)} ₼
+                          </td>
+                          <td className="py-3 px-4 text-right font-mono text-gray-950">
+                            {(parseFloat(selectedPurchase.quantity) * parseFloat(selectedPurchase.purchasePrice || 0)).toFixed(2)} ₼
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Serial Numbers / IMEIs if present */}
+                {selectedPurchase.serialNumbers && selectedPurchase.serialNumbers.length > 0 && (
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">
+                      Mədaxil Edilən Serial Nömrələri (IMEI)
+                    </span>
+                    <div className="bg-blue-50/30 border border-blue-100/50 rounded-2xl p-3 max-h-[120px] overflow-y-auto">
+                      <div className="flex flex-wrap gap-1.5">
+                        {selectedPurchase.serialNumbers.map((sn: string, idx: number) => (
+                          <span key={idx} className="px-2 py-0.5 bg-white border border-blue-100 text-blue-700 font-mono font-bold text-[9px] rounded-lg shadow-2xs">
+                            {sn}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {selectedPurchase.notes && (
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">Məxaric / Mədaxil Qeydi</span>
+                    <p className="text-xs text-gray-500 font-semibold bg-gray-50 border border-gray-100 rounded-xl p-3 leading-relaxed">
+                      {selectedPurchase.notes}
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex gap-2 pt-2 border-t border-gray-100">
+                  <button
+                    type="button"
+                    onClick={() => handlePrintPurchase(selectedPurchase)}
+                    className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs uppercase tracking-wide transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/10 hover-elevate"
+                  >
+                    <Printer className="w-3.5 h-3.5" /> Çap Et
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => startEditingPurchase(selectedPurchase)}
+                    className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs uppercase tracking-wide transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 shadow-md shadow-blue-600/10 hover-elevate"
+                  >
+                    Düzəliş Et ✏️
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPurchase(null)}
+                    className="flex-1 py-3 bg-gray-900 text-white font-bold rounded-xl text-xs uppercase tracking-wide hover:bg-black transition-all cursor-pointer shadow-md shadow-black/10 hover-elevate text-center"
+                  >
+                    Bağla
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
