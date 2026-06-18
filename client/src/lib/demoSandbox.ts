@@ -744,12 +744,22 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
 
   if (path === "/api/sales") {
     if (method === "GET") {
-      const sales = getDb("sales");
+      const rawSales = getDb("sales") || [];
+      const serials = getDb("product_serials") || [];
+      const returns = getDb("returns") || [];
+      const mapped = rawSales.map(s => {
+        const saleReturns = returns.filter((r: any) => r.saleId === s.id);
+        return {
+          ...s,
+          serials: serials.filter((ser: any) => ser.saleId === s.id),
+          returns: saleReturns
+        };
+      });
       if (userRole !== "Admin") {
         const normalized = userUsername ? userUsername.trim().toLowerCase() : "";
-        return jsonResponse(sales.filter(s => (s.sellerName || "").trim().toLowerCase() === normalized));
+        return jsonResponse(mapped.filter(s => (s.sellerName || "").trim().toLowerCase() === normalized));
       }
-      return jsonResponse(sales);
+      return jsonResponse(mapped);
     }
     if (method === "POST") {
       const body = getBody();
@@ -1005,6 +1015,16 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
     }
     if (method === "POST") {
       const body = getBody();
+      if (userRole !== "Admin") {
+        if (!body.adminPassword) {
+          return jsonResponse({ message: "Bu əməliyyat üçün Admin şifrəsi tələb olunur." }, 401);
+        }
+        const users = getDb("users") || [];
+        const adminUser = users.find((u: any) => u.role === "Admin" && u.password === body.adminPassword.trim());
+        if (!adminUser) {
+          return jsonResponse({ message: "Daxil etdiyiniz Admin şifrəsi yanlışdır." }, 401);
+        }
+      }
       const returns = getDb("returns");
       const nextId = returns.length > 0 ? Math.max(...returns.map(r => r.id)) + 1 : 1;
       

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
+import { useToast } from "../components/Toast.tsx";
 import {
   History,
   Search,
@@ -17,7 +18,10 @@ import {
   AlertCircle,
   ShoppingBag,
   Truck,
-  Lock
+  Lock,
+  RotateCcw,
+  Check,
+  X
 } from "lucide-react";
 
 interface Sale {
@@ -35,6 +39,9 @@ interface Sale {
   paymentStatus: string;
   sellerName?: string | null;
   items?: any[];
+  returns?: any[];
+  serials?: any[];
+  warehouseId?: number | null;
 }
 
 const paymentBadges: Record<string, string> = {
@@ -47,6 +54,151 @@ const paymentBadges: Record<string, string> = {
 
 export default function SalesHistory() {
   const [activeTab, setActiveTab] = useState<"sales" | "warranty" | "lossSales">("sales");
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  // Return Modal States
+  const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
+  const [selectedSaleForReturn, setSelectedSaleForReturn] = useState<Sale | null>(null);
+  const [returnQuantities, setReturnQuantities] = useState<Record<number, string>>({}); // productId -> qty
+  const [returnStatuses, setReturnStatuses] = useState<Record<number, "returned_to_stock" | "defective">>({}); // productId -> status
+  const [returnSerials, setReturnSerials] = useState<Record<number, string[]>>({}); // productId -> serial numbers array
+  const [returnReason, setReturnReason] = useState("");
+  const [returnAdminPassword, setReturnAdminPassword] = useState("");
+  const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
+
+  const getSaleReturnableQty = (sale: Sale) => {
+    let totalSold = 0;
+    if (sale.items) {
+      totalSold = sale.items.reduce((sum, item) => sum + Number(item.quantity), 0);
+    }
+    let totalReturned = 0;
+    if (sale.returns) {
+      for (const ret of sale.returns) {
+        if (ret.items) {
+          totalReturned += ret.items.reduce((sum: number, ri: any) => sum + Number(ri.quantity), 0);
+        }
+      }
+    }
+    return totalSold - totalReturned;
+  };
+
+  const handleInitiateReturn = (sale: Sale) => {
+    setSelectedSaleForReturn(sale);
+    setReturnReason("");
+    setReturnAdminPassword("");
+    
+    const initialQuantities: Record<number, string> = {};
+    const initialStatuses: Record<number, "returned_to_stock" | "defective"> = {};
+    const initialSerials: Record<number, string[]> = {};
+    
+    if (sale.items) {
+      sale.items.forEach((item) => {
+        initialQuantities[item.productId] = "0";
+        initialStatuses[item.productId] = "returned_to_stock";
+        initialSerials[item.productId] = [];
+      });
+    }
+    
+    setReturnQuantities(initialQuantities);
+    setReturnStatuses(initialStatuses);
+    setReturnSerials(initialSerials);
+    setIsReturnModalOpen(true);
+  };
+
+  const handleSubmitReturn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedSaleForReturn) return;
+
+    // Validate that at least one item has a return quantity > 0
+    const itemsToReturn: any[] = [];
+    let hasInvalidQuantity = false;
+    let errorMessage = "";
+
+    selectedSaleForReturn.items?.forEach((item) => {
+      const isSerialized = item.product?.trackingType === "serialized";
+      let qty = 0;
+      let serials: string[] = [];
+
+      if (isSerialized) {
+        serials = returnSerials[item.productId] || [];
+        qty = serials.length;
+      } else {
+        qty = parseFloat(returnQuantities[item.productId] || "0");
+      }
+
+      if (qty > 0) {
+        // Calculate max returnable
+        let alreadyReturned = 0;
+        if (selectedSaleForReturn.returns) {
+          for (const ret of selectedSaleForReturn.returns) {
+            const retItem = ret.items?.find((ri: any) => ri.productId === item.productId);
+            if (retItem) {
+              alreadyReturned += Number(retItem.quantity);
+            }
+          }
+        }
+        const maxReturnable = Number(item.quantity) - alreadyReturned;
+        if (qty > maxReturnable) {
+          hasInvalidQuantity = true;
+          errorMessage = `${item.product?.name || item.productName || "Məhsul"} üçün maksimum qaytarıla bilən miqdar: ${maxReturnable}`;
+          return;
+        }
+
+        itemsToReturn.push({
+          productId: item.productId,
+          quantity: qty,
+          salePrice: Number(item.unitPrice || item.salePrice || 0),
+          purchasePrice: Number(item.purchasePrice || 0),
+          status: returnStatuses[item.productId] || "returned_to_stock",
+          serialNumbers: serials
+        });
+      }
+    });
+
+    if (hasInvalidQuantity) {
+      toast({ title: "Xəta", description: errorMessage, variant: "destructive" });
+      return;
+    }
+
+    if (itemsToReturn.length === 0) {
+      toast({ title: "Xəta", description: "Qaytarmaq üçün ən azı bir məhsulun miqdarı təyin edilməlidir.", variant: "destructive" });
+      return;
+    }
+
+    setIsSubmittingReturn(true);
+    try {
+      const res = await fetch("/api/returns", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-role": user?.role || "Staff",
+          "x-user-username": user?.username || ""
+        },
+        body: JSON.stringify({
+          saleId: selectedSaleForReturn.id,
+          reason: returnReason,
+          warehouseId: selectedSaleForReturn.warehouseId,
+          adminPassword: returnAdminPassword,
+          items: itemsToReturn
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Geri qaytarış tamamlanarkən xəta baş verdi.");
+      }
+
+      toast({ title: "Uğurlu", description: "Geri qaytarış uğurla rəsmiləşdirildi.", variant: "success" });
+      setIsReturnModalOpen(false);
+      setSelectedSaleForReturn(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
+    } catch (err: any) {
+      toast({ title: "Xəta", description: err.message, variant: "destructive" });
+    } finally {
+      setIsSubmittingReturn(false);
+    }
+  };
 
   // Sales History Tab States
   const [fromDate, setFromDate] = useState("");
@@ -470,11 +622,22 @@ export default function SalesHistory() {
                             </span>
                           </td>
                           <td className="p-4 text-right pr-6">
-                            <Link href={`/satislar/${sale.id}`}>
-                              <button className="p-2 border border-gray-100 hover:border-gray-200 text-gray-500 hover:text-primary rounded-xl cursor-pointer bg-white transition-all">
-                                <Eye className="w-3.5 h-3.5" />
-                              </button>
-                            </Link>
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Link href={`/satislar/${sale.id}`}>
+                                <button className="p-2 border border-gray-100 hover:border-gray-200 text-gray-500 hover:text-primary rounded-xl cursor-pointer bg-white transition-all" title="Bax">
+                                  <Eye className="w-3.5 h-3.5" />
+                                </button>
+                              </Link>
+                              {getSaleReturnableQty(sale) > 0 && (
+                                <button
+                                  onClick={() => handleInitiateReturn(sale)}
+                                  className="p-2 border border-red-100 hover:border-red-200 text-red-500 hover:text-red-700 hover:bg-red-50/30 rounded-xl cursor-pointer bg-white transition-all"
+                                  title="Geri Qaytar"
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -831,6 +994,236 @@ export default function SalesHistory() {
               </div>
             </div>
           )}
+        </div>
+      )}
+      {/* Geri Qaytarış Modalı */}
+      {isReturnModalOpen && selectedSaleForReturn && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white border border-gray-100 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden glass-card relative animate-in zoom-in-95 duration-200">
+            {/* Top Border Line */}
+            <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-red-500 to-amber-500"></div>
+
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-5 border-b border-gray-100 mt-1">
+              <div>
+                <h3 className="text-base font-black text-gray-900 flex items-center gap-2">
+                  <RotateCcw className="w-5 h-5 text-red-500" />
+                  Məhsulların Geri Qaytarılması
+                </h3>
+                <p className="text-[10px] text-gray-400 font-bold mt-1 uppercase tracking-wider">
+                  Qaimə №: #{selectedSaleForReturn.id.toString().padStart(5, "0")} | Müştəri: {selectedSaleForReturn.customerName || "Nəğd Satış"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsReturnModalOpen(false);
+                  setSelectedSaleForReturn(null);
+                }}
+                className="p-1.5 hover:bg-gray-100 rounded-xl text-gray-400 hover:text-gray-600 transition-all cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Form Content */}
+            <form onSubmit={handleSubmitReturn} className="flex-1 flex flex-col overflow-hidden">
+              <div className="p-6 overflow-y-auto space-y-6 flex-1 text-xs">
+                {/* Sale Items List */}
+                <div className="space-y-4">
+                  <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Satılmış Məhsullar</h4>
+                  <div className="space-y-3">
+                    {selectedSaleForReturn.items?.map((item: any) => {
+                      const isSerialized = item.product?.trackingType === "serialized";
+
+                      // Calculate max returnable
+                      let alreadyReturned = 0;
+                      if (selectedSaleForReturn.returns) {
+                        for (const ret of selectedSaleForReturn.returns) {
+                          const retItem = ret.items?.find((ri: any) => ri.productId === item.productId);
+                          if (retItem) {
+                            alreadyReturned += Number(retItem.quantity);
+                          }
+                        }
+                      }
+                      const maxReturnable = Number(item.quantity) - alreadyReturned;
+
+                      // Filter serials sold in this sale
+                      const productSerials = (selectedSaleForReturn.serials || []).filter(
+                        (s: any) => s.productId === item.productId && (s.status === "sold" || s.returnId === null)
+                      );
+
+                      return (
+                        <div key={item.id} className="p-4 bg-gray-50/70 border border-gray-100/50 rounded-xl space-y-3">
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                            <div>
+                              <span className="font-bold text-gray-900 block">{item.product?.name || item.productName || "Məhsul"}</span>
+                              <span className="text-[10px] text-gray-400 font-semibold mt-0.5 block">
+                                Satılıb: {item.quantity} {item.product?.unit || "ədəd"} | Qaytarılıb: {alreadyReturned} | Qiymət: {Number(item.unitPrice || item.salePrice || 0).toFixed(2)} ₼
+                              </span>
+                            </div>
+                            
+                            {maxReturnable > 0 ? (
+                              <span className="bg-red-50 text-red-600 border border-red-100/40 px-2 py-0.5 rounded-md text-[9px] font-bold self-start sm:self-center">
+                                Qaytarıla bilən: {maxReturnable} {item.product?.unit || "ədəd"}
+                              </span>
+                            ) : (
+                              <span className="bg-green-50 text-green-700 border border-green-100/40 px-2 py-0.5 rounded-md text-[9px] font-bold self-start sm:self-center">
+                                Tamamilə qaytarılıb ✓
+                              </span>
+                            )}
+                          </div>
+
+                          {maxReturnable > 0 && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-gray-200/50 pt-3">
+                              {/* Left Column: Return Qty / Serials Selector */}
+                              <div className="space-y-1.5">
+                                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Qaytarılan Miqdar *</label>
+                                {isSerialized ? (
+                                  <div className="space-y-2">
+                                    <span className="text-[10px] text-amber-700 font-bold block mb-1">
+                                      Geri qaytarılacaq IMEI / S/N seçin:
+                                    </span>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {productSerials.map((s: any) => {
+                                        const isChecked = (returnSerials[item.productId] || []).includes(s.serialNumber);
+                                        return (
+                                          <button
+                                            type="button"
+                                            key={s.id}
+                                            onClick={() => {
+                                              const current = returnSerials[item.productId] || [];
+                                              let next: string[];
+                                              if (isChecked) {
+                                                next = current.filter(x => x !== s.serialNumber);
+                                              } else {
+                                                next = [...current, s.serialNumber];
+                                              }
+                                              setReturnSerials(prev => ({ ...prev, [item.productId]: next }));
+                                            }}
+                                            className={`px-2 py-1 rounded-lg border text-[10px] font-mono font-bold transition-all cursor-pointer ${
+                                              isChecked
+                                                ? "bg-red-600 border-red-600 text-white shadow-xs"
+                                                : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
+                                            }`}
+                                          >
+                                            {s.serialNumber}
+                                          </button>
+                                        );
+                                      })}
+                                      {productSerials.length === 0 && (
+                                        <span className="text-[10px] text-gray-400 italic">Sifarişin serial nömrəsi tapılmadı.</span>
+                                      )}
+                                    </div>
+                                    <span className="text-[10px] font-bold text-gray-900 block mt-1">
+                                      Seçilən: {(returnSerials[item.productId] || []).length} ədəd
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    min="0"
+                                    max={maxReturnable}
+                                    placeholder="0"
+                                    value={returnQuantities[item.productId] || ""}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setReturnQuantities(prev => ({ ...prev, [item.productId]: val }));
+                                    }}
+                                    className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-red-500 bg-white font-bold"
+                                  />
+                                )}
+                              </div>
+
+                              {/* Right Column: Disposition Status */}
+                              <div className="space-y-1.5">
+                                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Məhsulun Vəziyyəti (Disposition) *</label>
+                                <select
+                                  value={returnStatuses[item.productId] || "returned_to_stock"}
+                                  onChange={(e) => {
+                                    const val = e.target.value as "returned_to_stock" | "defective";
+                                    setReturnStatuses(prev => ({ ...prev, [item.productId]: val }));
+                                  }}
+                                  className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-red-500 bg-white cursor-pointer font-bold text-gray-700"
+                                >
+                                  <option value="returned_to_stock">♻️ Anbara Qaytarılsın (Yenidən Satışa Yararlıdır)</option>
+                                  <option value="defective">⚠️ Qüsurludur/Yararsızdır (Anbara QAYITMASIN / Zay Edilsin)</option>
+                                </select>
+                                <p className="text-[9px] text-gray-400 leading-normal">
+                                  {returnStatuses[item.productId] === "defective"
+                                    ? "Qüsurlu seçildikdə, məhsul aktiv satış balansına bərpa edilmir və zay kateqoriyasına silinir."
+                                    : "Anbara qaytarılsın seçildikdə, miqdar dərhal həmin anbarın balansına bərpa edilir."}
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Reason Note */}
+                <div className="space-y-1.5">
+                  <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Geri Qaytarılma Səbəbi</label>
+                  <textarea
+                    placeholder="Məs. Müştəri razı qalmadı, Defekt aşkarlandı və s."
+                    rows={2}
+                    value={returnReason}
+                    onChange={(e) => setReturnReason(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-red-500 bg-white"
+                  />
+                </div>
+
+                {/* Admin Password Block */}
+                <div className="p-4 bg-red-50/50 border border-red-100 rounded-xl space-y-3">
+                  <div className="flex items-center gap-2 text-red-800 font-bold">
+                    <Lock className="w-4 h-4" />
+                    <h5 className="text-[11px] uppercase tracking-wider">Təsdiqləmə Tələb Olunur</h5>
+                  </div>
+                  <p className="text-[10px] text-red-700/80 leading-normal">
+                    Qaytarış əməliyyatını tamamlamaq üçün mağaza administratorunun sistem şifrəsini daxil edin. Bu, dövriyyə balansının düzgünlüyü üçün məcburidir.
+                  </p>
+                  <div className="space-y-1">
+                    <input
+                      type="password"
+                      placeholder="Admin Şifrəsi"
+                      required
+                      value={returnAdminPassword}
+                      onChange={(e) => setReturnAdminPassword(e.target.value)}
+                      className="w-full max-w-xs px-3.5 py-2 border border-red-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-red-500 bg-white font-mono text-xs font-bold"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-4 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsReturnModalOpen(false);
+                    setSelectedSaleForReturn(null);
+                  }}
+                  className="px-4 py-2 border border-gray-200 text-gray-500 font-semibold rounded-xl hover:bg-gray-100 cursor-pointer transition-all"
+                >
+                  İmtina
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingReturn}
+                  className="px-5 py-2.5 bg-red-600 text-white font-semibold rounded-xl hover:bg-red-700 cursor-pointer disabled:opacity-50 transition-all flex items-center gap-1.5 shadow-md shadow-red-600/10 hover-elevate"
+                >
+                  {isSubmittingReturn ? "Rəsmiləşdirilir..." : (
+                    <>
+                      <RotateCcw className="w-4 h-4" /> Qaytarışı Təsdiqlə
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

@@ -2162,7 +2162,8 @@ router.get("/sales", async (req, res) => {
       with: { 
         payments: true, 
         returns: { with: { items: true } },
-        items: { with: { product: true } }
+        items: { with: { product: true } },
+        serials: true
       },
       orderBy: [desc(schema.sales.saleDate)],
     });
@@ -2688,10 +2689,29 @@ router.get("/returns/:id", async (req, res) => {
   }
 });
 
-// Process a return
 router.post("/returns", async (req, res) => {
   try {
-    const { saleId, reason, items, warehouseId } = req.body;
+    const { saleId, reason, items, warehouseId, adminPassword } = req.body;
+    const userRole = req.headers["x-user-role"] as string;
+
+    if (userRole !== "Admin") {
+      if (!adminPassword) {
+        return res.status(401).json({ message: "Geri qaytarış əməliyyatı üçün Admin şifrəsi tələb olunur." });
+      }
+
+      // Verify the admin user's password
+      const adminUser = await db.query.users.findFirst({
+        where: and(
+          eq(schema.users.tenantId, req.tenantId),
+          eq(schema.users.role, "Admin"),
+          eq(schema.users.password, adminPassword.trim())
+        )
+      });
+
+      if (!adminUser) {
+        return res.status(401).json({ message: "Daxil etdiyiniz Admin şifrəsi yanlışdır." });
+      }
+    }
 
     if (!items || items.length === 0) {
       return res.status(400).json({ message: "Qaytarılan məhsullar daxil edilməlidir" });
