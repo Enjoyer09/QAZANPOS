@@ -19,7 +19,10 @@ import {
   Globe,
   CreditCard,
   Calendar,
-  Warehouse
+  Warehouse,
+  History,
+  Zap,
+  Lock
 } from "lucide-react";
 
 interface HelpTopic {
@@ -673,6 +676,37 @@ export default function Help() {
             <li><b>Tarix aralığını müəyyən edin:</b> Başlanğıc və Son tarixlərini yazaraq <b>"Filtrlə"</b> düyməsini sıxın.</li>
             <li><b>KPI kartları və siyahı:</b> Siyahıda yalnız həmin işçinin satışları görünəcək və yuxarıdakı mənfəət/gəlir məbləğləri həmin süzgəcə uyğun hesablanacaq.</li>
             <li><b>Sıfırlama:</b> Süzgəci ləğv etmək üçün <b>"Sıfırla"</b> düyməsinə klikləməyiniz kifayətdir.</li>
+          </ol>
+        </div>
+      )
+    },
+    {
+      id: "pos-surətli-mehsul",
+      title: "⚡ POS Terminalda Sürətli Məhsul Yaratma və Müvəqqəti Satış",
+      category: "anbar",
+      icon: Zap,
+      content: (
+        <div className="space-y-3 leading-relaxed text-gray-700">
+          <p>
+            Məhsul axtarışı zamanı barkod və ya ad kataloqda tapılmadıqda, kassa ekranını tərk etmədən sürətli şəkildə satış etmək üçün iki fərqli seçim təqdim olunur.
+          </p>
+          <div className="bg-purple-50 border border-purple-100 rounded-xl p-3.5 space-y-1">
+            <span className="text-[10px] font-black text-purple-700 uppercase block tracking-wider">İki Seçimin Fərqi</span>
+            <span className="text-xs text-purple-900 font-semibold block">
+              <b>Kataloqda Yeni Məhsul Yarat</b> seçimi malı daimi olaraq bazaya və kateqoriyalara yazır. <b>Müvəqqəti Sərbəst Satış</b> isə kataloqu zibilləməmək üçün yalnız bu satış sənədinə aid edilən birdəfəlik məhsul yaradır.
+            </span>
+          </div>
+          <h4 className="font-extrabold text-gray-900 text-xs mt-3 uppercase tracking-wider">İstifadə qaydaları:</h4>
+          <ol className="list-decimal pl-4 space-y-2 text-xs font-semibold">
+            <li>
+              <b>Axtarış edin:</b> POS terminalda axtarış sahəsinə məhsulun adını və ya barkodunu daxil edin. Skan etdiyiniz barkod və ya yazdığınız ad tapılmadıqda, ekranda dərhal iki düyməli shortcut paneli açılacaq.
+            </li>
+            <li>
+              <b>Daimi Kataloq Məhsulu Yaratmaq:</b> panelindən <b>"+ Kataloqda Yeni Məhsul Yarat"</b> düyməsinə klikləyin. Açılan modalda məhsul adı (axtardığınız ad bura avtomatik yazılır), qiymət, barkod, kateqoriya və ölçü vahidini təyin edib yadda saxlayın. Məhsul kataloqa yazılacak və avtomatik səbətə əlavə olunacaq.
+            </li>
+            <li>
+              <b>Müvəqqəti Sərbəst Satış (Custom Item):</b> <b>"⚡ Müvəqqəti Sərbəst Satış Et"</b> düyməsinə klikləyin. Yalnız qiymət və adı yazaraq səbətə əlavə edin. Bu məhsul gələcək satış axtarışlarında çıxmayacaq, lakin bu qaimənin çekində, faktura tarixində və maliyyə hesabatlarında öz adı ilə görünəcək.
+            </li>
           </ol>
         </div>
       )

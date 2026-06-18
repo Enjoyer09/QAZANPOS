@@ -13,6 +13,8 @@ import {
   UserPlus,
   AlertTriangle,
   Globe,
+  Zap,
+  X,
 } from "lucide-react";
 import { 
   cacheProducts, 
@@ -106,6 +108,21 @@ export default function POS() {
   const [notes, setNotes] = useState("");
   const [salesChannel, setSalesChannel] = useState<string>("Mağaza");
   const [applyEdv, setApplyEdv] = useState(true);
+
+  // Quick Create Modal States
+  const [isQuickCreateOpen, setIsQuickCreateOpen] = useState(false);
+  const [quickCreateName, setQuickCreateName] = useState("");
+  const [quickCreatePrice, setQuickCreatePrice] = useState("");
+  const [quickCreateBarcode, setQuickCreateBarcode] = useState("");
+  const [quickCreateCategory, setQuickCreateCategory] = useState("Ümumi");
+  const [quickCreateUnit, setQuickCreateUnit] = useState("ədəd");
+  const [isSubmittingQuickCreate, setIsSubmittingQuickCreate] = useState(false);
+
+  // Custom Item Modal States
+  const [isCustomItemOpen, setIsCustomItemOpen] = useState(false);
+  const [customItemName, setCustomItemName] = useState("");
+  const [customItemPrice, setCustomItemPrice] = useState("");
+  const [isSubmittingCustomItem, setIsSubmittingCustomItem] = useState(false);
 
   // POS Mode State
   const [posMode, setPosMode] = useState<"sale" | "return">("sale");
@@ -258,14 +275,14 @@ export default function POS() {
   });  // Scanning State & Helpers
   const [scanInput, setScanInput] = useState("");
 
-  const addProductToBasket = (prod: any, serialNum?: string | null) => {
+  const addProductToBasket = (prod: any, serialNum?: string | null, bypassStockCheck = false, customSalePrice?: number) => {
     const qty = 1;
     
     // Check if adding exceeds stock (only in sale mode)
     const existingInBasket = basket.find((item) => item.productId === prod.productId);
     const currentBasketQty = existingInBasket ? existingInBasket.quantity : 0;
     
-    if (posMode === "sale" && currentBasketQty + qty > prod.currentQuantity) {
+    if (posMode === "sale" && !bypassStockCheck && currentBasketQty + qty > prod.currentQuantity) {
       toast({
         title: "Xəta!",
         description: (isAdmin || currentUser?.staffCanViewStockBalances !== 0)
@@ -296,6 +313,7 @@ export default function POS() {
             return {
               ...item,
               quantity: item.quantity + qty,
+              salePrice: customSalePrice !== undefined ? customSalePrice : item.salePrice,
               serialNumbers: updatedSerials,
             };
           }
@@ -310,12 +328,149 @@ export default function POS() {
           productName: prod.productName,
           unit: prod.unit,
           quantity: qty,
-          salePrice: prod.lastSalePrice || prod.lastPurchasePrice || 0,
-          minPrice: prod.lastPurchasePrice,
+          salePrice: customSalePrice !== undefined ? customSalePrice : (prod.lastSalePrice || prod.lastPurchasePrice || 0),
+          minPrice: prod.lastPurchasePrice || 0,
           serialNumbers: serialNum ? [serialNum] : [],
           category: prod.category,
         },
       ]);
+    }
+  };
+
+  // Submit Quick Create product to DB and add to basket
+  const handleQuickCreateSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickCreateName.trim()) {
+      toast({ title: "Xəta!", description: "Məhsul adı daxil edilməlidir.", variant: "destructive" });
+      return;
+    }
+    if (!quickCreatePrice || parseFloat(quickCreatePrice) <= 0) {
+      toast({ title: "Xəta!", description: "Düzgün satış qiyməti daxil edilməlidir.", variant: "destructive" });
+      return;
+    }
+
+    setIsSubmittingQuickCreate(true);
+    try {
+      const res = await fetch("/api/products", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-role": user?.role || "Staff",
+          "x-user-username": user?.username || ""
+        },
+        body: JSON.stringify({
+          name: quickCreateName.trim(),
+          category: quickCreateCategory,
+          unit: quickCreateUnit,
+          barcode: quickCreateBarcode.trim() || null,
+          trackingType: "standard",
+          salePrice: parseFloat(quickCreatePrice)
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Məhsul yaradılarkən xəta baş verdi.");
+      }
+
+      const createdProduct = await res.json();
+      
+      // Add immediately to basket
+      const mappedForBasket = {
+        productId: createdProduct.id,
+        productName: createdProduct.name,
+        unit: createdProduct.unit,
+        currentQuantity: 0,
+        lastSalePrice: parseFloat(quickCreatePrice),
+        lastPurchasePrice: 0,
+        category: createdProduct.category
+      };
+
+      addProductToBasket(mappedForBasket, null, true, parseFloat(quickCreatePrice));
+      
+      // Invalidate stock query to update search list
+      queryClient.invalidateQueries({ queryKey: ["/api/stock/levels"] });
+      
+      toast({ title: "Uğurlu!", description: `"${createdProduct.name}" kataloqa yaradıldı və səbətə əlavə olundu.`, variant: "success" });
+      
+      // Reset forms
+      setIsQuickCreateOpen(false);
+      setQuickCreateName("");
+      setQuickCreatePrice("");
+      setQuickCreateBarcode("");
+      setQuickCreateCategory("Ümumi");
+      setQuickCreateUnit("ədəd");
+      setProductSearchQuery(""); // Clear search bar
+    } catch (err: any) {
+      toast({ title: "Xəta!", description: err.message, variant: "destructive" });
+    } finally {
+      setIsSubmittingQuickCreate(false);
+    }
+  };
+
+  // Submit Custom Item (background create and add to basket)
+  const handleCustomItemSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customItemName.trim()) {
+      toast({ title: "Xəta!", description: "Məhsul adı daxil edilməlidir.", variant: "destructive" });
+      return;
+    }
+    if (!customItemPrice || parseFloat(customItemPrice) <= 0) {
+      toast({ title: "Xəta!", description: "Düzgün satış qiyməti daxil edilməlidir.", variant: "destructive" });
+      return;
+    }
+
+    setIsSubmittingCustomItem(true);
+    try {
+      // Background product creation
+      const res = await fetch("/api/products", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-role": user?.role || "Staff",
+          "x-user-username": user?.username || ""
+        },
+        body: JSON.stringify({
+          name: `[Sərbəst] ${customItemName.trim()}`,
+          category: "Sərbəst Satış",
+          unit: "ədəd",
+          trackingType: "standard"
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Müvəqqəti məhsul yaradılarkən xəta baş verdi.");
+      }
+
+      const createdProduct = await res.json();
+      
+      // Add immediately to basket
+      const mappedForBasket = {
+        productId: createdProduct.id,
+        productName: createdProduct.name,
+        unit: createdProduct.unit,
+        currentQuantity: 0,
+        lastSalePrice: parseFloat(customItemPrice),
+        lastPurchasePrice: 0,
+        category: createdProduct.category
+      };
+
+      addProductToBasket(mappedForBasket, null, true, parseFloat(customItemPrice));
+      
+      // Invalidate query
+      queryClient.invalidateQueries({ queryKey: ["/api/stock/levels"] });
+      
+      toast({ title: "Uğurlu!", description: `"${customItemName}" müvəqqəti satış kimi səbətə əlavə olundu.`, variant: "success" });
+      
+      setIsCustomItemOpen(false);
+      setCustomItemName("");
+      setCustomItemPrice("");
+      setProductSearchQuery(""); // Clear search bar
+    } catch (err: any) {
+      toast({ title: "Xəta!", description: err.message, variant: "destructive" });
+    } finally {
+      setIsSubmittingCustomItem(false);
     }
   };
 
@@ -992,7 +1147,42 @@ export default function POS() {
                   Axtarış Nəticələri ({searchedProducts.length})
                 </span>
                 {searchedProducts.length === 0 ? (
-                  <p className="text-xs text-gray-400 py-3 text-center">Axtarışa uyğun məhsul tapılmadı.</p>
+                  <div className="p-4 bg-gray-50/50 border border-gray-100 rounded-xl space-y-3.5 text-center animate-in fade-in duration-200">
+                    <p className="text-xs text-gray-400 font-semibold">🔍 Axtarışa uyğun məhsul tapılmadı.</p>
+                    <div className="flex flex-col sm:flex-row gap-2 justify-center items-center">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setQuickCreateName(productSearchQuery.trim());
+                          const query = productSearchQuery.trim();
+                          if (/^[0-9]{8,15}$/.test(query)) {
+                            setQuickCreateBarcode(query);
+                            setQuickCreateName("");
+                          } else {
+                            setQuickCreateBarcode("");
+                          }
+                          setQuickCreatePrice("");
+                          setQuickCreateCategory("Ümumi");
+                          setQuickCreateUnit("ədəd");
+                          setIsQuickCreateOpen(true);
+                        }}
+                        className="w-full sm:w-auto px-3.5 py-2 bg-primary text-white text-[10px] font-black uppercase tracking-wider rounded-lg hover:bg-primary/95 cursor-pointer transition-all flex items-center justify-center gap-1.5 hover-elevate shadow-xs"
+                      >
+                        ➕ Kataloqda Yeni Məhsul Yarat
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCustomItemName(productSearchQuery.trim());
+                          setCustomItemPrice("");
+                          setIsCustomItemOpen(true);
+                        }}
+                        className="w-full sm:w-auto px-3.5 py-2 bg-purple-600 text-white text-[10px] font-black uppercase tracking-wider rounded-lg hover:bg-purple-700 cursor-pointer transition-all flex items-center justify-center gap-1.5 hover-elevate shadow-xs"
+                      >
+                        ⚡ Müvəqqəti Sərbəst Satış Et
+                      </button>
+                    </div>
+                  </div>
                 ) : (
                   searchedProducts.map((p) => {
                     const price = p.lastSalePrice || p.lastPurchasePrice || 0;
@@ -1660,6 +1850,190 @@ export default function POS() {
               </div>
             </div>
 
+          </div>
+        </div>
+      )}
+      {/* Sürətli Məhsul Yaratma Modalı */}
+      {isQuickCreateOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white border border-gray-100 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4 relative animate-in zoom-in-95 duration-200">
+            {/* Top Border Line */}
+            <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-t-2xl"></div>
+
+            <div className="flex items-center justify-between mt-2">
+              <h3 className="text-base font-black text-gray-900 flex items-center gap-2">
+                <Plus className="w-5 h-5 text-primary" />
+                Kataloqda Yeni Məhsul Yarat
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsQuickCreateOpen(false)}
+                className="p-1 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-600 transition-all cursor-pointer animate-in fade-in duration-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleQuickCreateSubmit} className="space-y-4 text-xs font-semibold">
+              {/* Product Name */}
+              <div className="space-y-1.5">
+                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Məhsulun Adı *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Məs. Şokolad Alpin Gold"
+                  value={quickCreateName}
+                  onChange={(e) => setQuickCreateName(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-white text-xs font-bold"
+                />
+              </div>
+
+              {/* Price & Barcode Grid */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Satış Qiyməti (₼) *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="0.00"
+                    value={quickCreatePrice}
+                    onChange={(e) => setQuickCreatePrice(cleanNumberInput(e.target.value))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-white text-xs font-mono font-bold"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Barkod</label>
+                  <input
+                    type="text"
+                    placeholder="Skan edin və ya boş buraxın"
+                    value={quickCreateBarcode}
+                    onChange={(e) => setQuickCreateBarcode(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-white text-xs font-bold"
+                  />
+                </div>
+              </div>
+
+              {/* Category & Unit Grid */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Kateqoriya *</label>
+                  <select
+                    value={quickCreateCategory}
+                    onChange={(e) => setQuickCreateCategory(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-white text-xs font-bold text-gray-700 cursor-pointer"
+                  >
+                    <option value="Ümumi">Ümumi</option>
+                    <option value="Ərzaq">Ərzaq</option>
+                    <option value="Geyim">Geyim</option>
+                    <option value="Elektronika">Elektronika</option>
+                    <option value="Kosmetika">Kosmetika</option>
+                    <option value="Digər">Digər</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Ölçü Vahidi *</label>
+                  <select
+                    value={quickCreateUnit}
+                    onChange={(e) => setQuickCreateUnit(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-white text-xs font-bold text-gray-700 cursor-pointer"
+                  >
+                    <option value="ədəd">ədəd</option>
+                    <option value="kq">kq</option>
+                    <option value="litr">litr</option>
+                    <option value="metr">metr</option>
+                    <option value="paket">paket</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Modal Footer Buttons */}
+              <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setIsQuickCreateOpen(false)}
+                  className="px-4 py-2 border border-gray-200 text-gray-500 font-semibold rounded-xl hover:bg-gray-100 cursor-pointer transition-all"
+                >
+                  İmtina
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingQuickCreate}
+                  className="px-5 py-2 bg-primary text-white font-bold rounded-xl hover:bg-primary/95 cursor-pointer disabled:opacity-50 transition-all shadow-md shadow-primary/10"
+                >
+                  {isSubmittingQuickCreate ? "Yaradılır..." : "Yarat və Səbətə At"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Müvəqqəti Sərbəst Satış Modalı */}
+      {isCustomItemOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white border border-gray-100 rounded-2xl shadow-2xl max-w-sm w-full p-6 space-y-4 relative animate-in zoom-in-95 duration-200">
+            {/* Top Border Line */}
+            <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-purple-500 to-indigo-500 rounded-t-2xl"></div>
+
+            <div className="flex items-center justify-between mt-2">
+              <h3 className="text-base font-black text-gray-900 flex items-center gap-2">
+                <Zap className="w-5 h-5 text-purple-600" />
+                Müvəqqəti Sərbəst Satış
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsCustomItemOpen(false)}
+                className="p-1 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-600 transition-all cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCustomItemSubmit} className="space-y-4 text-xs font-semibold">
+              {/* Product Name */}
+              <div className="space-y-1.5">
+                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Məhsulun/Xidmətin Adı *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Məs. Qeyri-kataloq məhsulu"
+                  value={customItemName}
+                  onChange={(e) => setCustomItemName(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-purple-600 bg-white text-xs font-bold"
+                />
+              </div>
+
+              {/* Price */}
+              <div className="space-y-1.5">
+                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Satış Qiyməti (₼) *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="0.00"
+                  value={customItemPrice}
+                  onChange={(e) => setCustomItemPrice(cleanNumberInput(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-purple-600 bg-white text-xs font-mono font-bold"
+                />
+              </div>
+
+              {/* Modal Footer Buttons */}
+              <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setIsCustomItemOpen(false)}
+                  className="px-4 py-2 border border-gray-200 text-gray-500 font-semibold rounded-xl hover:bg-gray-100 cursor-pointer transition-all"
+                >
+                  İmtina
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingCustomItem}
+                  className="px-5 py-2 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 cursor-pointer disabled:opacity-50 transition-all shadow-md shadow-purple-600/10"
+                >
+                  {isSubmittingCustomItem ? "Əlavə edilir..." : "Səbətə Əlavə Et"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
