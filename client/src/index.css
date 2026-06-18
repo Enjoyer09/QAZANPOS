@@ -308,4 +308,18 @@
   }
 }
 
+/* Enable text selection and copying across the entire application */
+body, div, span, p, h1, h2, h3, h4, h5, h6, td, th, li, a, input, textarea, label {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+}
+
+/* Maintain non-selectable behavior for interactive controls to prevent UI drag highlights */
+button, button *, svg, svg * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
 
