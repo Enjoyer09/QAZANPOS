@@ -68,7 +68,22 @@ export default function POS() {
   const isAdmin = user?.role === "Admin";
 
   // Basket State
-  const [basket, setBasket] = useState<BasketItem[]>([]);
+  const [basket, setBasket] = useState<BasketItem[]>(() => {
+    try {
+      const saved = localStorage.getItem("qazanpos_pos_basket");
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("qazanpos_pos_basket", JSON.stringify(basket));
+    } catch (e) {
+      console.error("Persisting basket failed:", e);
+    }
+  }, [basket]);
   const [editingPrices, setEditingPrices] = useState<Record<number, string>>({});
   const [editingQuantities, setEditingQuantities] = useState<Record<number, string>>({});
   const [selectedProductId, setSelectedProductId] = useState("");
