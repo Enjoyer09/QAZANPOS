@@ -63,6 +63,7 @@ export const products = pgTable("products", {
   trackingType: text("tracking_type").notNull().default("none"),
   warrantyMonths: integer("warranty_months"),
   isArchived: integer("is_archived").notNull().default(0), // 0 = Active, 1 = Archived
+  vendorId: integer("vendor_id").references(() => vendors.id, { onDelete: "set null" }),
 }, (table) => ({
   productsTenantBarcodeIdx: uniqueIndex("products_tenant_barcode_idx").on(table.tenantId, table.barcode)
 }));

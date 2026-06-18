@@ -1201,7 +1201,7 @@ router.post("/products", async (req, res) => {
     if (!await checkUserPermission(req, "staffCanManageCatalog")) {
       return res.status(403).json({ message: "Bu əməliyyat üçün səlahiyyətiniz yoxdur." });
     }
-    const { name, category, unit, description, barcode, trackingType, serialNumber, warrantyMonths } = req.body;
+    const { name, category, unit, description, barcode, trackingType, serialNumber, warrantyMonths, vendorId } = req.body;
     if (!name) return res.status(400).json({ message: "Ad tələb olunur" });
 
     // Validate product name uniqueness and keyword collision (case-insensitive, normalized)
@@ -1284,6 +1284,7 @@ router.post("/products", async (req, res) => {
           barcode: barcode || null,
           trackingType: trackingType || "none",
           warrantyMonths: warrantyMonths ? parseInt(String(warrantyMonths)) : null,
+          vendorId: vendorId ? parseInt(String(vendorId)) : null,
         })
         .returning();
 
@@ -1341,7 +1342,7 @@ router.put("/products/:id", async (req, res) => {
       return res.status(403).json({ message: "Bu əməliyyat üçün səlahiyyətiniz yoxdur." });
     }
     const id = parseInt(req.params.id);
-    const { name, category, unit, description, barcode, trackingType, warrantyMonths, isArchived } = req.body;
+    const { name, category, unit, description, barcode, trackingType, warrantyMonths, isArchived, vendorId } = req.body;
 
     // Fetch existing product to resolve current name/description if missing in req.body
     const currentProduct = await db.query.products.findFirst({
@@ -1410,6 +1411,7 @@ router.put("/products/:id", async (req, res) => {
         trackingType: trackingType || "none",
         warrantyMonths: warrantyMonths ? parseInt(String(warrantyMonths)) : null,
         isArchived: isArchived !== undefined ? parseInt(String(isArchived)) : undefined,
+        vendorId: vendorId !== undefined ? (vendorId ? parseInt(String(vendorId)) : null) : undefined,
       })
       .where(and(eq(schema.products.id, id), eq(schema.products.tenantId, req.tenantId)))
       .returning();

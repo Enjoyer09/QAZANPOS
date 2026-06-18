@@ -16,6 +16,7 @@ interface Product {
   warrantyMonths?: number | null;
   isArchived?: number;
   hasHistory?: boolean;
+  vendorId?: number | null;
 }
 
 const emptyProduct = {
@@ -27,6 +28,7 @@ const emptyProduct = {
   trackingType: "none",
   serialNumber: "",
   warrantyMonths: "",
+  vendorId: "",
 };
 
 export default function Products() {
@@ -72,6 +74,16 @@ export default function Products() {
     queryFn: async () => {
       const res = await fetch("/api/settings");
       if (!res.ok) return { storeName: "BirSaaS Store" };
+      return res.json();
+    }
+  });
+
+  // Fetch vendors list
+  const { data: vendors } = useQuery<any[]>({
+    queryKey: ["/api/vendors"],
+    queryFn: async () => {
+      const res = await fetch("/api/vendors");
+      if (!res.ok) throw new Error();
       return res.json();
     }
   });
@@ -238,6 +250,7 @@ export default function Products() {
       trackingType: product.trackingType || "none",
       serialNumber: "",
       warrantyMonths: product.warrantyMonths ? String(product.warrantyMonths) : "",
+      vendorId: product.vendorId ? String(product.vendorId) : "",
     });
     setIsOpen(true);
   };
@@ -436,6 +449,7 @@ export default function Products() {
                   <th className="p-4">Barkod</th>
                   <th className="p-4">Kateqoriya</th>
                   <th className="p-4">Ölçü Vahidi</th>
+                  <th className="p-4">Tədarükçü</th>
                   <th className="p-4">Təsvir (Qeyd)</th>
                   <th className="p-4 text-right pr-6">Əməliyyatlar</th>
                 </tr>
@@ -443,13 +457,13 @@ export default function Products() {
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan={7} className="p-10 text-center text-xs text-gray-400">
+                    <td colSpan={8} className="p-10 text-center text-xs text-gray-400">
                       Yüklənir...
                     </td>
                   </tr>
                 ) : filteredList.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-16 text-center text-xs text-gray-400">
+                    <td colSpan={8} className="p-16 text-center text-xs text-gray-400">
                       {searchQuery ? "Axtarışa uyğun məhsul tapılmadı." : "Bu bölmədə məhsul yoxdur."}
                     </td>
                   </tr>
@@ -476,6 +490,13 @@ export default function Products() {
                         )}
                       </td>
                       <td className="p-4 text-gray-500 font-medium">{item.unit}</td>
+                      <td className="p-4 font-semibold text-gray-700">
+                        {item.vendorId && vendors ? (
+                          vendors.find(v => v.id === item.vendorId)?.name || "—"
+                        ) : (
+                          "—"
+                        )}
+                      </td>
                       <td className="p-4 text-gray-400 truncate max-w-xs">{item.description || "—"}</td>
                       <td className="p-4 text-right pr-6">
                         <div className="flex items-center justify-end gap-2">
@@ -615,6 +636,22 @@ export default function Products() {
                   onChange={(e) => setFormData((prev) => ({ ...prev, category: e.target.value }))}
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50"
                 />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Tədarükçü (Firma)</label>
+                <select
+                  value={formData.vendorId || ""}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, vendorId: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 cursor-pointer font-bold text-gray-700"
+                >
+                  <option value="">Seçilməyib (Yoxdur)</option>
+                  {(vendors || []).map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="space-y-1.5">

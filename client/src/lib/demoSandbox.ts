@@ -587,7 +587,8 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
         purchasePrice: parseFloat(body.purchasePrice || 0),
         supplierName: body.supplierName || "",
         notes: body.description || body.notes || "",
-        isArchived: 0
+        isArchived: 0,
+        vendorId: body.vendorId ? parseInt(String(body.vendorId)) : null
       };
       products.push(newProduct);
       saveDb("products", products);
