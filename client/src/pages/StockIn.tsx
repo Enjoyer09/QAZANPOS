@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { ArrowLeft, PlusCircle, CheckCircle, Info, Lock, Edit2, X } from "lucide-react";
+import { ArrowLeft, PlusCircle, CheckCircle, Info, Lock, Edit2, X, Plus } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
 import { sanitizeQtyInput } from "../lib/utils.ts";
+import { generateValidEAN13 } from "../components/Barcode.tsx";
 
 const emptyEntry = {
   productId: "",
@@ -62,6 +63,19 @@ export default function StockIn() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editFormData, setEditFormData] = useState<any>(null);
   const [adminPassword, setAdminPassword] = useState("");
+
+  // Full Product Creation Modal States
+  const [isNewProductModalOpen, setIsNewProductModalOpen] = useState(false);
+  const [newProductName, setNewProductName] = useState("");
+  const [newProductBarcode, setNewProductBarcode] = useState("");
+  const [newProductTrackingType, setNewProductTrackingType] = useState("none");
+  const [newProductSerialNumber, setNewProductSerialNumber] = useState("");
+  const [newProductCategory, setNewProductCategory] = useState("");
+  const [newProductVendorId, setNewProductVendorId] = useState("");
+  const [newProductUnit, setNewProductUnit] = useState("ədəd");
+  const [newProductWarrantyMonths, setNewProductWarrantyMonths] = useState("");
+  const [newProductDescription, setNewProductDescription] = useState("");
+  const [isSubmittingNewProduct, setIsSubmittingNewProduct] = useState(false);
 
   // Update Mutation
   const updateMutation = useMutation({
@@ -240,6 +254,59 @@ export default function StockIn() {
     },
   });
 
+  const handleNewProductSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProductName.trim()) {
+      toast({ title: "Xəta!", description: "Məhsul adı mütləqdir.", variant: "destructive" });
+      return;
+    }
+
+    setIsSubmittingNewProduct(true);
+    try {
+      const res = await fetch("/api/products", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-role": user?.role || "Staff",
+          "x-user-username": user?.username || ""
+        },
+        body: JSON.stringify({
+          name: newProductName.trim(),
+          category: newProductCategory.trim() || null,
+          unit: newProductUnit,
+          description: newProductDescription.trim() || null,
+          barcode: newProductBarcode.trim() || null,
+          trackingType: newProductTrackingType,
+          serialNumber: newProductSerialNumber.trim() || null,
+          warrantyMonths: newProductWarrantyMonths ? parseInt(newProductWarrantyMonths) : null,
+          vendorId: newProductVendorId ? parseInt(newProductVendorId) : null
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Məhsul yaradılarkən xəta baş verdi.");
+      }
+
+      const createdProduct = await res.json();
+      
+      // Auto-select this newly created product in the Stock In form
+      setFormData((prev) => ({ ...prev, productId: String(createdProduct.id) }));
+      setProductSearch(createdProduct.name);
+      
+      // Invalidate queries to refresh lists
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stock/levels"] });
+      
+      toast({ title: "Uğurlu!", description: `"${createdProduct.name}" məhsulu kataloqa yaradıldı və seçildi.`, variant: "success" });
+      setIsNewProductModalOpen(false);
+    } catch (err: any) {
+      toast({ title: "Xəta!", description: err.message, variant: "destructive" });
+    } finally {
+      setIsSubmittingNewProduct(false);
+    }
+  };
+
   const isCredit = formData.paymentType === "Nisyə";
   const calculatedTotal = parseFloat(formData.quantity || "0") * parseFloat(formData.purchasePrice || "0");
 
@@ -351,7 +418,27 @@ export default function StockIn() {
           <form onSubmit={handleSubmit} className="space-y-4 text-xs font-semibold">
             {/* Product selection */}
             <div className="space-y-1.5 relative">
-              <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Məhsul *</label>
+              <div className="flex items-center justify-between">
+                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Məhsul *</label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewProductName("");
+                    setNewProductBarcode("");
+                    setNewProductCategory("");
+                    setNewProductUnit("ədəd");
+                    setNewProductDescription("");
+                    setNewProductTrackingType("none");
+                    setNewProductSerialNumber("");
+                    setNewProductWarrantyMonths("");
+                    setNewProductVendorId("");
+                    setIsNewProductModalOpen(true);
+                  }}
+                  className="text-primary hover:underline text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                >
+                  ➕ Yeni Məhsul Yarat
+                </button>
+              </div>
               <div className="relative">
                 <input
                   type="text"
@@ -373,7 +460,36 @@ export default function StockIn() {
                 {showProductDropdown && (
                   <div className="absolute z-50 w-full mt-1 bg-white border border-gray-100 rounded-xl shadow-lg max-h-60 overflow-y-auto">
                     {filteredProducts.length === 0 ? (
-                      <div className="p-3 text-center text-xs text-gray-400">Məhsul tapılmadı</div>
+                      <div className="p-4 text-center text-xs text-gray-400 space-y-2">
+                        <p>🔍 Məhsul tapılmadı</p>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            // Pre-fill name or barcode
+                            const query = productSearch.trim();
+                            if (/^[0-9]{8,15}$/.test(query)) {
+                              setNewProductBarcode(query);
+                              setNewProductName("");
+                            } else {
+                              setNewProductName(query);
+                              setNewProductBarcode("");
+                            }
+                            setNewProductCategory("");
+                            setNewProductUnit("ədəd");
+                            setNewProductDescription("");
+                            setNewProductTrackingType("none");
+                            setNewProductSerialNumber("");
+                            setNewProductWarrantyMonths("");
+                            setNewProductVendorId("");
+                            setIsNewProductModalOpen(true);
+                          }}
+                          className="px-3 py-1.5 bg-primary text-white text-[10px] font-black uppercase tracking-wider rounded-lg hover:bg-primary/95 cursor-pointer transition-all inline-block hover-elevate shadow-xs"
+                        >
+                          ➕ Yeni Kataloq Məhsulu Yarat
+                        </button>
+                      </div>
                     ) : (
                       filteredProducts.map((p) => (
                         <button
@@ -998,6 +1114,181 @@ export default function StockIn() {
                   className="w-1/2 py-2.5 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 transition-all cursor-pointer text-center disabled:opacity-50"
                 >
                   {updateMutation.isPending ? "Yenilənir..." : "Təsdiqlə və Saxla"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* 2. FULL NEW PRODUCT CREATION MODAL FOR STOCK IN */}
+      {isNewProductModalOpen && (
+        <div className="liquid-glass-overlay !z-[110]">
+          <div className="liquid-glass-card max-w-md p-6 relative animate-in zoom-in-95 duration-200">
+            {/* Top Border Line */}
+            <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-primary to-teal-500 rounded-t-2xl"></div>
+
+            <div className="flex items-center justify-between pb-4 border-b border-gray-50 mb-5 mt-2">
+              <h3 className="font-extrabold text-gray-900 text-lg leading-tight flex items-center gap-2">
+                <Plus className="w-5 h-5 text-primary" />
+                Kataloqda Yeni Məhsul Yarat
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsNewProductModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleNewProductSubmit} className="space-y-4 text-xs font-semibold max-h-[75vh] overflow-y-auto pr-1">
+              {/* Product Name */}
+              <div className="space-y-1.5">
+                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Məhsul adı *</label>
+                <input
+                  type="text"
+                  placeholder="Məs. Korkmaz Qazan 24sm"
+                  value={newProductName}
+                  onChange={(e) => setNewProductName(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 text-xs font-bold"
+                  required
+                />
+              </div>
+
+              {/* Barcode */}
+              <div className="space-y-1.5">
+                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Barkod</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Məhsul barkodu (EAN-13)"
+                    value={newProductBarcode}
+                    onChange={(e) => setNewProductBarcode(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 font-mono text-gray-900 font-bold"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setNewProductBarcode(generateValidEAN13())}
+                    className="px-3.5 py-3 bg-amber-50 text-amber-600 border border-amber-200 hover:bg-amber-100/50 rounded-xl font-bold transition-all text-[11px] shrink-0 cursor-pointer"
+                    title="Avtomatik EAN-13 barkod yarat"
+                  >
+                    Yarat ⚡
+                  </button>
+                </div>
+              </div>
+
+              {/* Tracking Type */}
+              <div className="space-y-1.5">
+                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">İzləmə Növü *</label>
+                <select
+                  value={newProductTrackingType}
+                  onChange={(e) => setNewProductTrackingType(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 cursor-pointer font-bold text-gray-700"
+                >
+                  <option value="none">Standard (Barkod ilə)</option>
+                  <option value="serialized">Serial Nömrə (IMEI ilə izlənilən)</option>
+                </select>
+              </div>
+
+              {newProductTrackingType === "serialized" && (
+                <div className="space-y-1.5 border border-amber-200 bg-amber-50/10 p-3.5 rounded-xl animate-in slide-in-from-top-1.5 duration-200">
+                  <label className="text-amber-800 uppercase tracking-wider block text-[10px] font-bold">Serial Nömrə / IMEI (İlkin)</label>
+                  <input
+                    type="text"
+                    placeholder="Məs. SN-1234567"
+                    value={newProductSerialNumber}
+                    onChange={(e) => setNewProductSerialNumber(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 bg-white font-mono text-xs"
+                  />
+                  <p className="text-[10px] text-amber-700/80 leading-normal font-medium mt-1">
+                    İxtiyari. Əgər bura serial nömrəsi daxil etsəniz, məhsul yaradılarkən avtomatik olaraq anbara 1 ədəd mədaxil ediləcək (Alış qiyməti: 0 ₼).
+                  </p>
+                </div>
+              )}
+
+              {/* Category */}
+              <div className="space-y-1.5">
+                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Kateqoriya</label>
+                <input
+                  type="text"
+                  placeholder="Məs. Qazan, Tava, Mətbəx"
+                  value={newProductCategory}
+                  onChange={(e) => setNewProductCategory(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50"
+                />
+              </div>
+
+              {/* Vendor */}
+              <div className="space-y-1.5">
+                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Tədarükçü (Firma)</label>
+                <select
+                  value={newProductVendorId}
+                  onChange={(e) => setNewProductVendorId(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 cursor-pointer font-bold text-gray-700"
+                >
+                  <option value="">Seçilməyib (Yoxdur)</option>
+                  {(vendors || []).map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Unit */}
+              <div className="space-y-1.5">
+                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Ölçü Vahidi *</label>
+                <select
+                  value={newProductUnit}
+                  onChange={(e) => setNewProductUnit(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 cursor-pointer font-bold text-gray-700"
+                >
+                  <option value="ədəd">ədəd (ədəd olaraq)</option>
+                  <option value="dəst">dəst (dəst olaraq)</option>
+                  <option value="kq">kq (kiloqram olaraq)</option>
+                  <option value="metr">metr (metrlə)</option>
+                </select>
+              </div>
+
+              {/* Warranty Months */}
+              <div className="space-y-1.5">
+                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Zəmanət Müddəti (Ay)</label>
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="Məs. 12 (ixtiyari)"
+                  value={newProductWarrantyMonths}
+                  onChange={(e) => setNewProductWarrantyMonths(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 font-bold"
+                />
+              </div>
+
+              {/* Description */}
+              <div className="space-y-1.5">
+                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Təsvir (Qeyd)</label>
+                <textarea
+                  placeholder="İxtiyari əlavə qeydlər daxil edin"
+                  value={newProductDescription}
+                  onChange={(e) => setNewProductDescription(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 h-20 resize-none"
+                />
+              </div>
+
+              {/* Modal Footer Buttons */}
+              <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setIsNewProductModalOpen(false)}
+                  className="px-4 py-2 border border-gray-200 text-gray-500 font-semibold rounded-xl hover:bg-gray-50 cursor-pointer transition-all"
+                >
+                  İmtina
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingNewProduct}
+                  className="px-5 py-2 bg-primary text-white font-bold rounded-xl hover:bg-primary/95 cursor-pointer disabled:opacity-50 transition-all shadow-md shadow-primary/10"
+                >
+                  {isSubmittingNewProduct ? "Yaradılır..." : "Yarat və Seç"}
                 </button>
               </div>
             </form>
