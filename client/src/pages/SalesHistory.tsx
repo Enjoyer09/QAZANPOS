@@ -286,8 +286,25 @@ export default function SalesHistory() {
     );
   });
 
-  const totalSalesRevenue = filteredSales ? filteredSales.reduce((sum, s) => sum + Number(s.totalAmount || 0), 0) : 0;
-  const totalSalesCost = filteredSales ? filteredSales.reduce((sum, s) => sum + Number(s.totalCost || 0), 0) : 0;
+  const totalSalesRevenue = filteredSales 
+    ? filteredSales.reduce((sum, s) => {
+        const returned = (s.returns || []).reduce((acc: number, r: any) => acc + Number(r.totalAmount || 0), 0);
+        return sum + (Number(s.totalAmount || 0) - returned);
+      }, 0) 
+    : 0;
+
+  const totalSalesCost = filteredSales 
+    ? filteredSales.reduce((sum, s) => {
+        const returnedCost = (s.returns || []).reduce((retSum: number, r: any) => {
+          const itemsCost = (r.items || []).reduce((iSum: number, item: any) => {
+            return iSum + (Number(item.purchasePrice || 0) * Number(item.quantity || 0));
+          }, 0);
+          return retSum + itemsCost;
+        }, 0);
+        return sum + (Number(s.totalCost || 0) - returnedCost);
+      }, 0) 
+    : 0;
+
   const totalSalesProfit = totalSalesRevenue - totalSalesCost;
 
   // Extract individual sale items sold below cost price (loss-making items)
@@ -551,7 +568,16 @@ export default function SalesHistory() {
                     </tr>
                   ) : (
                     filteredSales.map((sale) => {
-                      const profit = Number(sale.totalAmount || 0) - Number(sale.totalCost || 0);
+                      const returned = (sale.returns || []).reduce((acc: number, r: any) => acc + Number(r.totalAmount || 0), 0);
+                      const returnedCost = (sale.returns || []).reduce((retSum: number, r: any) => {
+                        const itemsCost = (r.items || []).reduce((iSum: number, item: any) => {
+                          return iSum + (Number(item.purchasePrice || 0) * Number(item.quantity || 0));
+                        }, 0);
+                        return retSum + itemsCost;
+                      }, 0);
+                      const netAmount = Number(sale.totalAmount || 0) - returned;
+                      const netCost = Number(sale.totalCost || 0) - returnedCost;
+                      const profit = netAmount - netCost;
                       return (
                         <tr key={sale.id} className="border-b border-gray-50 hover:bg-gray-50/30 transition-all text-xs">
                           <td className="p-4 text-center font-mono text-gray-900 font-bold">
@@ -599,8 +625,13 @@ export default function SalesHistory() {
                               </span>
                             )}
                           </td>
-                          <td className="p-4 text-right font-bold text-gray-950 font-mono">
-                            {Number(sale.totalAmount || 0).toFixed(2)} ₼
+                          <td className="p-4 text-right font-mono">
+                            <span className="font-bold text-gray-955 block">{Number(netAmount).toFixed(2)} ₼</span>
+                            {returned > 0 && (
+                              <span className="text-[10px] text-amber-600 font-bold block mt-0.5" title={`İlkin: ${Number(sale.totalAmount).toFixed(2)} ₼`}>
+                                Qaytarılıb: -{Number(returned).toFixed(2)} ₼
+                              </span>
+                            )}
                           </td>
                           {isAdmin && (
                             <td className={`p-4 text-right font-bold font-mono ${profit >= 0 ? "text-green-600" : "text-red-500"}`}>

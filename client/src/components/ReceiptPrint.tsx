@@ -26,6 +26,11 @@ export function generateReceiptHtml(sale: any, settings: any): string {
 
   // Calculate totals dynamically and robustly
   const totalAmount = parseFloat(sale.totalAmount) || 0;
+  const returnedAmount = (sale.returns || []).reduce(
+    (sum: number, r: any) => sum + (parseFloat(r.totalAmount) || 0),
+    0
+  );
+  const netAmount = totalAmount - returnedAmount;
   
   let totalPaid = parseFloat(sale.totalPaid);
   if (isNaN(totalPaid) || sale.totalPaid === undefined || sale.totalPaid === null) {
@@ -44,7 +49,7 @@ export function generateReceiptHtml(sale: any, settings: any): string {
     const customRemaining = sale.remainingDebt !== undefined && sale.remainingDebt !== null 
       ? parseFloat(sale.remainingDebt) 
       : null;
-    remainingDebt = customRemaining !== null ? customRemaining : Math.max(0, totalAmount - totalPaid);
+    remainingDebt = customRemaining !== null ? customRemaining : Math.max(0, totalAmount - totalPaid - returnedAmount);
   }
 
   // Azerbaijan Tax calculations
@@ -52,7 +57,7 @@ export function generateReceiptHtml(sale: any, settings: any): string {
   if (showTaxOnReceipt === 1 && taxStatus) {
     if (taxStatus === "edv") {
       if (sale.applyEdv !== 0) {
-        const vatVal = (totalAmount * edvRate) / (100 + edvRate);
+        const vatVal = (netAmount * edvRate) / (100 + edvRate);
         taxDetailsHtml = `
           <table class="receipt-table" style="font-size: 8.5pt; color: #333333; margin-top: 2px;">
             <tr>
@@ -72,7 +77,7 @@ export function generateReceiptHtml(sale: any, settings: any): string {
         `;
       }
     } else if (taxStatus === "sadelestirilmis") {
-      const simplifiedVal = (totalAmount * simplifiedRate) / 100;
+      const simplifiedVal = (netAmount * simplifiedRate) / 100;
       taxDetailsHtml = `
         <table class="receipt-table" style="font-size: 8.5pt; color: #333333; margin-top: 2px;">
           <tr>
@@ -413,17 +418,29 @@ export function generateReceiptHtml(sale: any, settings: any): string {
 
       <!-- Totals -->
       <div class="total-box">
+        ${returnedAmount > 0 ? `
+        <table class="receipt-table" style="font-size: 8.5pt; color: #444444; margin-bottom: 2px;">
+          <tr>
+            <td>İlkin Məbləğ:</td>
+            <td style="text-align: right; font-family: monospace;">${totalAmount.toFixed(2)} ₼</td>
+          </tr>
+          <tr>
+            <td>Geri Qaytarılan:</td>
+            <td style="text-align: right; font-family: monospace; color: #883333;">-${returnedAmount.toFixed(2)} ₼</td>
+          </tr>
+        </table>
+        ` : ""}
         <table class="receipt-table" style="font-weight: bold; font-size: 11.5pt;">
           <tr>
             <td style="width: 60%; text-align: left; font-size: 11.5pt;">CƏMİ:</td>
-            <td style="width: 40%; text-align: right; font-size: 11.5pt;">${totalAmount.toFixed(2)} ₼</td>
+            <td style="width: 40%; text-align: right; font-size: 11.5pt;">${netAmount.toFixed(2)} ₼</td>
           </tr>
         </table>
         ${taxDetailsHtml}
         <table class="receipt-table">
           <tr>
             <td>Ödənilən:</td>
-            <td>${totalPaid.toFixed(2)} ₼</td>
+            <td>${Math.max(0, totalPaid - returnedAmount).toFixed(2)} ₼</td>
           </tr>
         </table>
         ${debtHtml}

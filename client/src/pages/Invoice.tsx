@@ -464,18 +464,41 @@ export default function Invoice({ params }: InvoiceProps) {
           {/* Totals panel */}
           <div className="border-t border-gray-100 pt-6 flex justify-end">
             <div className="w-64 space-y-2 text-xs font-semibold text-gray-500">
-              <div className="flex justify-between">
-                <span>Cəmi məbləğ</span>
-                <span className="font-bold text-gray-950 font-mono text-sm">
-                  {totalAmount.toFixed(2)} ₼
-                </span>
-              </div>
+              {returnedAmount > 0 ? (
+                <>
+                  <div className="flex justify-between">
+                    <span>İlkin Cəm</span>
+                    <span className="font-bold text-gray-950 font-mono">
+                      {totalAmount.toFixed(2)} ₼
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-amber-700 font-bold">
+                    <span>Geri Qaytarılan</span>
+                    <span className="font-mono">
+                      -{returnedAmount.toFixed(2)} ₼
+                    </span>
+                  </div>
+                  <div className="flex justify-between border-t border-dashed border-gray-200 pt-1.5 text-gray-900 font-extrabold">
+                    <span>Cəmi məbləğ</span>
+                    <span className="font-mono text-sm">
+                      {(totalAmount - returnedAmount).toFixed(2)} ₼
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div className="flex justify-between">
+                  <span>Cəmi məbləğ</span>
+                  <span className="font-bold text-gray-950 font-mono text-sm">
+                    {totalAmount.toFixed(2)} ₼
+                  </span>
+                </div>
+              )}
               {settings?.showTaxOnInvoice !== 0 && settings?.taxStatus === "edv" && (
                 invoice.applyEdv !== 0 ? (
                   <div className="flex justify-between text-[11px] text-gray-400 font-medium">
                     <span>ƏDV ({settings?.edvRate ?? 18}% daxil)</span>
                     <span className="font-bold text-gray-700 font-mono">
-                      {((totalAmount * (settings?.edvRate ?? 18)) / (100 + (settings?.edvRate ?? 18))).toFixed(2)} ₼
+                      {(((totalAmount - returnedAmount) * (settings?.edvRate ?? 18)) / (100 + (settings?.edvRate ?? 18))).toFixed(2)} ₼
                     </span>
                   </div>
                 ) : (
@@ -491,14 +514,14 @@ export default function Invoice({ params }: InvoiceProps) {
                 <div className="flex justify-between text-[11px] text-gray-400 font-medium">
                   <span>Sadələşdirilmiş V. ({settings?.simplifiedRate ?? 2}%)</span>
                   <span className="font-bold text-gray-700 font-mono">
-                    {((totalAmount * (settings?.simplifiedRate ?? 2)) / 100).toFixed(2)} ₼
+                    {(((totalAmount - returnedAmount) * (settings?.simplifiedRate ?? 2)) / 100).toFixed(2)} ₼
                   </span>
                 </div>
               )}
               <div className="flex justify-between">
                 <span>Ödənilən məbləğ</span>
                 <span className="font-bold text-green-600 font-mono text-sm">
-                  {totalPaid.toFixed(2)} ₼
+                  {Math.max(0, totalPaid - returnedAmount).toFixed(2)} ₼
                 </span>
               </div>
               {isCredit && (
