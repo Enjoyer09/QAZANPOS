@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useToast } from "../components/Toast.tsx";
@@ -21,7 +21,9 @@ import {
   Lock,
   RotateCcw,
   Check,
-  X
+  X,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 
 interface Sale {
@@ -200,12 +202,68 @@ export default function SalesHistory() {
     }
   };
 
+  const getTodayString = () => {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, "0");
+    const dd = String(today.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const todayStr = getTodayString();
+
   // Sales History Tab States
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-  const [filterActive, setFilterActive] = useState(false);
+  const [fromDate, setFromDate] = useState(todayStr);
+  const [toDate, setToDate] = useState(todayStr);
+  const [filterActive, setFilterActive] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSeller, setSelectedSeller] = useState("");
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(20);
+
+  // Reset page when queries change
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [fromDate, toDate, filterActive, searchQuery, selectedSeller, activeTab]);
+
+  // Horizontal scroll Refs
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+  const warrantyScrollRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const handleWheel = (e: WheelEvent) => {
+      if (el.scrollWidth > el.clientWidth) {
+        if (e.deltaY !== 0) {
+          e.preventDefault();
+          el.scrollLeft += e.deltaY;
+        }
+      }
+    };
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    return () => {
+      el.removeEventListener("wheel", handleWheel);
+    };
+  }, []);
+
+  React.useEffect(() => {
+    const el = warrantyScrollRef.current;
+    if (!el) return;
+    const handleWheel = (e: WheelEvent) => {
+      if (el.scrollWidth > el.clientWidth) {
+        if (e.deltaY !== 0) {
+          e.preventDefault();
+          el.scrollLeft += e.deltaY;
+        }
+      }
+    };
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    return () => {
+      el.removeEventListener("wheel", handleWheel);
+    };
+  }, []);
 
   // Warranty Lookup Tab States
   const [lookupQuery, setLookupQuery] = useState("");
@@ -258,9 +316,10 @@ export default function SalesHistory() {
   };
 
   const handleReset = () => {
-    setFromDate("");
-    setToDate("");
-    setFilterActive(false);
+    const todayStr = getTodayString();
+    setFromDate(todayStr);
+    setToDate(todayStr);
+    setFilterActive(true);
     setSearchQuery("");
     setSelectedSeller("");
   };
@@ -306,6 +365,21 @@ export default function SalesHistory() {
     : 0;
 
   const totalSalesProfit = totalSalesRevenue - totalSalesCost;
+
+  // Sales pagination calculations
+  const totalSalesItems = filteredSales.length;
+  const totalSalesPages = pageSize === -1 ? 1 : Math.ceil(totalSalesItems / pageSize);
+  
+  // Safe-guard currentPage boundary
+  useEffect(() => {
+    if (currentPage > totalSalesPages && totalSalesPages > 0) {
+      setCurrentPage(totalSalesPages);
+    }
+  }, [filteredSales.length, pageSize, totalSalesPages, currentPage]);
+
+  const paginatedSales = pageSize === -1
+    ? filteredSales
+    : filteredSales.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   // Extract individual sale items sold below cost price (loss-making items)
   const lossItems = React.useMemo(() => {
@@ -538,7 +612,7 @@ export default function SalesHistory() {
 
           {/* Sales History Table */}
           <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-xs glass-card">
-            <div className="overflow-x-auto">
+            <div ref={scrollRef} className="overflow-x-auto scrollbar-thin">
               <table className="w-full text-left text-sm border-collapse min-w-[800px]">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50/50 text-xs font-bold text-gray-400 uppercase tracking-wider">
@@ -567,7 +641,7 @@ export default function SalesHistory() {
                       </td>
                     </tr>
                   ) : (
-                    filteredSales.map((sale) => {
+                    paginatedSales.map((sale) => {
                       const returned = (sale.returns || []).reduce((acc: number, r: any) => acc + Number(r.totalAmount || 0), 0);
                       const returnedCost = (sale.returns || []).reduce((retSum: number, r: any) => {
                         const itemsCost = (r.items || []).reduce((iSum: number, item: any) => {
@@ -677,6 +751,95 @@ export default function SalesHistory() {
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls */}
+            {totalSalesItems > 0 && (
+              <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/30 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-semibold text-gray-500">
+                <div className="flex items-center gap-4">
+                  {/* Show choice dropdown */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-400">Göstər:</span>
+                    <select
+                      value={pageSize}
+                      onChange={(e) => {
+                        setPageSize(Number(e.target.value));
+                        setCurrentPage(1);
+                      }}
+                      className="border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer text-xs font-bold text-gray-700"
+                    >
+                      <option value={10}>10 sətir</option>
+                      <option value={20}>20 sətir</option>
+                      <option value={50}>50 sətir</option>
+                      <option value={100}>100 sətir</option>
+                      <option value={-1}>Hamısı</option>
+                    </select>
+                  </div>
+                  
+                  {/* Summary of showing items */}
+                  <span>
+                    {pageSize === -1 ? (
+                      `Toplam ${totalSalesItems} satışın hamısı göstərilir`
+                    ) : (
+                      `Toplam ${totalSalesItems} satışdan ${Math.min(totalSalesItems, (currentPage - 1) * pageSize + 1)}-${Math.min(totalSalesItems, currentPage * pageSize)} aralığı`
+                    )}
+                  </span>
+                </div>
+
+                {pageSize !== -1 && totalSalesPages > 1 && (
+                  <div className="flex items-center gap-1.5">
+                    {/* Previous button */}
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      disabled={currentPage === 1}
+                      className="p-1.5 border border-gray-200 rounded-xl hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer transition-all"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+
+                    {/* Page Numbers */}
+                    {Array.from({ length: totalSalesPages }, (_, i) => i + 1).map((pageNum) => {
+                      if (
+                        totalSalesPages > 6 &&
+                        pageNum !== 1 &&
+                        pageNum !== totalSalesPages &&
+                        Math.abs(pageNum - currentPage) > 1
+                      ) {
+                        if (pageNum === 2 && currentPage > 3) {
+                          return <span key={pageNum} className="px-1 text-gray-400">...</span>;
+                        }
+                        if (pageNum === totalSalesPages - 1 && currentPage < totalSalesPages - 2) {
+                          return <span key={pageNum} className="px-1 text-gray-400">...</span>;
+                        }
+                        return null;
+                      }
+
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => setCurrentPage(pageNum)}
+                          className={`w-7.5 h-7.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                            currentPage === pageNum
+                              ? "bg-primary text-white border-primary shadow-xs"
+                              : "border-gray-200 hover:bg-gray-50 text-gray-700"
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+
+                    {/* Next button */}
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.min(totalSalesPages, prev + 1))}
+                      disabled={currentPage === totalSalesPages}
+                      className="p-1.5 border border-gray-200 rounded-xl hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer transition-all"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -708,7 +871,7 @@ export default function SalesHistory() {
 
           {/* Loss Sales Table */}
           <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-xs glass-card">
-            <div className="overflow-x-auto">
+            <div ref={warrantyScrollRef} className="overflow-x-auto scrollbar-thin">
               <table className="w-full text-left text-sm border-collapse min-w-[800px]">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50/50 text-xs font-bold text-gray-400 uppercase tracking-wider">
