@@ -339,7 +339,7 @@ function AppLayout({ children, user, currentUser, onLogout }: { children: React.
       </div>
 
       {/* 1. Centered Floating Liquid Glass Navbar */}
-      <header className="w-[calc(100%-2rem)] sm:w-full max-w-7xl mx-auto px-4 sm:px-6 py-3.5 mt-4 sm:mt-6 rounded-2xl glass-navbar flex items-center justify-between shadow-xl sticky top-4 sm:top-6 z-50 no-print">
+      <header className="w-[calc(100%-2rem)] sm:w-full max-w-[1600px] mx-auto px-4 sm:px-6 py-3.5 mt-4 sm:mt-6 rounded-2xl glass-navbar flex items-center justify-between shadow-xl sticky top-4 sm:top-6 z-50 no-print">
         {/* Brand Logo & Name */}
         <Link href={isSuperTenant ? "/" : (isAdmin ? "/" : "/pos")}>
           <div className="flex items-center gap-3 cursor-pointer group">
@@ -741,14 +741,14 @@ function AppLayout({ children, user, currentUser, onLogout }: { children: React.
       )}
 
       {/* 2. Main content container */}
-      <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 mt-8 flex flex-col">
+      <main className="flex-1 w-full max-w-[1600px] mx-auto px-4 sm:px-6 mt-8 flex flex-col">
         <div className="flex-1 w-full animate-in fade-in-50 duration-300">
           {children}
         </div>
       </main>
 
       {/* 3. Premium Watermark & Version Footer */}
-      <footer className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-6 mt-8 border-t border-gray-200/50 flex flex-col sm:flex-row items-center justify-between text-[10px] font-bold text-gray-400 tracking-wider no-print">
+      <footer className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 py-6 mt-8 border-t border-gray-200/50 flex flex-col sm:flex-row items-center justify-between text-[10px] font-bold text-gray-400 tracking-wider no-print">
         <div className="flex items-center gap-2">
           <img src="/assets/logo.jpg" alt="BirSaaS Logo" className="size-4.5 rounded-md object-cover" />
           <span>BirSaaS Platformu © {new Date().getFullYear()}</span>

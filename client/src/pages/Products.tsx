@@ -353,20 +353,20 @@ export default function Products() {
         </div>
 
         {/* Kateqoriyalar Siyahısı */}
-        <div className="space-y-1 max-h-[400px] overflow-y-auto pr-1">
+        <div className="space-y-1 max-h-[500px] overflow-y-auto pr-1">
           <button
             onClick={() => setSelectedCategory("all")}
-            className={`w-full text-left px-3 py-2 rounded-xl text-[11px] font-semibold flex justify-between items-center transition-all cursor-pointer border ${
+            className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-extrabold flex justify-between items-center transition-all cursor-pointer border ${
               selectedCategory === "all"
                 ? (activeTab === "active" ? "bg-primary/10 text-primary border-primary/20" : "bg-red-50 text-red-600 border-red-100")
-                : "text-gray-600 hover:bg-gray-50 border-transparent"
+                : "text-gray-700 hover:bg-gray-50 border-transparent"
             }`}
           >
             <span>Hamısı</span>
-            <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold ${
+            <span className={`px-2 py-0.5 rounded-md text-[10px] font-black ${
               selectedCategory === "all"
                 ? (activeTab === "active" ? "bg-primary text-white" : "bg-red-600 text-white")
-                : "bg-gray-100 text-gray-400"
+                : "bg-gray-200 text-gray-500"
             }`}>
               {activeTab === "active" ? totalActiveCount : totalArchivedCount}
             </span>
@@ -379,17 +379,17 @@ export default function Products() {
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
-                className={`w-full text-left px-3 py-2 rounded-xl text-[11px] font-semibold flex justify-between items-center transition-all cursor-pointer border ${
+                className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-extrabold flex justify-between items-center transition-all cursor-pointer border ${
                   isSelected
                     ? (activeTab === "active" ? "bg-primary/10 text-primary border-primary/20" : "bg-red-50 text-red-600 border-red-100")
-                    : "text-gray-600 hover:bg-gray-50/50 border-transparent"
+                    : "text-gray-700 hover:bg-gray-50/50 border-transparent"
                 }`}
               >
                 <span className="truncate pr-2">{cat}</span>
-                <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold shrink-0 ${
+                <span className={`px-2 py-0.5 rounded-md text-[10px] font-black shrink-0 ${
                   isSelected
                     ? (activeTab === "active" ? "bg-primary text-white" : "bg-red-600 text-white")
-                    : "bg-gray-100 text-gray-400"
+                    : "bg-gray-200 text-gray-500"
                 }`}>
                   {count}
                 </span>
@@ -425,15 +425,15 @@ export default function Products() {
         </div>
 
         {/* Search Input bar */}
-        <div className="bg-white border border-gray-100 p-4 rounded-2xl shadow-xs glass-card text-xs font-semibold max-w-md">
-          <div className="space-y-1">
-            <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Məhsul Axtar</label>
+        <div className="bg-white border border-gray-100 p-4 rounded-2xl shadow-xs glass-card text-sm font-semibold max-w-xl">
+          <div className="space-y-1.5">
+            <label className="text-gray-500 uppercase tracking-wider block text-[10px] font-extrabold">Məhsul Axtar</label>
             <input
               type="text"
               placeholder="Məhsul adı, kateqoriya və ya təsvir..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50"
+              className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 text-sm font-semibold text-gray-800"
             />
           </div>
         </div>
@@ -443,7 +443,7 @@ export default function Products() {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm border-collapse min-w-[650px]">
               <thead>
-                <tr className="border-b border-gray-100 bg-gray-50/50 text-xs font-bold text-gray-400 uppercase tracking-wider">
+                <tr className="border-b border-gray-100 bg-gray-50/50 text-xs font-black text-gray-800 uppercase tracking-wider">
                   <th className="p-4 w-12 text-center">#</th>
                   <th className="p-4">Ad</th>
                   <th className="p-4">Barkod</th>
@@ -469,35 +469,35 @@ export default function Products() {
                   </tr>
                 ) : (
                   filteredList.map((item, idx) => (
-                    <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/30 transition-all text-xs">
-                      <td className="p-4 text-center font-mono text-gray-400">{idx + 1}</td>
+                    <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/30 transition-all text-sm">
+                      <td className="p-4 text-center font-mono text-gray-500 font-bold">{idx + 1}</td>
                       <td className="p-4 font-bold text-gray-900">
                         <div>{item.name}</div>
                         {item.warrantyMonths ? (
-                          <span className="inline-block bg-blue-50 text-blue-600 border border-blue-100 px-1.5 py-0.5 rounded-md text-[9px] font-bold mt-1 select-none animate-in fade-in duration-200">
+                          <span className="inline-block bg-blue-50 text-blue-600 border border-blue-100 px-1.5 py-0.5 rounded-md text-[10px] font-black mt-1 select-none animate-in fade-in duration-200">
                             🛡️ {item.warrantyMonths} ay zəmanət
                           </span>
                         ) : null}
                       </td>
-                      <td className="p-4 font-mono text-[10px] text-gray-500 font-bold">{item.barcode || "—"}</td>
+                      <td className="p-4 font-mono text-xs text-gray-600 font-bold">{item.barcode || "—"}</td>
                       <td className="p-4 font-medium text-gray-600">
                         {item.category ? (
-                          <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-md text-[10px] font-bold">
+                          <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-md text-xs font-black">
                             {item.category}
                           </span>
                         ) : (
                           "—"
                         )}
                       </td>
-                      <td className="p-4 text-gray-500 font-medium">{item.unit}</td>
-                      <td className="p-4 font-semibold text-gray-700">
+                      <td className="p-4 text-gray-700 font-bold">{item.unit}</td>
+                      <td className="p-4 font-bold text-gray-800">
                         {item.vendorId && vendors ? (
                           vendors.find(v => v.id === item.vendorId)?.name || "—"
                         ) : (
                           "—"
                         )}
                       </td>
-                      <td className="p-4 text-gray-400 truncate max-w-xs">{item.description || "—"}</td>
+                      <td className="p-4 text-gray-600 font-medium truncate max-w-xs">{item.description || "—"}</td>
                       <td className="p-4 text-right pr-6">
                         <div className="flex items-center justify-end gap-2">
                           {item.isArchived === 1 ? (
