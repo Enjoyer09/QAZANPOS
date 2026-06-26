@@ -992,6 +992,14 @@ function AppContent() {
     setIsCheckingSession(false);
   }, [isSandboxScoped]);
 
+  // Load and apply local UI scaling setting (Fluid REM Scaling)
+  useEffect(() => {
+    const savedScale = localStorage.getItem("qazanpos_ui_scale") || "100%";
+    const scaleVal = savedScale.replace("%", "");
+    const basePx = (parseFloat(scaleVal) / 100) * 16;
+    document.documentElement.style.fontSize = `${basePx}px`;
+  }, []);
+
   const handleLoginSuccess = (userData: any) => {
     if (isSandboxScoped) {
       sessionStorage.setItem("qazanpos_user", JSON.stringify(userData));

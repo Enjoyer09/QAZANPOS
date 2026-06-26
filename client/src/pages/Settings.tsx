@@ -64,6 +64,7 @@ export default function SettingsPage() {
   };
 
   const [settingsTab, setSettingsTab] = useState("general");
+  const [uiScale, setUiScale] = useState(() => localStorage.getItem("qazanpos_ui_scale") || "100%");
   const [showResetConfirmModal, setShowResetConfirmModal] = useState(false);
   const [marketplaceCommissions, setMarketplaceCommissions] = useState<Record<string, number>>({});
   const [resetPassword, setResetPassword] = useState("");
@@ -1449,6 +1450,37 @@ export default function SettingsPage() {
                       />
                       <span>Rəsmi Satış Qaiməsində (Invoice PDF/A4) vergi məlumatlarını göstər</span>
                     </label>
+
+                    {/* UI Scale Dropdown */}
+                    <div className="pt-2 max-w-xs space-y-1.5">
+                      <label className="text-gray-400 uppercase tracking-wider block text-[9px] font-bold">Sistem Ölçüsü (Ekran Skalası) 🖥️</label>
+                      <select
+                        value={uiScale}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setUiScale(val);
+                          localStorage.setItem("qazanpos_ui_scale", val);
+                          const scaleVal = val.replace("%", "");
+                          const basePx = (parseFloat(scaleVal) / 100) * 16;
+                          document.documentElement.style.fontSize = `${basePx}px`;
+                          toast({
+                            title: "Görünüş Ölçüsü Dəyişdirildi",
+                            description: `Ekran ölçüsü ${val} olaraq tənzimləndi.`,
+                            variant: "success",
+                          });
+                        }}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-white cursor-pointer font-bold text-xs"
+                      >
+                        <option value="80%">80% (Çox Kiçik)</option>
+                        <option value="90%">90% (Kiçik)</option>
+                        <option value="100%">100% (Standart)</option>
+                        <option value="110%">110% (Böyük)</option>
+                        <option value="120%">120% (Çox Böyük)</option>
+                      </select>
+                      <p className="text-[10px] text-gray-400 font-medium leading-normal">
+                        Bütün pəncərələrin, düymələrin və mətnlərin ölçüsünü ekranınıza uyğunlaşdırmaq üçün dəyişdirə bilərsiniz. Bu tənzimləmə yalnız bu cihazda yadda saxlanılır.
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>

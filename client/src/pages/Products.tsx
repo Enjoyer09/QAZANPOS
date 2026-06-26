@@ -402,7 +402,7 @@ export default function Products() {
       {/* Sağ Hissə: Məhsul Siyahısı */}
       <div className="flex-1 w-full space-y-6">
         {/* Top action header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-2xl font-black text-gray-900 tracking-tight">
               {activeTab === "active" ? "Məhsul Kataloqu" : "Arxivlənmiş Məhsullar"}
@@ -417,7 +417,7 @@ export default function Products() {
           {activeTab === "active" && (
             <button
               onClick={handleOpenNew}
-              className="px-4 py-2.5 bg-primary text-white font-semibold text-sm rounded-xl hover:bg-primary/90 cursor-pointer flex items-center gap-2 shadow-md shadow-primary/10 transition-all hover-elevate"
+              className="px-4 py-2.5 bg-primary text-white font-semibold text-sm rounded-xl hover:bg-primary/90 cursor-pointer flex items-center gap-2 shadow-md shadow-primary/10 transition-all hover-elevate shrink-0"
             >
               <Plus className="w-4 h-4" /> Yeni Məhsul
             </button>
