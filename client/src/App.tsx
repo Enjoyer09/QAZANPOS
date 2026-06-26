@@ -315,7 +315,7 @@ function AppLayout({ children, user, currentUser, onLogout }: { children: React.
   const navGroups = baseGroups.filter((group) => group.items.length > 0);
 
   return (
-    <div className="relative min-h-screen w-screen flex flex-col overflow-x-hidden pb-12 select-none">
+    <div className="relative min-h-screen w-full flex flex-col pb-12 select-none">
       {/* 0. Demo Session Alert Banner */}
       {sessionStorage.getItem("birsaas_demo_active") === "true" && (
         <div className="w-full bg-emerald-500 hover:bg-emerald-600 text-white text-[11px] font-black tracking-wide py-2.5 px-4 text-center select-none flex items-center justify-center gap-2 animate-pulse no-print shadow-md shadow-emerald-500/10 z-100">

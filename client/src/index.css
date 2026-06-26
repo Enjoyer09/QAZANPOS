@@ -47,7 +47,6 @@
     background-color: #f3f6f9;
     font-family: var(--app-font-sans);
     color: #1e293b;
-    overflow-x: hidden;
     position: relative;
     min-height: 100vh;
   }
