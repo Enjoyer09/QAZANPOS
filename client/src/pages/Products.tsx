@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Edit2, Trash2, X, Tag, Sliders, Info, Lock, Archive, RotateCcw } from "lucide-react";
+import { Plus, Edit2, Trash2, X, Tag, Sliders, Info, Lock, Archive, RotateCcw, ChevronLeft, ChevronRight } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
 import { generateValidEAN13 } from "../components/Barcode.tsx";
 import LabelPrintModal from "../components/LabelPrintModal.tsx";
@@ -62,6 +62,12 @@ export default function Products() {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedProductForLabel, setSelectedProductForLabel] = useState<Product | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(20);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedCategory, searchQuery, activeTab]);
 
   const handleTabChange = (tab: "active" | "archived") => {
     setActiveTab(tab);
@@ -138,6 +144,21 @@ export default function Products() {
       );
     });
   });
+
+  // Pagination calculations
+  const totalItems = filteredList.length;
+  const totalPages = pageSize === -1 ? 1 : Math.ceil(totalItems / pageSize);
+  
+  // Safe-guard currentPage boundary
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(totalPages);
+    }
+  }, [filteredList.length, pageSize, totalPages, currentPage]);
+
+  const paginatedList = pageSize === -1
+    ? filteredList
+    : filteredList.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const createMutation = useMutation({
     mutationFn: async (data: typeof emptyProduct) => {
@@ -468,9 +489,11 @@ export default function Products() {
                     </td>
                   </tr>
                 ) : (
-                  filteredList.map((item, idx) => (
-                    <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/30 transition-all text-sm">
-                      <td className="p-4 text-center font-mono text-gray-500 font-bold">{idx + 1}</td>
+                  paginatedList.map((item, idx) => {
+                    const itemIndex = pageSize === -1 ? idx + 1 : (currentPage - 1) * pageSize + idx + 1;
+                    return (
+                      <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/30 transition-all text-sm">
+                        <td className="p-4 text-center font-mono text-gray-500 font-bold">{itemIndex}</td>
                       <td className="p-4 font-bold text-gray-900">
                         <div>{item.name}</div>
                         {item.warrantyMonths ? (
@@ -544,11 +567,101 @@ export default function Products() {
                         </div>
                       </td>
                     </tr>
-                  ))
+                  );
+                })
                 )}
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {totalItems > 0 && (
+            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/30 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-semibold text-gray-500">
+              <div className="flex items-center gap-4">
+                {/* Show choice dropdown */}
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-400">Göstər:</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer text-xs font-bold text-gray-700"
+                  >
+                    <option value={10}>10 sətir</option>
+                    <option value={20}>20 sətir</option>
+                    <option value={50}>50 sətir</option>
+                    <option value={100}>100 sətir</option>
+                    <option value={-1}>Hamısı</option>
+                  </select>
+                </div>
+                
+                {/* Summary of showing items */}
+                <span>
+                  {pageSize === -1 ? (
+                    `Toplam ${totalItems} məhsulun hamısı göstərilir`
+                  ) : (
+                    `Toplam ${totalItems} məhsuldan ${Math.min(totalItems, (currentPage - 1) * pageSize + 1)}-${Math.min(totalItems, currentPage * pageSize)} aralığı`
+                  )}
+                </span>
+              </div>
+
+              {pageSize !== -1 && totalPages > 1 && (
+                <div className="flex items-center gap-1.5">
+                  {/* Previous button */}
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    className="p-1.5 border border-gray-200 rounded-xl hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer transition-all"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+
+                  {/* Page Numbers */}
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => {
+                    if (
+                      totalPages > 6 &&
+                      pageNum !== 1 &&
+                      pageNum !== totalPages &&
+                      Math.abs(pageNum - currentPage) > 1
+                    ) {
+                      if (pageNum === 2 && currentPage > 3) {
+                        return <span key={pageNum} className="px-1 text-gray-400">...</span>;
+                      }
+                      if (pageNum === totalPages - 1 && currentPage < totalPages - 2) {
+                        return <span key={pageNum} className="px-1 text-gray-400">...</span>;
+                      }
+                      return null;
+                    }
+
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => setCurrentPage(pageNum)}
+                        className={`w-7.5 h-7.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                          currentPage === pageNum
+                            ? "bg-primary text-white border-primary shadow-xs"
+                            : "border-gray-200 hover:bg-gray-50 text-gray-700"
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+
+                  {/* Next button */}
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    className="p-1.5 border border-gray-200 rounded-xl hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer transition-all"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
