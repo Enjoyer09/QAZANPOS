@@ -712,3 +712,170 @@ export async function printZReport(stats: any, settings: any): Promise<boolean> 
     }
   });
 }
+
+export function printPickTicket(basketItems: any[], userLabel: string): Promise<boolean> {
+  const dateStr = new Date().toLocaleDateString("az-AZ") + " " + new Date().toLocaleTimeString("az-AZ", { hour: '2-digit', minute: '2-digit' });
+  
+  let itemsRows = "";
+  basketItems.forEach((item, idx) => {
+    const name = item.productName || "Məhsul";
+    const qty = item.quantity;
+    const unit = item.unit || "ədəd";
+    const serials = item.serialNumbers && item.serialNumbers.length > 0
+      ? `<div style="font-size: 7.5pt; color: #555; margin-top: 2px;">IMEI/Serial: ${item.serialNumbers.join(", ")}</div>`
+      : "";
+      
+    itemsRows += `
+      <tr style="border-bottom: 1px dashed #dddddd;">
+        <td style="padding: 6px 0; text-align: left; font-size: 9pt;">
+          <b>${idx + 1}. ${name}</b>
+          ${serials}
+        </td>
+        <td style="padding: 6px 0; text-align: right; font-size: 10pt; font-weight: bold; font-family: monospace;">
+          ${qty} ${unit}
+        </td>
+      </tr>
+    `;
+  });
+
+  const html = `
+    <html>
+      <head>
+        <title>Pick Ticket</title>
+        <style>
+          body {
+            font-family: 'Courier New', Courier, monospace;
+            width: 80mm;
+            margin: 0;
+            padding: 5mm;
+            background: #ffffff;
+            color: #000000;
+          }
+          .header {
+            text-align: center;
+            border-bottom: 2px solid #000000;
+            padding-bottom: 6px;
+            margin-bottom: 10px;
+          }
+          .title {
+            font-size: 11pt;
+            font-weight: bold;
+            text-transform: uppercase;
+          }
+          .warning {
+            font-size: 8pt;
+            border: 1px solid #000000;
+            padding: 4px;
+            margin-top: 4px;
+            display: inline-block;
+            font-weight: bold;
+          }
+          .info-table {
+            width: 100%;
+            font-size: 8.5pt;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #000000;
+            padding-bottom: 5px;
+          }
+          .items-table {
+            width: 100%;
+            border-collapse: collapse;
+          }
+          .footer {
+            margin-top: 15px;
+            border-top: 1px solid #000000;
+            padding-top: 8px;
+            text-align: center;
+            font-size: 8pt;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="title">ANBAR YIĞIM BİLETİ</div>
+          <div class="warning">MALİYYƏ SƏNƏDİ DEYİL</div>
+        </div>
+        <table class="info-table">
+          <tr>
+            <td align="left">Tarix:</td>
+            <td align="right">${dateStr}</td>
+          </tr>
+          ${userLabel ? `
+          <tr>
+            <td align="left">Etiket / Masa:</td>
+            <td align="right"><b>${userLabel}</b></td>
+          </tr>
+          ` : ""}
+        </table>
+        <table class="items-table">
+          <thead>
+            <tr style="border-bottom: 1px solid #000000;">
+              <th align="left" style="font-size: 8.5pt; padding-bottom: 4px;">Məhsul adı</th>
+              <th align="right" style="font-size: 8.5pt; padding-bottom: 4px;">Miqdar</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsRows}
+          </tbody>
+        </table>
+        <div class="footer">
+          QAZANPOS • Anbar Bölməsi
+        </div>
+      </body>
+    </html>
+  `;
+
+  const savedPrinter = localStorage.getItem("qazan_pos_selected_printer");
+  let isQzConnected = qzService.isConnected();
+
+  return new Promise(async (resolve) => {
+    if (!isQzConnected) {
+      try { isQzConnected = await qzService.connect(); } catch {}
+    }
+
+    if (isQzConnected && savedPrinter) {
+      try {
+        await qzService.printHTML(savedPrinter, html, { width: "80mm" });
+        resolve(true);
+        return;
+      } catch (err) {
+        console.error("QZ print failed for Pick Ticket, falling back to standard browser print...", err);
+      }
+    }
+
+    // Fallback to standard browser printing via hidden iframe
+    try {
+      const iframe = document.createElement("iframe");
+      iframe.style.position = "fixed";
+      iframe.style.right = "0";
+      iframe.style.bottom = "0";
+      iframe.style.width = "0";
+      iframe.style.height = "0";
+      iframe.style.border = "0";
+      document.body.appendChild(iframe);
+      
+      const doc = iframe.contentWindow?.document || iframe.contentDocument;
+      if (!doc) {
+        resolve(false);
+        return;
+      }
+      
+      doc.open();
+      doc.write(html);
+      doc.close();
+      
+      setTimeout(() => {
+        try {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+          document.body.removeChild(iframe);
+          resolve(true);
+        } catch (e) {
+          resolve(false);
+        }
+      }, 300);
+    } catch (err) {
+      resolve(false);
+    }
+  });
+}

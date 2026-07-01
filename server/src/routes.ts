@@ -5808,5 +5808,82 @@ router.get("/stock/procurement-drafts", async (req, res) => {
   }
 });
 
+// --- Held Sales (Cart Hold/Resume) ---
+
+// Save current cart as "held"
+router.post("/held-sales", async (req, res) => {
+  try {
+    const { basketJson, label, customerId, customerName, paymentType, notes, warehouseId } = req.body;
+    if (!basketJson) {
+      return res.status(400).json({ message: "Səbət məlumatı tələb olunur" });
+    }
+
+    const username = (req.headers["x-user-username"] as string || "system").trim().toLowerCase();
+    const warehouseIdNum = warehouseId ? parseInt(warehouseId) : null;
+
+    const [record] = await db.insert(schema.heldSales).values({
+      tenantId: req.tenantId,
+      label: label || null,
+      basketJson,
+      customerId: customerId ? parseInt(customerId) : null,
+      customerName: customerName || null,
+      paymentType: paymentType || "Nəğd",
+      notes: notes || null,
+      heldBy: username,
+      heldAt: new Date().toISOString(),
+      warehouseId: warehouseIdNum,
+    }).returning();
+
+    await db.insert(schema.activityLogs).values({
+      tenantId: req.tenantId,
+      username,
+      action: "SATISH_SAXLANDI",
+      description: `Satış saxlandı: "${label || "Adsız"}"`,
+      timestamp: new Date().toISOString(),
+    });
+
+    res.json(record);
+  } catch (error) {
+    console.error("Hold sale error:", error);
+    res.status(500).json({ message: "Satış saxlanarkən xəta baş verdi" });
+  }
+});
+
+// Get all held sales for this tenant
+router.get("/held-sales", async (req, res) => {
+  try {
+    const list = await db.select().from(schema.heldSales)
+      .where(eq(schema.heldSales.tenantId, req.tenantId))
+      .orderBy(desc(schema.heldSales.heldAt));
+    res.json(list);
+  } catch (error) {
+    console.error("Get held sales error:", error);
+    res.status(500).json({ message: "Saxlanmış satışları çəkərkən xəta baş verdi" });
+  }
+});
+
+// Delete (discard) a held sale
+router.delete("/held-sales/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    await db.delete(schema.heldSales)
+      .where(and(eq(schema.heldSales.id, id), eq(schema.heldSales.tenantId, req.tenantId)));
+
+    const username = (req.headers["x-user-username"] as string || "system").trim().toLowerCase();
+    await db.insert(schema.activityLogs).values({
+      tenantId: req.tenantId,
+      username,
+      action: "SAXLANMIŞ_SİLİNDİ",
+      description: `Saxlanmış satış silindi: ID ${id}`,
+      timestamp: new Date().toISOString(),
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Delete held sale error:", error);
+    res.status(500).json({ message: "Saxlanmış satış silinərkən xəta baş verdi" });
+  }
+});
+
 export default router;
 

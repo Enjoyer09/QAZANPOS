@@ -15,6 +15,10 @@ import {
   Globe,
   Zap,
   X,
+  Bookmark,
+  BookmarkCheck,
+  Clock,
+  DollarSign,
 } from "lucide-react";
 import { 
   cacheProducts, 
@@ -27,7 +31,7 @@ import {
   saveOfflineReturn
 } from "../lib/offlineSync.ts";
 import { useToast } from "../components/Toast.tsx";
-import { printReceipt, printZReport } from "../components/ReceiptPrint.tsx";
+import { printReceipt, printZReport, printPickTicket } from "../components/ReceiptPrint.tsx";
 import { sanitizeQtyInput } from "../lib/utils.ts";
 
 interface BasketItem {
@@ -39,6 +43,7 @@ interface BasketItem {
   minPrice: number; // Snapshot of lastPurchasePrice
   serialNumbers?: string[];
   category?: string;
+  originalPrice?: number;
 }
 
 export default function POS() {
@@ -218,6 +223,20 @@ export default function POS() {
   const [useLoyaltyPoints, setUseLoyaltyPoints] = useState(false);
   const [loyaltyDiscountInput, setLoyaltyDiscountInput] = useState("0");
 
+  // Cash Payment State (change calculator)
+  const [cashReceivedInput, setCashReceivedInput] = useState("");
+
+  // Hold/Resume State
+  const [isHoldModalOpen, setIsHoldModalOpen] = useState(false);
+  const [holdLabel, setHoldLabel] = useState("");
+  const [isHeldListOpen, setIsHeldListOpen] = useState(false);
+  const [isHoldingCart, setIsHoldingCart] = useState(false);
+
+  // Per-item Discount State
+  const [discountModalItem, setDiscountModalItem] = useState<BasketItem | null>(null);
+  const [discountVal, setDiscountVal] = useState("");
+  const [discountType, setDiscountType] = useState<"percent" | "amount">("percent");
+
   const handleResetPOS = () => {
     setBasket([]);
     setEditingPrices({});
@@ -242,6 +261,7 @@ export default function POS() {
     setUseLoyaltyPoints(false);
     setLoyaltyDiscountInput("0");
     setActualCashInput("");
+    setCashReceivedInput("");
     setCloseShiftStats(null);
   };
 
@@ -268,6 +288,75 @@ export default function POS() {
     },
     enabled: isOnline,
   });
+
+  // Held Sales Query
+  const { data: heldSales, refetch: refetchHeldSales } = useQuery<any[]>({
+    queryKey: ["/api/held-sales"],
+    queryFn: async () => {
+      const res = await fetch("/api/held-sales");
+      if (!res.ok) throw new Error();
+      return res.json();
+    },
+    enabled: isOnline,
+  });
+
+  const handleHoldCart = async () => {
+    if (basket.length === 0) {
+      toast({ title: "Xəta!", description: "Səbət boşdur.", variant: "destructive" });
+      return;
+    }
+    setIsHoldingCart(true);
+    try {
+      const activeCustomer = activeCustomers?.find((c) => c.id === parseInt(selectedCustomerId));
+      const res = await fetch("/api/held-sales", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          basketJson: JSON.stringify(basket),
+          label: holdLabel.trim() || null,
+          customerId: selectedCustomerId || null,
+          customerName: customerMode === "existing" ? activeCustomer?.name : newCustomerName || null,
+          paymentType,
+          notes,
+          warehouseId: currentUser?.warehouseId || null,
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json()).message);
+      toast({ title: "Saxlandı! 🔖", description: `Satış saxlandı: "${holdLabel || "Adsız"}"`, variant: "success" });
+      handleResetPOS();
+      setIsHoldModalOpen(false);
+      setHoldLabel("");
+      refetchHeldSales();
+    } catch (err: any) {
+      toast({ title: "Xəta!", description: err.message, variant: "destructive" });
+    } finally {
+      setIsHoldingCart(false);
+    }
+  };
+
+  const handleResumeHeld = (held: any) => {
+    try {
+      const parsed: BasketItem[] = JSON.parse(held.basketJson);
+      setBasket(parsed);
+      if (held.customerId) setSelectedCustomerId(held.customerId.toString());
+      if (held.paymentType) setPaymentType(held.paymentType);
+      if (held.notes) setNotes(held.notes);
+      setIsHeldListOpen(false);
+      toast({ title: "Davam edildi! ▶️", description: `"${held.label || "Adsız"}" satışı yükləndi.`, variant: "success" });
+      // Auto-delete from held list after resuming
+      fetch(`/api/held-sales/${held.id}`, { method: "DELETE" }).then(() => refetchHeldSales());
+    } catch {
+      toast({ title: "Xəta!", description: "Saxlanmış satış yüklənə bilmədi.", variant: "destructive" });
+    }
+  };
+
+  const handleDeleteHeld = async (id: number) => {
+    await fetch(`/api/held-sales/${id}`, { method: "DELETE" });
+    refetchHeldSales();
+    toast({ title: "Silindi", description: "Saxlanmış satış silindi.", variant: "success" });
+  };
+
+
 
   // Silent automatic cache updates
   useEffect(() => {
@@ -386,10 +475,12 @@ export default function POS() {
           if (item.productId === prod.productId) {
             const updatedSerials = item.serialNumbers ? [...item.serialNumbers] : [];
             if (serialNum) updatedSerials.push(serialNum);
+            const defaultPrice = customSalePrice !== undefined ? customSalePrice : item.salePrice;
             return {
               ...item,
               quantity: item.quantity + qty,
-              salePrice: customSalePrice !== undefined ? customSalePrice : item.salePrice,
+              salePrice: defaultPrice,
+              originalPrice: item.originalPrice || defaultPrice,
               serialNumbers: updatedSerials,
             };
           }
@@ -397,6 +488,7 @@ export default function POS() {
         })
       );
     } else {
+      const defaultPrice = customSalePrice !== undefined ? customSalePrice : (prod.lastSalePrice || prod.lastPurchasePrice || 0);
       setBasket((prev) => [
         ...prev,
         {
@@ -404,7 +496,8 @@ export default function POS() {
           productName: prod.productName,
           unit: prod.unit,
           quantity: qty,
-          salePrice: customSalePrice !== undefined ? customSalePrice : (prod.lastSalePrice || prod.lastPurchasePrice || 0),
+          salePrice: defaultPrice,
+          originalPrice: defaultPrice,
           minPrice: prod.lastPurchasePrice || 0,
           serialNumbers: serialNum ? [serialNum] : [],
           category: prod.category,
@@ -712,13 +805,19 @@ export default function POS() {
 
     if (existingInBasket) {
       setBasket((prev) =>
-        prev.map((item) =>
-          item.productId === prod.productId
-            ? { ...item, quantity: item.quantity + qty }
-            : item
-        )
+        prev.map((item) => {
+          if (item.productId === prod.productId) {
+            return {
+              ...item,
+              quantity: item.quantity + qty,
+              originalPrice: item.originalPrice || item.salePrice
+            };
+          }
+          return item;
+        })
       );
     } else {
+      const defaultPrice = prod.lastSalePrice || prod.lastPurchasePrice || 0;
       setBasket((prev) => [
         ...prev,
         {
@@ -726,7 +825,8 @@ export default function POS() {
           productName: prod.productName,
           unit: prod.unit,
           quantity: qty,
-          salePrice: prod.lastSalePrice || prod.lastPurchasePrice || 0, // Defaults to last sale price, then purchase price
+          salePrice: defaultPrice,
+          originalPrice: defaultPrice,
           minPrice: prod.lastPurchasePrice,
           category: prod.category,
         },
@@ -790,6 +890,32 @@ export default function POS() {
         return { ...item, [field]: value };
       })
     );
+  };
+
+  const applyItemDiscount = (productId: number, val: string, type: "percent" | "amount") => {
+    const inputVal = parseFloat(val) || 0;
+    setBasket((prev) =>
+      prev.map((item) => {
+        if (item.productId !== productId) return item;
+        const orig = item.originalPrice || item.salePrice;
+        let finalPrice = orig;
+
+        if (type === "percent") {
+          finalPrice = orig * (1 - inputVal / 100);
+        } else {
+          finalPrice = Math.max(0, orig - inputVal);
+        }
+
+        return {
+          ...item,
+          salePrice: parseFloat(finalPrice.toFixed(2)),
+          originalPrice: orig,
+        };
+      })
+    );
+    setDiscountModalItem(null);
+    setDiscountVal("");
+    toast({ title: "Endirim tətbiq edildi! 🏷️", variant: "success" });
   };
 
   // Calculations
@@ -1494,30 +1620,50 @@ export default function POS() {
                           </td>
                           <td className="py-4 px-2 text-right">
                             <div className="flex flex-col items-end">
-                              <input
-                                type="text"
-                                inputMode="decimal"
-                                value={editingPrices[item.productId] !== undefined ? editingPrices[item.productId] : item.salePrice.toString()}
-                                onChange={(e) => {
-                                  const sanitized = cleanNumberInput(e.target.value);
-                                  setEditingPrices((prev) => ({ ...prev, [item.productId]: sanitized }));
-                                  if (!sanitized.endsWith(".")) {
-                                    handleUpdateBasketItem(item.productId, "salePrice", sanitized);
-                                  }
-                                }}
-                                onBlur={() => {
-                                  setEditingPrices((prev) => {
-                                    const copy = { ...prev };
-                                    delete copy[item.productId];
-                                    return copy;
-                                  });
-                                }}
-                                className={`w-20 px-2 py-1 border rounded-lg text-right focus:outline-none focus:ring-1 ${
-                                  isLoss
-                                    ? "border-red-400 focus:ring-red-500 bg-red-50/50"
-                                    : (posMode === "return" ? "border-gray-200 focus:ring-amber-500" : "border-gray-200 focus:ring-primary")
-                                }`}
-                              />
+                              <div className="flex items-center gap-1.5 justify-end">
+                                {posMode === "sale" && item.originalPrice && item.salePrice < item.originalPrice && (
+                                  <span className="text-[10px] text-gray-400 line-through font-mono">
+                                    {item.originalPrice.toFixed(2)} ₼
+                                  </span>
+                                )}
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={editingPrices[item.productId] !== undefined ? editingPrices[item.productId] : item.salePrice.toString()}
+                                  onChange={(e) => {
+                                    const sanitized = cleanNumberInput(e.target.value);
+                                    setEditingPrices((prev) => ({ ...prev, [item.productId]: sanitized }));
+                                    if (!sanitized.endsWith(".")) {
+                                      handleUpdateBasketItem(item.productId, "salePrice", sanitized);
+                                    }
+                                  }}
+                                  onBlur={() => {
+                                    setEditingPrices((prev) => {
+                                      const copy = { ...prev };
+                                      delete copy[item.productId];
+                                      return copy;
+                                    });
+                                  }}
+                                  className={`w-18 px-2 py-1 border rounded-lg text-right focus:outline-none focus:ring-1 ${
+                                    isLoss
+                                      ? "border-red-400 focus:ring-red-500 bg-red-50/50"
+                                      : (posMode === "return" ? "border-gray-200 focus:ring-amber-500" : "border-gray-200 focus:ring-primary")
+                                  }`}
+                                />
+                                {posMode === "sale" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setDiscountModalItem(item);
+                                      setDiscountVal("");
+                                    }}
+                                    className="p-1 rounded-lg border border-amber-100 hover:bg-amber-50 text-amber-600 transition cursor-pointer"
+                                    title="Fərdi Endirim Tətbiq Et"
+                                  >
+                                    🏷️
+                                  </button>
+                                )}
+                              </div>
                               {isLoss && (
                                 <span className="text-[9px] font-bold text-red-500 mt-1">
                                   Min: {item.minPrice.toFixed(2)} ₼
@@ -1900,6 +2046,34 @@ export default function POS() {
                 </div>
               )}
 
+              {/* Cash Received Calculator (OpenTHC-inspired) */}
+              {posMode === "sale" && paymentType === "Nəğd" && (
+                <div className="space-y-1.5 border border-emerald-100 bg-emerald-50/20 p-3.5 rounded-xl animate-in slide-in-from-top-1.5">
+                  <label className="text-emerald-700 uppercase tracking-wider block text-[10px] font-bold flex items-center gap-1">
+                    <DollarSign className="w-3 h-3" /> Nəğd Qəbul Edildi
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={cashReceivedInput}
+                    onChange={(e) => setCashReceivedInput(e.target.value)}
+                    className="w-full px-4 py-3 border border-emerald-200 rounded-xl focus:outline-none bg-white focus:ring-1 focus:ring-emerald-400 font-mono font-bold text-sm"
+                  />
+                  {parseFloat(cashReceivedInput) > 0 && (
+                    <div className={`flex justify-between items-center font-bold text-sm px-1 pt-1 ${
+                      parseFloat(cashReceivedInput) >= totalAmount ? "text-emerald-700" : "text-red-600"
+                    }`}>
+                      <span>{parseFloat(cashReceivedInput) >= totalAmount ? "Qaytarılacaq:" : "Çatmayan:"}</span>
+                      <span className="font-mono">
+                        {Math.abs(parseFloat(cashReceivedInput) - totalAmount).toFixed(2)} ₼
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Checkout Button */}
               <button
                 onClick={handleCheckout}
@@ -1911,12 +2085,257 @@ export default function POS() {
                 }`}
               >
                 <CheckCircle className="w-4 h-4" />{" "}
-                {posMode === "return" ? "Geri Qaytarışı Tamamla" : (isCredit ? "Nisyə Satış Qeyd Et" : "Satışı Tamamla (Qaimə)")}
+                {posMode === "return" ? "Geri Qaytarlışı Tamamla" : (isCredit ? "Nisye Satış Qeyd Et" : "Satışı Tamamla (Qaimə)")}
               </button>
+
+              {/* Hold & Resume Buttons */}
+              {posMode === "sale" && (
+                <div className="grid grid-cols-3 gap-1.5">
+                  <button
+                    onClick={() => setIsHoldModalOpen(true)}
+                    disabled={basket.length === 0}
+                    className="w-full py-2.5 border border-amber-200 bg-amber-50/40 text-amber-700 font-bold rounded-xl cursor-pointer disabled:opacity-40 flex items-center justify-center gap-1 text-[10px] hover:bg-amber-50 transition-all"
+                  >
+                    <Bookmark className="w-3 h-3" /> Saxla
+                  </button>
+                  <button
+                    onClick={() => { setIsHeldListOpen(true); refetchHeldSales(); }}
+                    className="relative w-full py-2.5 border border-blue-200 bg-blue-50/40 text-blue-700 font-bold rounded-xl cursor-pointer flex items-center justify-center gap-1 text-[10px] hover:bg-blue-50 transition-all"
+                  >
+                    <BookmarkCheck className="w-3 h-3" /> Saxlanmış
+                    {heldSales && heldSales.length > 0 && (
+                      <span className="absolute -top-1.5 -right-1.5 bg-blue-600 text-white text-[9px] font-black rounded-full w-4 h-4 flex items-center justify-center">
+                        {heldSales.length}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (basket.length === 0) {
+                        toast({ title: "Xəta!", description: "Səbət boşdur", variant: "destructive" });
+                        return;
+                      }
+                      const ok = await printPickTicket(basket, holdLabel || "");
+                      if (ok) {
+                        toast({ title: "Yığım bileti göndərildi! 📋", variant: "success" });
+                      } else {
+                        toast({ title: "Xəta!", description: "Çap edilərkən səhv baş verdi", variant: "destructive" });
+                      }
+                    }}
+                    className="w-full py-2.5 border border-purple-200 bg-purple-50/40 text-purple-700 font-bold rounded-xl cursor-pointer flex items-center justify-center gap-1 text-[10px] hover:bg-purple-50 transition-all"
+                  >
+                    📋 Yığım Bileti
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
       </div>
+
+      {/* === HOLD CART MODAL === */}
+      {isHoldModalOpen && (
+        <div className="liquid-glass-overlay !z-100">
+          <div className="liquid-glass-card max-w-sm p-7 space-y-5">
+            <div className="flex items-center gap-3">
+              <div className="size-10 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center">
+                <Bookmark className="w-5 h-5 text-amber-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-gray-900">Satışı Saxla</h3>
+                <p className="text-[11px] text-gray-400">{basket.length} məhsul, {totalAmount.toFixed(2)} ₼</p>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-gray-400 uppercase tracking-wider block text-[10px] font-bold">Ad / Etiket (ixtiyari)</label>
+              <input
+                type="text"
+                placeholder="məs. Müştəri 2, Masa 4..."
+                value={holdLabel}
+                onChange={(e) => setHoldLabel(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleHoldCart()}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none bg-gray-50 focus:ring-1 focus:ring-amber-400 text-sm"
+                autoFocus
+              />
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setIsHoldModalOpen(false); setHoldLabel(""); }}
+                className="flex-1 py-2.5 border border-gray-200 text-gray-600 font-bold rounded-xl text-sm hover:bg-gray-50 transition-all"
+              >
+                Ləğv Et
+              </button>
+              <button
+                onClick={handleHoldCart}
+                disabled={isHoldingCart}
+                className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-sm disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+              >
+                <Bookmark className="w-4 h-4" />
+                {isHoldingCart ? "Saxlanır..." : "Saxla"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* === HELD SALES LIST MODAL === */}
+      {isHeldListOpen && (
+        <div className="liquid-glass-overlay !z-100">
+          <div className="liquid-glass-card max-w-md p-7 space-y-5 w-full">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="size-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center">
+                  <BookmarkCheck className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-gray-900">Saxlanmış Satışlar</h3>
+                  <p className="text-[11px] text-gray-400">{heldSales?.length || 0} saxlanmış satış</p>
+                </div>
+              </div>
+              <button onClick={() => setIsHeldListOpen(false)} className="size-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 transition">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {(!heldSales || heldSales.length === 0) ? (
+              <div className="text-center py-8 text-gray-400">
+                <Clock className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                <p className="text-sm font-medium">Saxlanmış satış yoxdur</p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-80 overflow-y-auto">
+                {heldSales.map((held) => {
+                  let items: any[] = [];
+                  try { items = JSON.parse(held.basketJson); } catch {}
+                  const heldTotal = items.reduce((s, i) => s + i.quantity * i.salePrice, 0);
+                  return (
+                    <div key={held.id} className="flex items-center justify-between p-3.5 border border-gray-100 rounded-xl bg-gray-50/50 hover:border-blue-200 transition">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-sm text-gray-900 truncate">{held.label || "Adsız Satış"}</p>
+                        <p className="text-[11px] text-gray-400">
+                          {items.length} məhsul • <span className="font-mono font-bold text-gray-700">{heldTotal.toFixed(2)} ₼</span>
+                        </p>
+                        <p className="text-[10px] text-gray-300">
+                          {new Date(held.heldAt).toLocaleTimeString("az-AZ", { hour: "2-digit", minute: "2-digit" })} • {held.heldBy}
+                        </p>
+                      </div>
+                      <div className="flex gap-2 ml-3">
+                        <button
+                          onClick={() => handleResumeHeld(held)}
+                          className="px-3 py-2 bg-blue-600 text-white font-bold rounded-lg text-xs hover:bg-blue-700 transition flex items-center gap-1"
+                        >
+                          ▶️ Davam
+                        </button>
+                        <button
+                          onClick={() => handleDeleteHeld(held.id)}
+                          className="px-2 py-2 border border-red-100 text-red-500 font-bold rounded-lg text-xs hover:bg-red-50 transition"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* === INDIVIDUAL ITEM DISCOUNT MODAL === */}
+      {discountModalItem && (
+        <div className="liquid-glass-overlay !z-100">
+          <div className="liquid-glass-card max-w-sm p-7 space-y-5">
+            <div className="flex items-center gap-3">
+              <div className="size-10 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-lg">
+                🏷️
+              </div>
+              <div>
+                <h3 className="text-base font-black text-gray-900">Məhsul Endirimi</h3>
+                <p className="text-[11px] text-gray-400 truncate max-w-[200px]">{discountModalItem.productName}</p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex bg-gray-100 p-1 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setDiscountType("percent")}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${discountType === "percent" ? "bg-white text-gray-900 shadow-xs" : "text-gray-400"}`}
+                >
+                  Faiz (%)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDiscountType("amount")}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${discountType === "amount" ? "bg-white text-gray-900 shadow-xs" : "text-gray-400"}`}
+                >
+                  Məbləğ (₼)
+                </button>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-gray-400 uppercase tracking-wider block text-[10px] font-bold">Endirim Dəyəri</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="0.00"
+                    value={discountVal}
+                    onChange={(e) => setDiscountVal(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        applyItemDiscount(discountModalItem.productId, discountVal, discountType);
+                      }
+                    }}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-400 text-sm font-bold"
+                    autoFocus
+                  />
+                  <span className="absolute right-4 top-3 text-gray-400 font-bold text-xs">
+                    {discountType === "percent" ? "%" : "₼"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Min price warning (OpenTHC guard style) */}
+              {(() => {
+                const val = parseFloat(discountVal) || 0;
+                const orig = discountModalItem.originalPrice || discountModalItem.salePrice;
+                const targetPrice = discountType === "percent" ? orig * (1 - val / 100) : orig - val;
+                const isPriceBelowMin = targetPrice < discountModalItem.minPrice;
+                
+                if (isPriceBelowMin) {
+                  return (
+                    <div className="bg-red-50 border border-red-100 p-3 rounded-xl flex items-start gap-2 text-[11px] text-red-700 font-medium">
+                      <AlertTriangle className="w-4 h-4 shrink-0 text-red-500 mt-0.5" />
+                      <div>
+                        <p className="font-bold">Maya Dəyərindən Aşağı! ⚠️</p>
+                        <p className="text-red-600/90 leading-tight">Məhsulun mayası: {discountModalItem.minPrice.toFixed(2)} ₼. Satış zərərlə yekunlaşacaq.</p>
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setDiscountModalItem(null); setDiscountVal(""); }}
+                className="flex-1 py-2.5 border border-gray-200 text-gray-600 font-bold rounded-xl text-sm hover:bg-gray-50 transition-all"
+              >
+                Ləğv Et
+              </button>
+              <button
+                onClick={() => applyItemDiscount(discountModalItem.productId, discountVal, discountType)}
+                className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-sm transition-all"
+              >
+                Tətbiq Et
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Success Modal Overlay */}
       {showSuccessModal && lastCreatedSale && (

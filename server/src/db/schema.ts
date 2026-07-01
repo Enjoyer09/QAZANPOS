@@ -483,6 +483,7 @@ export const tenantsRelations = relations(tenants, ({ many }) => ({
   warehouses: many(warehouses),
   stockTransfers: many(stockTransfers),
   safeTransfers: many(safeTransfers),
+  heldSales: many(heldSales),
 }));
 
 export const productsRelations = relations(products, ({ one, many }) => ({
@@ -797,6 +798,24 @@ export const stockTransfersRelations = relations(stockTransfers, ({ one }) => ({
   }),
 }));
 
+// 16. Held Sales (Cart Hold/Resume - OpenTHC pattern)
+export const heldSales = pgTable("held_sales", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" })
+    .default(1),
+  label: text("label"), // Optional label e.g. "Müştəri 1", "Masa 3"
+  basketJson: text("basket_json").notNull(), // JSON snapshot of BasketItem[]
+  customerId: integer("customer_id").references(() => customers.id, { onDelete: "set null" }),
+  customerName: text("customer_name"),
+  paymentType: text("payment_type").notNull().default("Nəğd"),
+  notes: text("notes"),
+  heldBy: text("held_by").notNull(), // username
+  heldAt: text("held_at").notNull(), // ISO timestamp
+  warehouseId: integer("warehouse_id").references(() => warehouses.id, { onDelete: "set null" }),
+});
+
 // 22. Safe Transfers and Vault Manual Transactions
 export const safeTransfers = pgTable("safe_transfers", {
   id: serial("id").primaryKey(),
@@ -845,4 +864,17 @@ export const stockAdjustmentsRelations = relations(stockAdjustments, ({ one }) =
   }),
 }));
 
-
+export const heldSalesRelations = relations(heldSales, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [heldSales.tenantId],
+    references: [tenants.id],
+  }),
+  customer: one(customers, {
+    fields: [heldSales.customerId],
+    references: [customers.id],
+  }),
+  warehouse: one(warehouses, {
+    fields: [heldSales.warehouseId],
+    references: [warehouses.id],
+  }),
+}));
