@@ -431,6 +431,7 @@ export const tenantsRelations = relations(tenants, ({ many }) => ({
   productSerials: many(productSerials),
   warehouses: many(warehouses),
   stockTransfers: many(stockTransfers),
+  safeTransfers: many(safeTransfers),
 }));
 
 export const productsRelations = relations(products, ({ one, many }) => ({
@@ -742,6 +743,27 @@ export const stockTransfersRelations = relations(stockTransfers, ({ one }) => ({
   product: one(products, {
     fields: [stockTransfers.productId],
     references: [products.id],
+  }),
+}));
+
+// 22. Safe Transfers and Vault Manual Transactions
+export const safeTransfers = pgTable("safe_transfers", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" })
+    .default(1),
+  amount: doublePrecision("amount").notNull(),
+  type: text("type").notNull(), // "kassa_to_safe", "safe_deposit", "safe_withdrawal"
+  description: text("description"),
+  date: text("date").notNull(), // ISO timestamp
+  username: text("username").notNull(),
+});
+
+export const safeTransfersRelations = relations(safeTransfers, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [safeTransfers.tenantId],
+    references: [tenants.id],
   }),
 }));
 

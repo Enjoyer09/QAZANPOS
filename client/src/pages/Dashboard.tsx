@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
+import { useToast } from "../components/Toast.tsx";
 import {
   TrendingUp,
   TrendingDown,
@@ -15,6 +16,14 @@ import {
   Activity,
   Calendar,
   PieChart,
+  Wallet,
+  Landmark,
+  ArrowLeftRight,
+  Coins,
+  Plus,
+  Minus,
+  Lock,
+  ShieldCheck,
 } from "lucide-react";
 
 interface SummaryData {
@@ -467,10 +476,40 @@ function CogsMarginWidget({ data }: { data: any }) {
 // ----------------------------------------------------
 
 export default function Dashboard() {
+  const { toast } = useToast();
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+
+  // Safe & Kassa Transfers state
+  const [transferAmount, setTransferAmount] = useState("");
+  const [transferDesc, setTransferDesc] = useState("");
+  const [isSubmittingTransfer, setIsSubmittingTransfer] = useState(false);
+  const [safeActionType, setSafeActionType] = useState<"safe_deposit" | "safe_withdrawal">("safe_deposit");
+  const [safeActionAmount, setSafeActionAmount] = useState("");
+  const [safeActionDesc, setSafeActionDesc] = useState("");
+  const [isSubmittingSafeAction, setIsSubmittingSafeAction] = useState(false);
   const [filterActive, setFilterActive] = useState(false);
-  const [activeTab, setActiveTab] = useState<"summary" | "analytics">("summary");
+  const [activeTab, setActiveTab] = useState<"summary" | "analytics" | "finance">("summary");
+
+  const { data: balances, isLoading: isBalancesLoading, refetch: refetchBalances } = useQuery<any>({
+    queryKey: ["/api/dashboard/balances"],
+    queryFn: async () => {
+      const res = await fetch("/api/dashboard/balances");
+      if (!res.ok) throw new Error();
+      return res.json();
+    },
+    enabled: activeTab === "finance",
+  });
+
+  const { data: safeTransfers, isLoading: isTransfersLoading, refetch: refetchTransfers } = useQuery<any[]>({
+    queryKey: ["/api/safe-transfers"],
+    queryFn: async () => {
+      const res = await fetch("/api/safe-transfers");
+      if (!res.ok) throw new Error();
+      return res.json();
+    },
+    enabled: activeTab === "finance",
+  });
 
   // Queries
   const summaryParams = filterActive
@@ -518,6 +557,91 @@ export default function Dashboard() {
     enabled: activeTab === "analytics",
   });
 
+  const handleSafeTransferSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!transferAmount) return;
+    setIsSubmittingTransfer(true);
+    try {
+      const res = await fetch("/api/safe-transfers", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-User-Username": (() => {
+            try {
+              const u = localStorage.getItem("qazanpos_user");
+              return u ? JSON.parse(u).username : "system";
+            } catch (e) { return "system"; }
+          })(),
+        },
+        body: JSON.stringify({
+          amount: transferAmount,
+          type: "kassa_to_safe",
+          description: transferDesc,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      toast({
+        title: "Köçürmə uğurlu oldu",
+        description: `${parseFloat(transferAmount).toFixed(2)} AZN kassadan seyfə köçürüldü.`,
+      });
+      setTransferAmount("");
+      setTransferDesc("");
+      refetchBalances();
+      refetchTransfers();
+    } catch (err) {
+      toast({
+        title: "Xəta baş verdi",
+        description: "Köçürməni icra etmək mümkün olmadı.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmittingTransfer(false);
+    }
+  };
+
+  const handleSafeActionSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!safeActionAmount) return;
+    setIsSubmittingSafeAction(true);
+    try {
+      const res = await fetch("/api/safe-transfers", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-User-Username": (() => {
+            try {
+              const u = localStorage.getItem("qazanpos_user");
+              return u ? JSON.parse(u).username : "system";
+            } catch (e) { return "system"; }
+          })(),
+        },
+        body: JSON.stringify({
+          amount: safeActionAmount,
+          type: safeActionType,
+          description: safeActionDesc,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      const typeLabel = safeActionType === "safe_deposit" ? "mədaxil" : "məxaric";
+      toast({
+        title: "Əməliyyat uğurlu oldu",
+        description: `${parseFloat(safeActionAmount).toFixed(2)} AZN seyfə ${typeLabel} edildi.`,
+      });
+      setSafeActionAmount("");
+      setSafeActionDesc("");
+      refetchBalances();
+      refetchTransfers();
+    } catch (err) {
+      toast({
+        title: "Xəta baş verdi",
+        description: "Əməliyyatı icra etmək mümkün olmadı.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmittingSafeAction(false);
+    }
+  };
+
   const handleFilter = () => {
     setFilterActive(true);
   };
@@ -564,6 +688,16 @@ export default function Dashboard() {
                 }`}
               >
                 Analitika 📊
+              </button>
+              <button
+                onClick={() => setActiveTab("finance")}
+                className={`px-3 py-1.5 rounded-lg text-[10px] font-black tracking-wide uppercase transition-all cursor-pointer ${
+                  activeTab === "finance"
+                    ? "bg-white text-gray-900 shadow-xs"
+                    : "text-gray-400 hover:text-gray-900"
+                }`}
+              >
+                Maliyyə Balansı 💰
               </button>
             </div>
           </div>
@@ -890,7 +1024,7 @@ export default function Dashboard() {
             </div>
           </div>
         </>
-      ) : (
+      ) : activeTab === "analytics" ? (
         // ----------------------------------------------------
         // EXECUTIVE INTERACTIVE ANALYTICS LAYOUT
         // ----------------------------------------------------
@@ -979,6 +1113,269 @@ export default function Dashboard() {
 
                   <div className="py-4">
                     <CogsMarginWidget data={analytics.cogsAudit} />
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-6 animate-in fade-in-20 duration-300">
+          {/* Balance overview cards */}
+          {isBalancesLoading ? (
+            <div className="min-h-48 flex items-center justify-center bg-white border border-gray-100 rounded-3xl p-6 shadow-sm">
+              <div className="text-center space-y-3">
+                <RefreshCw className="w-8 h-8 text-primary mx-auto animate-spin" />
+                <span className="text-xs font-bold text-gray-400 block animate-pulse">Maliyyə balansları toplanır...</span>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                {/* Kassa Card */}
+                <div className="bg-white border border-gray-100 p-5 rounded-2xl shadow-xs glass-card relative overflow-hidden">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Kassa (Nəqd)</span>
+                    <div className="size-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center animate-pulse-subtle">
+                      <Wallet className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <span className="text-lg font-black text-gray-900 font-mono">{(balances?.kassa || 0).toFixed(2)} ₼</span>
+                    <span className="text-[9px] text-gray-400 block mt-1">POS-da olan aktiv nəqd pul</span>
+                  </div>
+                </div>
+
+                {/* Seyf Card */}
+                <div className="bg-white border border-gray-100 p-5 rounded-2xl shadow-xs glass-card relative overflow-hidden">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Seyf (Nəqd)</span>
+                    <div className="size-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                      <Lock className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <span className="text-lg font-black text-gray-900 font-mono">{(balances?.safe || 0).toFixed(2)} ₼</span>
+                    <span className="text-[9px] text-gray-400 block mt-1">Mağazanın əsas seyf fondu</span>
+                  </div>
+                </div>
+
+                {/* Bank/Card Card */}
+                <div className="bg-white border border-gray-100 p-5 rounded-2xl shadow-xs glass-card relative overflow-hidden">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Kart / Bank</span>
+                    <div className="size-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                      <Landmark className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <span className="text-lg font-black text-gray-900 font-mono">{(balances?.bank || 0).toFixed(2)} ₼</span>
+                    <span className="text-[9px] text-gray-400 block mt-1">Bank hesablarındakı qalıq</span>
+                  </div>
+                </div>
+
+                {/* Debts Card */}
+                <div className="bg-white border border-gray-100 p-5 rounded-2xl shadow-xs glass-card relative overflow-hidden">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Nisyə (Alacaqlar)</span>
+                    <div className="size-7 rounded-lg bg-red-50 text-red-600 flex items-center justify-center">
+                      <TrendingDown className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <span className="text-lg font-black text-red-600 font-mono">{(balances?.debt || 0).toFixed(2)} ₼</span>
+                    <span className="text-[9px] text-gray-400 block mt-1">Müştərilərin bizə olan borcu</span>
+                  </div>
+                </div>
+
+                {/* Investor Debt Card */}
+                <div className="bg-white border border-gray-100 p-5 rounded-2xl shadow-xs glass-card relative overflow-hidden">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">İnvestor Borcu</span>
+                    <div className="size-7 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
+                      <TrendingUp className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <span className="text-lg font-black text-purple-600 font-mono">{(balances?.investorDebt || 0).toFixed(2)} ₼</span>
+                    <span className="text-[9px] text-gray-400 block mt-1">Bizim investorlara borcumuz</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Forms / Transfer Section */}
+              <div className="grid gap-6 grid-cols-1 lg:grid-cols-3">
+                {/* Kassa to Safe transfer form */}
+                <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card space-y-4 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <ArrowLeftRight className="w-5 h-5 text-indigo-600 animate-pulse-subtle" />
+                      <h3 className="font-extrabold text-gray-900 text-sm">Kassadan Seyfə Köçürmə</h3>
+                    </div>
+                    <p className="text-[10px] text-gray-400 leading-relaxed mt-1">
+                      Kassada (POS) toplanmış nağd vəsaiti təhlükəsizlik məqsədilə əsas Seyfə köçürün.
+                    </p>
+                  </div>
+                  
+                  <form onSubmit={handleSafeTransferSubmit} className="space-y-3.5 mt-4">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-gray-400 uppercase block">Köçürülən Məbləğ (₼)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="Məbləğ daxil edin"
+                        value={transferAmount}
+                        onChange={(e) => setTransferAmount(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-600 bg-gray-50/30"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-gray-400 uppercase block">Açıqlama / Qeyd</label>
+                      <input
+                        type="text"
+                        placeholder="Məs. Günlük kassa təhvili"
+                        value={transferDesc}
+                        onChange={(e) => setTransferDesc(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-600 bg-gray-50/30"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={isSubmittingTransfer}
+                      className="w-full py-2 bg-indigo-600 text-white font-bold text-xs rounded-xl hover:bg-indigo-700 disabled:opacity-50 cursor-pointer transition-colors shadow-sm"
+                    >
+                      {isSubmittingTransfer ? "Köçürülür..." : "Köçürməni Tamamla"}
+                    </button>
+                  </form>
+                </div>
+
+                {/* Safe Deposit / Withdrawal form */}
+                <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card space-y-4 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Coins className="w-5 h-5 text-emerald-600" />
+                      <h3 className="font-extrabold text-gray-900 text-sm">Seyf Mədaxil və Məxarici</h3>
+                    </div>
+                    <p className="text-[10px] text-gray-400 leading-relaxed mt-1">
+                      Kassadan kənar, birbaşa Seyfə nağd vəsait əlavə edin (Mədaxil) və ya seyfdən nağd pul çıxarın (Məxaric).
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleSafeActionSubmit} className="space-y-3.5 mt-4">
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSafeActionType("safe_deposit")}
+                        className={`py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                          safeActionType === "safe_deposit"
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                            : "border-gray-200 text-gray-400"
+                        }`}
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Mədaxil
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSafeActionType("safe_withdrawal")}
+                        className={`py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                          safeActionType === "safe_withdrawal"
+                            ? "bg-rose-50 text-rose-700 border-rose-200"
+                            : "border-gray-200 text-gray-400"
+                        }`}
+                      >
+                        <Minus className="w-3.5 h-3.5" /> Məxaric
+                      </button>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-gray-400 uppercase block">Məbləğ (₼)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="Məbləğ daxil edin"
+                        value={safeActionAmount}
+                        onChange={(e) => setSafeActionAmount(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/30"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-gray-400 uppercase block">Təyinat / Səbəb</label>
+                      <input
+                        type="text"
+                        placeholder="Məs. Təsisçi tərəfindən pul qoyuluşu"
+                        value={safeActionDesc}
+                        onChange={(e) => setSafeActionDesc(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/30"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={isSubmittingSafeAction}
+                      className={`w-full py-2 text-white font-bold text-xs rounded-xl cursor-pointer disabled:opacity-50 transition-colors shadow-sm ${
+                        safeActionType === "safe_deposit" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-rose-600 hover:bg-rose-700"
+                      }`}
+                    >
+                      {isSubmittingSafeAction ? "Qeyd edilir..." : "Əməliyyatı Qeyd Et"}
+                    </button>
+                  </form>
+                </div>
+
+                {/* Transfers History List */}
+                <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card space-y-4 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Activity className="w-5 h-5 text-gray-600 animate-spin-slow" />
+                        <h3 className="font-extrabold text-gray-900 text-sm">Son Köçürmələr</h3>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => { refetchBalances(); refetchTransfers(); }}
+                        className="p-1.5 text-gray-400 hover:text-gray-900 rounded-lg hover:bg-gray-50 cursor-pointer"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    <div className="space-y-2.5 max-h-[220px] overflow-y-auto pr-1 mt-4">
+                      {isTransfersLoading ? (
+                        <p className="text-xs text-gray-400">Yüklənir...</p>
+                      ) : !safeTransfers || safeTransfers.length === 0 ? (
+                        <p className="text-xs text-gray-400 py-8 text-center font-medium">Köçürmə tarixçəsi boşdur.</p>
+                      ) : (
+                        safeTransfers.map((st: any) => (
+                          <div key={st.id} className="border-b border-gray-50 pb-2.5 last:border-0 last:pb-0 text-xs">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <span className={`px-1.5 py-0.5 rounded-sm font-bold text-[8px] uppercase ${
+                                  st.type === "kassa_to_safe"
+                                    ? "bg-indigo-50 text-indigo-700 border border-indigo-100"
+                                    : st.type === "safe_deposit"
+                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                                    : "bg-rose-50 text-rose-700 border border-rose-100"
+                                }`}>
+                                  {st.type === "kassa_to_safe" ? "Kassa ➔ Seyf" : st.type === "safe_deposit" ? "Seyf Mədaxil" : "Seyf Məxaric"}
+                                </span>
+                                <span className="text-[10px] text-gray-400 block mt-1">{new Date(st.date).toLocaleString("az-AZ")}</span>
+                              </div>
+                              <span className={`font-mono font-bold ${
+                                st.type === "safe_withdrawal" ? "text-rose-600" : "text-emerald-600"
+                              }`}>
+                                {st.type === "safe_withdrawal" ? "-" : "+"}{st.amount.toFixed(2)} ₼
+                              </span>
+                            </div>
+                            {st.description && (
+                              <p className="text-[10px] text-gray-500 mt-1 italic">
+                                "{st.description}"
+                              </p>
+                            )}
+                            <span className="text-[9px] text-gray-400 block mt-0.5">İcraçı: @{st.username}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

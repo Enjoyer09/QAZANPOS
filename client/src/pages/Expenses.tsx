@@ -23,7 +23,8 @@ const categoryBadges: Record<string, string> = {
 };
 
 const paymentTypeLabels: Record<string, string> = {
-  cash: "Nəqd",
+  cash: "Nəqd (Kassa)",
+  safe: "Seyf (Nəqd)",
   card: "Kart / Bank",
   investor_debt: "İnvestor Borcu",
   other: "Digər",
@@ -31,6 +32,7 @@ const paymentTypeLabels: Record<string, string> = {
 
 const paymentTypeBadges: Record<string, string> = {
   cash: "bg-emerald-50 text-emerald-700 border-emerald-100",
+  safe: "bg-indigo-50 text-indigo-700 border-indigo-100",
   card: "bg-blue-50 text-blue-700 border-blue-100",
   investor_debt: "bg-purple-50 text-purple-700 border-purple-100",
   other: "bg-gray-50 text-gray-700 border-gray-100",
@@ -290,6 +292,7 @@ export default function Expenses() {
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 cursor-pointer"
               >
                 <option value="cash">Nəqd (Kassa)</option>
+                <option value="safe">Seyf (Nəqd)</option>
                 <option value="card">Kart / Bank Hesabı</option>
                 <option value="investor_debt">İnvestor Borcu</option>
                 <option value="other">Digər</option>

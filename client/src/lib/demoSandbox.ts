@@ -203,6 +203,7 @@ export function initDemoDatabase() {
   sessionStorage.setItem("birsaas_demo_warehouses", JSON.stringify(DEFAULT_WAREHOUSES));
   sessionStorage.setItem("birsaas_demo_stock_transfers", JSON.stringify(DEFAULT_STOCK_TRANSFERS));
   sessionStorage.setItem("birsaas_demo_product_serials", JSON.stringify(DEFAULT_PRODUCT_SERIALS));
+  sessionStorage.setItem("birsaas_demo_safe_transfers", JSON.stringify([]));
   sessionStorage.setItem("birsaas_demo_db_initialized", "true");
 }
 
@@ -1301,6 +1302,154 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
     const threshold = settings.lowStockAlertCount || 5;
     const lowStock = products.filter(p => p.currentQuantity < threshold);
     return jsonResponse(lowStock);
+  }
+
+  // Safe Transfers List
+  if (path === "/api/safe-transfers" && method === "GET") {
+    const safeTransfers = getDb("safe_transfers");
+    const sorted = [...safeTransfers].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    return jsonResponse(sorted);
+  }
+
+  // Create Safe Transfer
+  if (path === "/api/safe-transfers" && method === "POST") {
+    const bodyObj = getBody();
+    const { amount, type, description } = bodyObj || {};
+    const amt = parseFloat(amount);
+    if (isNaN(amt) || amt <= 0) {
+      return jsonResponse({ message: "Düzgün məbləğ daxil edin" }, 400);
+    }
+    const safeTransfers = getDb("safe_transfers");
+    const nextId = safeTransfers.length > 0 ? Math.max(...safeTransfers.map(t => t.id)) + 1 : 1;
+    
+    const userStr = localStorage.getItem("qazanpos_user");
+    let currentUsername = "system";
+    if (userStr) {
+      try {
+        const u = JSON.parse(userStr);
+        currentUsername = u.username || "system";
+      } catch (e) {}
+    }
+
+    const newTx = {
+      id: nextId,
+      amount: amt,
+      type,
+      description: description || null,
+      date: new Date().toISOString(),
+      username: currentUsername,
+    };
+    safeTransfers.push(newTx);
+    saveDb("safe_transfers", safeTransfers);
+
+    let actionDesc = "";
+    if (type === "kassa_to_safe") actionDesc = "Kassadan Seyfə köçürmə";
+    if (type === "safe_deposit") actionDesc = "Seyfə mədaxil";
+    if (type === "safe_withdrawal") actionDesc = "Seyfdən məxaric";
+
+    const logs = getDb("logs");
+    const nextLogId = logs.length > 0 ? Math.max(...logs.map(l => l.id)) + 1 : 1;
+    logs.push({
+      id: nextLogId,
+      username: currentUsername,
+      action: "Maliyyə Əməliyyatı",
+      description: `${actionDesc}: ${amt.toFixed(2)} AZN qeydə alındı`,
+      timestamp: new Date().toISOString(),
+      archived: 0
+    });
+    saveDb("logs", logs);
+
+    return jsonResponse(newTx);
+  }
+
+  // Calculate Balances
+  if (path === "/api/dashboard/balances" && method === "GET") {
+    const sales = getDb("sales");
+    const returns = getDb("returns");
+    const expenses = getDb("expenses");
+    const stockEntries = getDb("stock_entries");
+    const safeTransfers = getDb("safe_transfers");
+
+    let kassa = 0;
+    let safe = 0;
+    let bank = 0;
+    let debt = 0;
+    let investorDebt = 0;
+
+    for (const sale of sales) {
+      const total = sale.totalAmount || 0;
+      if (sale.payments && sale.payments.length > 0) {
+        for (const p of sale.payments) {
+          if (p.paymentType === "Nəğd") {
+            kassa += p.amount;
+          } else if (["Kart", "Kart2Kart", "Köçürmə"].includes(p.paymentType)) {
+            bank += p.amount;
+          }
+        }
+      } else {
+        const paid = sale.paidAmount !== undefined ? sale.paidAmount : total;
+        if (sale.paymentType === "Nəğd") {
+          kassa += paid;
+        } else if (["Kart", "Kart2Kart", "Köçürmə"].includes(sale.paymentType)) {
+          bank += paid;
+        } else if (sale.paymentType === "Nisyə") {
+          kassa += paid;
+        }
+      }
+
+      if (sale.paymentStatus === "credit" || sale.paymentType === "Nisyə") {
+        const paid = sale.payments ? sale.payments.reduce((acc: number, p: any) => acc + p.amount, 0) : (sale.paidAmount || 0);
+        debt += Math.max(0, total - paid);
+      }
+    }
+
+    for (const ret of returns) {
+      kassa -= ret.totalAmount;
+    }
+
+    for (const exp of expenses) {
+      const type = exp.paymentType || "cash";
+      if (type === "cash") {
+        kassa -= exp.amount;
+      } else if (type === "card") {
+        bank -= exp.amount;
+      } else if (type === "safe") {
+        safe -= exp.amount;
+      } else if (type === "investor_debt") {
+        investorDebt += exp.amount;
+      }
+    }
+
+    for (const entry of stockEntries) {
+      if (entry.paidStatus === "paid") {
+        const totalCost = entry.quantity * entry.purchasePrice;
+        const type = entry.paymentType || "Nəğd";
+        if (type === "Nəğd") {
+          kassa -= totalCost;
+        } else {
+          bank -= totalCost;
+        }
+      }
+    }
+
+    for (const st of safeTransfers) {
+      if (st.type === "kassa_to_safe") {
+        kassa -= st.amount;
+        safe += st.amount;
+      } else if (st.type === "safe_deposit") {
+        safe += st.amount;
+      } else if (st.type === "safe_withdrawal") {
+        safe -= st.amount;
+      }
+    }
+
+    return jsonResponse({
+      kassa: Math.max(0, kassa),
+      safe: Math.max(0, safe),
+      bank: Math.max(0, bank),
+      debt: Math.max(0, debt),
+      investorDebt: Math.max(0, investorDebt),
+    });
   }
 
   // 10. Dashboard Summary (Financial aggregation)

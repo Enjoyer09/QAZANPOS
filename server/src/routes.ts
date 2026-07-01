@@ -3254,6 +3254,160 @@ router.delete("/expenses/:id", requireAdmin, async (req, res) => {
 // 7. DASHBOARD ANALYTICS ENDPOINTS
 // ----------------------------------------------------
 
+router.get("/safe-transfers", requireAdmin, async (req, res) => {
+  try {
+    const list = await db.select().from(schema.safeTransfers).where(
+      eq(schema.safeTransfers.tenantId, req.tenantId)
+    ).orderBy(desc(schema.safeTransfers.date));
+    res.json(list);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Köçürmə tarixçəsi yüklənmədi" });
+  }
+});
+
+router.post("/safe-transfers", requireAdmin, async (req, res) => {
+  try {
+    const { amount, type, description } = req.body;
+    const amt = parseFloat(amount);
+    if (isNaN(amt) || amt <= 0) {
+      return res.status(400).json({ message: "Düzgün məbləğ daxil edin" });
+    }
+    if (!["kassa_to_safe", "safe_deposit", "safe_withdrawal"].includes(type)) {
+      return res.status(400).json({ message: "Düzgün transfer növü deyil" });
+    }
+    const newTx = {
+      tenantId: req.tenantId,
+      amount: amt,
+      type,
+      description: description || null,
+      date: new Date().toISOString(),
+      username: req.headers["x-user-username"] as string || "system",
+    };
+    const inserted = await db.insert(schema.safeTransfers).values(newTx).returning();
+    
+    let actionDesc = "";
+    if (type === "kassa_to_safe") actionDesc = "Kassadan Seyfə köçürmə";
+    if (type === "safe_deposit") actionDesc = "Seyfə mədaxil";
+    if (type === "safe_withdrawal") actionDesc = "Seyfdən məxaric";
+    
+    await db.insert(schema.activityLogs).values({
+      tenantId: req.tenantId,
+      username: newTx.username,
+      action: "Maliyyə Əməliyyatı",
+      description: `${actionDesc}: ${amt.toFixed(2)} AZN qeydə alındı`,
+      timestamp: new Date().toISOString(),
+    });
+    
+    res.json(inserted[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Əməliyyat uğursuz oldu" });
+  }
+});
+
+router.get("/dashboard/balances", requireAdmin, async (req, res) => {
+  try {
+    const tenantId = req.tenantId;
+    const sales = await db.select().from(schema.sales).where(eq(schema.sales.tenantId, tenantId));
+    const returns = await db.select().from(schema.returns).where(eq(schema.returns.tenantId, tenantId));
+    const expenses = await db.select().from(schema.expenses).where(eq(schema.expenses.tenantId, tenantId));
+    const creditPayments = await db.select().from(schema.creditPayments).where(eq(schema.creditPayments.tenantId, tenantId));
+    const vendorPayments = await db.select().from(schema.vendorPayments).where(eq(schema.vendorPayments.tenantId, tenantId));
+    const salaryPayments = await db.select().from(schema.salaryPayments).where(eq(schema.salaryPayments.tenantId, tenantId));
+    const safeTransfers = await db.select().from(schema.safeTransfers).where(eq(schema.safeTransfers.tenantId, tenantId));
+
+    let kassa = 0;
+    let safe = 0;
+    let bank = 0;
+    let debt = 0;
+    let investorDebt = 0;
+
+    for (const sale of sales) {
+      const isCredit = sale.paymentStatus === "credit" || sale.paymentType === "Nisyə";
+      const total = Number(sale.totalAmount) || 0;
+      const paid = isCredit ? 0 : total;
+      
+      if (sale.paymentType === "Nəğd") {
+        kassa += paid;
+      } else if (["Kart", "Kart2Kart", "Köçürmə"].includes(sale.paymentType || "")) {
+        bank += paid;
+      }
+
+      if (isCredit) {
+        debt += total;
+      }
+    }
+
+    for (const ret of returns) {
+      kassa -= ret.totalAmount;
+    }
+
+    for (const exp of expenses) {
+      const type = exp.paymentType || "cash";
+      if (type === "cash") {
+        kassa -= exp.amount;
+      } else if (type === "card") {
+        bank -= exp.amount;
+      } else if (type === "safe") {
+        safe -= exp.amount;
+      } else if (type === "investor_debt") {
+        investorDebt += exp.amount;
+      }
+    }
+
+    for (const cp of creditPayments) {
+      const type = cp.paymentType || "Nəğd";
+      if (type === "Nəğd") {
+        kassa += cp.amount;
+      } else if (["Kart", "Kart2Kart", "Köçürmə"].includes(type)) {
+        bank += cp.amount;
+      }
+      debt -= cp.amount;
+    }
+
+    for (const vp of vendorPayments) {
+      const type = vp.paymentType || "Nəğd";
+      if (type === "Nəğd") {
+        kassa -= vp.amount;
+      } else if (["Kart", "Kart2Kart", "Köçürmə"].includes(type)) {
+        bank -= vp.amount;
+      }
+    }
+
+    for (const sp of salaryPayments) {
+      const type = sp.paymentType || "Nəğd";
+      if (type === "Nəğd") {
+        kassa -= sp.amount;
+      } else if (["Kart", "Kart2Kart", "Köçürmə"].includes(type)) {
+        bank -= sp.amount;
+      }
+    }
+
+    for (const st of safeTransfers) {
+      if (st.type === "kassa_to_safe") {
+        kassa -= st.amount;
+        safe += st.amount;
+      } else if (st.type === "safe_deposit") {
+        safe += st.amount;
+      } else if (st.type === "safe_withdrawal") {
+        safe -= st.amount;
+      }
+    }
+
+    res.json({
+      kassa: Math.max(0, kassa),
+      safe: Math.max(0, safe),
+      bank: Math.max(0, bank),
+      debt: Math.max(0, debt),
+      investorDebt: Math.max(0, investorDebt),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Balansların hesablanması zamanı xəta baş verdi" });
+  }
+});
+
 router.get("/dashboard/summary", requireAdmin, async (req, res) => {
   try {
     const todayStr = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
