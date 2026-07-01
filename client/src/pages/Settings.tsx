@@ -11,6 +11,7 @@ import {
   Database,
   Printer,
   Sparkles,
+  Gift,
   Barcode,
   Users,
   Trash2,
@@ -22,6 +23,7 @@ import {
   Globe,
   Landmark,
   Warehouse,
+  MessageSquare,
 } from "lucide-react";
 
 const AZ_BANKS = [
@@ -91,6 +93,16 @@ export default function SettingsPage() {
   const [telegramChatId, setTelegramChatId] = useState("");
   const [telegramNotificationsEnabled, setTelegramNotificationsEnabled] = useState(0);
   const [isTestingTelegram, setIsTestingTelegram] = useState(false);
+
+  // Loyalty Engine State
+  const [loyaltyRuleRate, setLoyaltyRuleRate] = useState("1");
+  const [loyaltyMinPointsRedeem, setLoyaltyMinPointsRedeem] = useState("10");
+
+  // SMS Notifications State
+  const [smsApiKey, setSmsApiKey] = useState("");
+  const [smsSenderName, setSmsSenderName] = useState("");
+  const [smsTemplateDebt, setSmsTemplateDebt] = useState("");
+  const [smsTemplateSale, setSmsTemplateSale] = useState("");
 
   // Backup Settings State
   const [backupTime, setBackupTime] = useState("23:00");
@@ -382,6 +394,16 @@ export default function SettingsPage() {
       setSimplifiedRate("" + (settingsData.simplifiedRate ?? 2));
       setShowTaxOnReceipt(settingsData.showTaxOnReceipt ?? 1);
       setShowTaxOnInvoice(settingsData.showTaxOnInvoice ?? 1);
+
+      // Load Loyalty settings
+      setLoyaltyRuleRate("" + ((settingsData.loyaltyRuleRate ?? 0.01) * 100));
+      setLoyaltyMinPointsRedeem("" + (settingsData.loyaltyMinPointsRedeem ?? 10));
+
+      // Load SMS settings
+      setSmsApiKey(settingsData.smsApiKey || "");
+      setSmsSenderName(settingsData.smsSenderName || "");
+      setSmsTemplateDebt(settingsData.smsTemplateDebt || "Hörmətli [Müştəri], sizin [QalıqBorc] ₼ borcunuz mövcuddur. QazanPOS");
+      setSmsTemplateSale(settingsData.smsTemplateSale || "Hörmətli [Müştəri], [Məbləğ] ₼ məbləğində alış-verişiniz üçün təşəkkür edirik! QazanPOS");
 
       // Load Marketplace Commissions settings
       try {
@@ -899,6 +921,16 @@ export default function SettingsPage() {
 
       // Azerbaijan Banks settings
       activeBanks: JSON.stringify(activeBanks),
+
+      // Loyalty fields
+      loyaltyRuleRate: (parseFloat(loyaltyRuleRate) || 0) / 100,
+      loyaltyMinPointsRedeem: parseFloat(loyaltyMinPointsRedeem) || 0,
+
+      // SMS fields
+      smsApiKey: smsApiKey.trim() || null,
+      smsSenderName: smsSenderName.trim() || null,
+      smsTemplateDebt: smsTemplateDebt.trim() || null,
+      smsTemplateSale: smsTemplateSale.trim() || null,
     };
 
     updateSettingsMutation.mutate(payload);
@@ -1215,6 +1247,30 @@ export default function SettingsPage() {
         >
           <Warehouse className="w-4 h-4" />
           Anbar Ayarları 🏢
+        </button>
+        <button
+          type="button"
+          onClick={() => setSettingsTab("loyalty")}
+          className={`flex items-center gap-2 px-5 py-3 border-b-2 text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+            settingsTab === "loyalty"
+              ? "border-primary text-primary"
+              : "border-transparent text-gray-400 hover:text-gray-600"
+          }`}
+        >
+          <Gift className="w-4 h-4" />
+          Loyallıq Sistemi 🏆
+        </button>
+        <button
+          type="button"
+          onClick={() => setSettingsTab("sms")}
+          className={`flex items-center gap-2 px-5 py-3 border-b-2 text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+            settingsTab === "sms"
+              ? "border-primary text-primary"
+              : "border-transparent text-gray-400 hover:text-gray-600"
+          }`}
+        >
+          <MessageSquare className="w-4 h-4" />
+          SMS Bildirişləri 💬
         </button>
         <button
           type="button"
@@ -1821,6 +1877,242 @@ export default function SettingsPage() {
             </div>
           )}
 
+          {settingsTab === "loyalty" && (
+            <div className="space-y-6 animate-in fade-in-0 duration-300">
+              <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card">
+                <div className="flex items-center gap-2 mb-6 border-b border-gray-100/50 pb-3">
+                  <Gift className="w-5 h-5 text-primary" />
+                  <h3 className="font-extrabold text-gray-900 text-sm">Loyallıq & Keşbek Sistemi</h3>
+                </div>
+
+                <p className="text-xs text-gray-400 leading-relaxed font-semibold mb-6">
+                  Müştərilərinizə hər alış-verişdə bonus xallar (keşbek) qazandıraraq onları mağazanıza bağlayın.
+                  Qazanılan xallar müştərinin profilində toplanacaq və növbəti alış-verişlərdə ödəniş vasitəsi kimi istifadə edilə biləcək.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  <div className="space-y-2">
+                    <label className="text-gray-400 uppercase tracking-wider block text-[10px] font-black">
+                      Keşbek Faiz Dərəcəsi (%)
+                    </label>
+                    <div className="relative flex items-center">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.1"
+                        value={loyaltyRuleRate}
+                        onChange={(e) => setLoyaltyRuleRate(e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 text-xs font-bold font-mono"
+                        placeholder="Məs. 1"
+                      />
+                      <span className="absolute right-4 text-xs font-bold text-gray-400 font-sans">%</span>
+                    </div>
+                    <span className="text-[10px] text-gray-400 font-semibold block leading-normal">
+                      Müştərinin hər alış-veriş məbləğindən qazanacağı keşbek faizidir. Məsələn, 1% təyin edildikdə, 100 ₼-lik alış-veriş edən müştəri 1 ₼ (1 bal) keşbek qazanacaq.
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-gray-400 uppercase tracking-wider block text-[10px] font-black">
+                      Minimum İstifadə Balı (Xal)
+                    </label>
+                    <div className="relative flex items-center">
+                      <input
+                        type="number"
+                        min="0"
+                        value={loyaltyMinPointsRedeem}
+                        onChange={(e) => setLoyaltyMinPointsRedeem(e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 text-xs font-bold font-mono"
+                        placeholder="Məs. 10"
+                      />
+                      <span className="absolute right-4 text-xs font-bold text-gray-400 font-sans">Bal</span>
+                    </div>
+                    <span className="text-[10px] text-gray-400 font-semibold block leading-normal">
+                      Müştərinin balansı bu həddə çatana qədər POS kassa ekranında keşbek ilə ödəniş etməsinə icazə verilməyəcək.
+                    </span>
+                  </div>
+                </div>
+
+                {/* Simulated Loyalty Card UI Preview */}
+                <div className="border border-gray-100 rounded-2xl p-6 bg-gradient-to-br from-primary/5 via-transparent to-primary/5 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-2xl -mr-16 -mt-16"></div>
+                  <h4 className="text-[10px] text-gray-400 font-extrabold uppercase tracking-wider mb-4">
+                    Nümunə Loyallıq Kartı Önizləməsi
+                  </h4>
+                  <div className="max-w-sm mx-auto bg-gradient-to-br from-slate-900 to-indigo-950 p-6 rounded-2xl text-white shadow-xl relative overflow-hidden aspect-video flex flex-col justify-between">
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-primary/20 rounded-full blur-xl -mr-8 -mt-8"></div>
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="text-[9px] text-indigo-300 font-extrabold uppercase tracking-widest">QAZANPOS LOYALLIQ</p>
+                        <p className="text-xs font-black mt-1">Örnək Müştəri A.S.</p>
+                      </div>
+                      <Gift className="w-6 h-6 text-primary" />
+                    </div>
+
+                    <div className="mt-4">
+                      <p className="text-[8px] text-indigo-300 font-extrabold uppercase tracking-widest">Müştəri Kodu</p>
+                      <p className="font-mono text-sm tracking-wider font-extrabold">★ ★ ★ ★   ★ ★ ★ ★   1 2 3 4</p>
+                    </div>
+
+                    <div className="flex justify-between items-end mt-2 pt-2 border-t border-white/10">
+                      <div>
+                        <p className="text-[8px] text-indigo-300 font-bold uppercase tracking-widest">Toplanmış Balans</p>
+                        <p className="text-lg font-black font-mono text-primary">24.50 ₼ <span className="text-[10px] font-bold text-white/80">(Bal)</span></p>
+                      </div>
+                      <span className="text-[8px] px-2 py-0.5 rounded bg-primary/20 text-primary border border-primary/30 uppercase font-black tracking-wider">
+                        Aktiv
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {settingsTab === "sms" && (
+            <div className="space-y-6 animate-in fade-in-0 duration-300">
+              <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card">
+                <div className="flex items-center gap-2 mb-6 border-b border-gray-100/50 pb-3">
+                  <MessageSquare className="w-5 h-5 text-primary" />
+                  <h3 className="font-extrabold text-gray-900 text-sm">SMS Bildiriş Sisteminin Ayarlanması</h3>
+                </div>
+
+                <p className="text-xs text-gray-400 leading-relaxed font-semibold mb-6">
+                  LİNK SMS provideri (sms.az / link.az) vasitəsilə müştərilərə avtomatik nisyə borc xəbərdarlıqları və satış çeki linklərinin SMS ilə göndərilməsi.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  <div className="space-y-2">
+                    <label className="text-gray-400 uppercase tracking-wider block text-[10px] font-black">
+                      LİNK SMS API Key (Token)
+                    </label>
+                    <input
+                      type="password"
+                      value={smsApiKey}
+                      onChange={(e) => setSmsApiKey(e.target.value)}
+                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 text-xs font-bold font-mono"
+                      placeholder="e.g. 5a1b3c8f9d0e2f..."
+                    />
+                    <span className="text-[10px] text-gray-400 font-semibold block leading-normal">
+                      SMS Gateway panelindən əldə etdiyiniz şəxsi API token.
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-gray-400 uppercase tracking-wider block text-[10px] font-black">
+                      Göndərən Adı (Sender ID)
+                    </label>
+                    <input
+                      type="text"
+                      value={smsSenderName}
+                      onChange={(e) => setSmsSenderName(e.target.value)}
+                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 text-xs font-bold font-mono"
+                      placeholder="Məs. QAZANPOS"
+                    />
+                    <span className="text-[10px] text-gray-400 font-semibold block leading-normal">
+                      Provayder tərəfindən sizin üçün təsdiqlənmiş göndərən adı (Alpha Name).
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <label className="text-gray-400 uppercase tracking-wider block text-[10px] font-black">
+                      Nisyə Borc Bildiriş Şablonu
+                    </label>
+                    <textarea
+                      value={smsTemplateDebt}
+                      onChange={(e) => setSmsTemplateDebt(e.target.value)}
+                      rows={3}
+                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 text-xs font-semibold leading-relaxed"
+                      placeholder="Məs. Hörmətli [AD], Sizin [BORC] AZN nisyə borcunuz var..."
+                    />
+                    <span className="text-[10px] text-gray-400 font-semibold block leading-normal">
+                      İstifadə edə biləcəyiniz dinamik açarlar: <code className="bg-gray-100 text-primary px-1.5 py-0.5 rounded font-mono font-bold text-[9px]">[AD]</code> (müştəri adı), <code className="bg-gray-100 text-primary px-1.5 py-0.5 rounded font-mono font-bold text-[9px]">[BORC]</code> (borc məbləği), <code className="bg-gray-100 text-primary px-1.5 py-0.5 rounded font-mono font-bold text-[9px]">[TARIX]</code> (son ödəniş tarixi), <code className="bg-gray-100 text-primary px-1.5 py-0.5 rounded font-mono font-bold text-[9px]">[MAQAZA]</code> (mağaza adı).
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-gray-400 uppercase tracking-wider block text-[10px] font-black">
+                      Yeni Satış Çeki Şablonu
+                    </label>
+                    <textarea
+                      value={smsTemplateSale}
+                      onChange={(e) => setSmsTemplateSale(e.target.value)}
+                      rows={3}
+                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 text-xs font-semibold leading-relaxed"
+                      placeholder="Məs. Hörmətli [AD], [MAQAZA] mağazasından [MEBLEQ] AZN alış-verişiniz üçün təşəkkür edirik..."
+                    />
+                    <span className="text-[10px] text-gray-400 font-semibold block leading-normal">
+                      İstifadə edə biləcəyiniz dinamik açarlar: <code className="bg-gray-100 text-primary px-1.5 py-0.5 rounded font-mono font-bold text-[9px]">[AD]</code>, <code className="bg-gray-100 text-primary px-1.5 py-0.5 rounded font-mono font-bold text-[9px]">[MEBLEQ]</code>, <code className="bg-gray-100 text-primary px-1.5 py-0.5 rounded font-mono font-bold text-[9px]">[MAQAZA]</code>, <code className="bg-gray-100 text-primary px-1.5 py-0.5 rounded font-mono font-bold text-[9px]">[LINK]</code> (elektron çek linki).
+                    </span>
+                  </div>
+                </div>
+
+                {/* Smartphone Preview Mockup */}
+                <div className="border border-gray-100 rounded-2xl p-6 bg-gradient-to-br from-primary/5 via-transparent to-primary/5 relative overflow-hidden mt-6">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-2xl -mr-16 -mt-16"></div>
+                  <h4 className="text-[10px] text-gray-400 font-extrabold uppercase tracking-wider mb-4">
+                    Nümunə Mobil SMS Önizləməsi
+                  </h4>
+                  <div className="max-w-[260px] mx-auto bg-slate-950 p-3 rounded-[32px] text-white shadow-2xl relative border-4 border-slate-800 aspect-[9/16] flex flex-col">
+                    {/* Speaker/Camera notch */}
+                    <div className="h-4 w-24 bg-slate-800 rounded-full mx-auto mb-3 flex items-center justify-center">
+                      <div className="h-1 w-8 bg-slate-700 rounded-full"></div>
+                    </div>
+
+                    {/* Chat Header */}
+                    <div className="flex items-center gap-2 border-b border-white/10 pb-2 mb-3">
+                      <div className="w-6 h-6 rounded-full bg-primary/30 flex items-center justify-center text-[10px] font-bold text-primary animate-pulse">
+                        {smsSenderName ? smsSenderName.substring(0, 2).toUpperCase() : "QP"}
+                      </div>
+                      <div>
+                        <p className="text-[9px] font-black">{smsSenderName || "QAZANPOS"}</p>
+                        <p className="text-[7px] text-gray-400">Biznes Hesab</p>
+                      </div>
+                    </div>
+
+                    {/* Chat Body */}
+                    <div className="flex-1 space-y-3 overflow-y-auto px-1">
+                      {/* Message 1 */}
+                      <div className="bg-zinc-800 p-2.5 rounded-2xl rounded-tl-none text-[9px] leading-normal text-gray-100 max-w-[90%] font-medium">
+                        {smsTemplateSale
+                          ? smsTemplateSale
+                              .replace("[AD]", "Əhməd bəy")
+                              .replace("[MAQAZA]", storeName || "Mətbəx Dünyası")
+                              .replace("[MEBLEQ]", "45.80")
+                              .replace("[LINK]", "qpos.az/c/a1b2")
+                          : "Hörmətli Əhməd bəy, Mətbəx Dünyası mağazasından 45.80 AZN alış-verişiniz üçün təşəkkür edirik! Çek: qpos.az/c/a1b2"}
+                        <span className="block text-[6px] text-right text-gray-400 mt-1">14:32</span>
+                      </div>
+
+                      {/* Message 2 */}
+                      <div className="bg-zinc-800 p-2.5 rounded-2xl rounded-tl-none text-[9px] leading-normal text-gray-100 max-w-[90%] font-medium">
+                        {smsTemplateDebt
+                          ? smsTemplateDebt
+                              .replace("[AD]", "Əhməd bəy")
+                              .replace("[MAQAZA]", storeName || "Mətbəx Dünyası")
+                              .replace("[BORC]", "20.00")
+                              .replace("[TARIX]", new Date(Date.now() + 15 * 86400000).toLocaleDateString())
+                          : `Hörmətli Əhməd bəy, Mətbəx Dünyası mağazasına olan 20.00 AZN nisyə borcunuz üçün son ödəniş tarixi: ${new Date(
+                              Date.now() + 15 * 86400000
+                            ).toLocaleDateString()}.`}
+                        <span className="block text-[6px] text-right text-gray-400 mt-1">16:45</span>
+                      </div>
+                    </div>
+
+                    {/* Chat Input bar */}
+                    <div className="h-6 bg-zinc-900 border border-white/5 rounded-full mt-2 flex items-center justify-between px-3 text-[8px] text-gray-500 font-semibold">
+                      <span>Mətn daxil edin...</span>
+                      <div className="w-3.5 h-3.5 rounded-full bg-primary flex items-center justify-center text-white text-[7px]">➔</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {settingsTab === "printer" && (
             /* Card 2: QZ Tray silent printing configuration */
             <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card">
@@ -2223,7 +2515,7 @@ export default function SettingsPage() {
           </div>
           )}
 
-          {(settingsTab === "general" || settingsTab === "printer" || settingsTab === "tax" || settingsTab === "channels" || settingsTab === "banks") && (
+          {(settingsTab === "general" || settingsTab === "printer" || settingsTab === "tax" || settingsTab === "channels" || settingsTab === "banks" || settingsTab === "loyalty" || settingsTab === "sms") && (
             /* Save Button */
             <div className="flex justify-end">
               <button

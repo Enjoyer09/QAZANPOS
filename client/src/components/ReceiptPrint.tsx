@@ -30,6 +30,8 @@ export function generateReceiptHtml(sale: any, settings: any): string {
     (sum: number, r: any) => sum + (parseFloat(r.totalAmount) || 0),
     0
   );
+  const loyaltyDiscountPaid = parseFloat(sale.loyaltyDiscountPaid) || 0;
+  const loyaltyPointsEarned = parseFloat(sale.loyaltyPointsEarned) || 0;
   const netAmount = totalAmount - returnedAmount;
   
   let totalPaid = parseFloat(sale.totalPaid);
@@ -436,6 +438,22 @@ export function generateReceiptHtml(sale: any, settings: any): string {
             <td style="width: 40%; text-align: right; font-size: 11.5pt;">${netAmount.toFixed(2)} ₼</td>
           </tr>
         </table>
+        ${loyaltyDiscountPaid > 0 ? `
+        <table class="receipt-table" style="font-size: 8.5pt; color: #047857; margin-bottom: 2px;">
+          <tr>
+            <td>Bonus Güzəşti:</td>
+            <td style="text-align: right; font-family: monospace;">-${loyaltyDiscountPaid.toFixed(2)} ₼</td>
+          </tr>
+        </table>
+        ` : ""}
+        ${loyaltyPointsEarned > 0 ? `
+        <table class="receipt-table" style="font-size: 8.5pt; color: #b45309; margin-bottom: 2px;">
+          <tr>
+            <td>🎁 Qazanilan Bonus:</td>
+            <td style="text-align: right; font-family: monospace; font-weight: bold;">+${loyaltyPointsEarned.toFixed(2)} bal</td>
+          </tr>
+        </table>
+        ` : ""}
         ${taxDetailsHtml}
         <table class="receipt-table">
           <tr>
@@ -537,6 +555,159 @@ export async function printReceipt(sale: any, settings: any): Promise<boolean> {
       }, 300);
     } catch (err) {
       console.error("Standard browser printing fallback failure", err);
+      resolve(false);
+    }
+  });
+}
+
+export function generateZReportHtml(stats: any, settings: any): string {
+  const storeName = settings?.receiptHeader || settings?.storeName || "BirSaaS";
+  const phone = settings?.phone || "";
+  const address = settings?.address || "";
+  const width = settings?.receiptWidth || "80mm";
+  
+  const shift = stats.shift;
+  const openedAtStr = new Date(shift.openedAt).toLocaleDateString("az-AZ") + " " + new Date(shift.openedAt).toLocaleTimeString("az-AZ", { hour: '2-digit', minute: '2-digit' });
+  const closedAtStr = new Date(shift.closedAt).toLocaleDateString("az-AZ") + " " + new Date(shift.closedAt).toLocaleTimeString("az-AZ", { hour: '2-digit', minute: '2-digit' });
+
+  return `
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <style>
+          @page { size: auto; margin: 0mm; }
+          body {
+            font-family: 'Courier New', Courier, monospace;
+            width: ${width};
+            margin: 0;
+            padding: 5mm;
+            box-sizing: border-box;
+            background: #ffffff;
+            color: #000000;
+          }
+          .center { text-align: center; }
+          .bold { font-weight: bold; }
+          .header { font-size: 11pt; line-height: 1.4; margin-bottom: 5px; text-transform: uppercase; }
+          .divider { border-top: 1px dashed #000000; margin: 8px 0; }
+          .item-row { display: flex; justify-content: space-between; font-size: 9pt; line-height: 1.5; }
+          .title { font-size: 12pt; font-weight: bold; margin-bottom: 5px; }
+        </style>
+      </head>
+      <body>
+        <div class="center header">
+          <span class="title">${storeName}</span><br>
+          ${address ? `<span>${address}</span><br>` : ""}
+          ${phone ? `<span>Tel: ${phone}</span><br>` : ""}
+        </div>
+        <div class="divider"></div>
+        <div class="center bold header">Z-HESABATI (NÖVBƏ SONU)</div>
+        <div class="item-row">
+          <span>Növbə No:</span>
+          <span>#${shift.id}</span>
+        </div>
+        <div class="item-row">
+          <span>Kassir:</span>
+          <span>${shift.cashierName}</span>
+        </div>
+        <div class="item-row">
+          <span>Açılış:</span>
+          <span>${openedAtStr}</span>
+        </div>
+        <div class="item-row">
+          <span>Bağlanış:</span>
+          <span>${closedAtStr}</span>
+        </div>
+        <div class="divider"></div>
+        <div class="item-row bold">
+          <span>Giriş Nağd:</span>
+          <span>${Number(stats.stats.openingCash).toFixed(2)} ₼</span>
+        </div>
+        <div class="item-row">
+          <span>Nağd Satış (+):</span>
+          <span>${Number(stats.stats.cashSalesAmount).toFixed(2)} ₼</span>
+        </div>
+        <div class="item-row">
+          <span>Nağd Qaytarış (-):</span>
+          <span>${Number(stats.stats.cashReturnsAmount).toFixed(2)} ₼</span>
+        </div>
+        <div class="item-row">
+          <span>Nağd Xərc (-):</span>
+          <span>${Number(stats.stats.cashExpensesAmount).toFixed(2)} ₼</span>
+        </div>
+        <div class="divider"></div>
+        <div class="item-row bold">
+          <span>Gözlənilən Nağd:</span>
+          <span>${Number(stats.stats.expectedCash).toFixed(2)} ₼</span>
+        </div>
+        <div class="item-row bold">
+          <span>Sayılan Nağd:</span>
+          <span>${Number(stats.stats.actualCash).toFixed(2)} ₼</span>
+        </div>
+        <div class="divider"></div>
+        <div class="item-row bold">
+          <span>Fərq (Artıq/Kəsir):</span>
+          <span>${stats.stats.variance >= 0 ? "+" : ""}${Number(stats.stats.variance).toFixed(2)} ₼</span>
+        </div>
+        <div class="divider"></div>
+        <div class="center bold" style="font-size: 8pt; margin-top: 10px;">
+          BirSaaS Kassa Sistemi.
+        </div>
+      </body>
+    </html>
+  `;
+}
+
+export async function printZReport(stats: any, settings: any): Promise<boolean> {
+  const html = generateZReportHtml(stats, settings);
+  const width = settings?.receiptWidth || "80mm";
+  
+  const savedPrinter = localStorage.getItem("qazan_pos_selected_printer");
+  let isQzConnected = qzService.isConnected();
+  if (!isQzConnected) {
+    isQzConnected = await qzService.connect();
+  }
+  
+  if (isQzConnected && savedPrinter) {
+    try {
+      await qzService.printHTML(savedPrinter, html, { width });
+      return true;
+    } catch (err) {
+      console.error("QZ print failed, falling back to standard browser print...", err);
+    }
+  }
+  
+  return new Promise((resolve) => {
+    try {
+      const iframe = document.createElement("iframe");
+      iframe.style.position = "fixed";
+      iframe.style.right = "0";
+      iframe.style.bottom = "0";
+      iframe.style.width = "0";
+      iframe.style.height = "0";
+      iframe.style.border = "0";
+      document.body.appendChild(iframe);
+      
+      const doc = iframe.contentWindow?.document || iframe.contentDocument;
+      if (!doc) {
+        resolve(false);
+        return;
+      }
+      
+      doc.open();
+      doc.write(html);
+      doc.close();
+      
+      setTimeout(() => {
+        try {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+          document.body.removeChild(iframe);
+          resolve(true);
+        } catch (e) {
+          resolve(false);
+        }
+      }, 300);
+    } catch (err) {
       resolve(false);
     }
   });

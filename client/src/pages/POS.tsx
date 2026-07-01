@@ -27,7 +27,7 @@ import {
   saveOfflineReturn
 } from "../lib/offlineSync.ts";
 import { useToast } from "../components/Toast.tsx";
-import { printReceipt } from "../components/ReceiptPrint.tsx";
+import { printReceipt, printZReport } from "../components/ReceiptPrint.tsx";
 import { sanitizeQtyInput } from "../lib/utils.ts";
 
 interface BasketItem {
@@ -151,6 +151,73 @@ export default function POS() {
     },
   });
 
+  // Shifts State & Queries
+  const { data: activeShiftData, isLoading: isActiveShiftLoading } = useQuery<any>({
+    queryKey: ["/api/shifts/active"],
+    queryFn: async () => {
+      const res = await fetch("/api/shifts/active");
+      if (!res.ok) throw new Error();
+      return res.json();
+    },
+    enabled: isOnline,
+  });
+  const activeShift = activeShiftData?.activeShift;
+
+  const [openingCashInput, setOpeningCashInput] = useState("0");
+  const [actualCashInput, setActualCashInput] = useState("");
+  const [isCloseShiftModalOpen, setIsCloseShiftModalOpen] = useState(false);
+  const [closeShiftStats, setCloseShiftStats] = useState<any>(null);
+
+  const openShiftMutation = useMutation({
+    mutationFn: async (openingCash: number) => {
+      const res = await fetch("/api/shifts/open", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ openingCash }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Növbə açıla bilmədi");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/shifts/active"] });
+      toast({ title: "Növbə Açıldı!", description: "Kassa növbəniz uğurla aktivləşdirildi.", variant: "success" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Xəta!", description: err.message, variant: "destructive" });
+    }
+  });
+
+  const closeShiftMutation = useMutation({
+    mutationFn: async (actualCash: number) => {
+      const res = await fetch("/api/shifts/close", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ actualCash }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Növbə bağlana bilmədi");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/shifts/active"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
+      setCloseShiftStats(data);
+      toast({ title: "Növbə Bağlandı!", description: "Z-Hesabatı uğurla hazırlandı.", variant: "success" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Xəta!", description: err.message, variant: "destructive" });
+    }
+  });
+
+  // Loyalty Points State
+  const [useLoyaltyPoints, setUseLoyaltyPoints] = useState(false);
+  const [loyaltyDiscountInput, setLoyaltyDiscountInput] = useState("0");
+
   const handleResetPOS = () => {
     setBasket([]);
     setEditingPrices({});
@@ -172,6 +239,10 @@ export default function POS() {
     setShowSuccessModal(false);
     setPosMode("sale");
     setReturnStatus("returned_to_stock");
+    setUseLoyaltyPoints(false);
+    setLoyaltyDiscountInput("0");
+    setActualCashInput("");
+    setCloseShiftStats(null);
   };
 
   // Queries
@@ -221,6 +292,11 @@ export default function POS() {
   const activeSettings = isOnline ? settings : getCachedSettings();
   const activeStockLevels = isOnline ? stockLevels : getCachedProducts();
   const activeCustomers = isOnline ? customers : getCachedCustomers();
+
+  const selectedCustomer = selectedCustomerId
+    ? activeCustomers?.find((c) => c.id === parseInt(selectedCustomerId))
+    : null;
+  const customerLoyaltyPoints = selectedCustomer ? parseFloat(selectedCustomer.loyaltyPoints || 0) : 0;
 
   const activeBanksList: string[] = React.useMemo(() => {
     if (!activeSettings?.activeBanks) return [];
@@ -764,6 +840,7 @@ export default function POS() {
       // Find active customer if existing selected
       const activeCustomer = activeCustomers?.find((c) => c.id === parseInt(selectedCustomerId));
 
+      const loyaltyDiscount = useLoyaltyPoints ? parseFloat(loyaltyDiscountInput) || 0 : 0;
       // Construct a rich local snapshot of the sale object to pass to the receipt generator
       const saleObj = {
         id: data.id,
@@ -777,8 +854,9 @@ export default function POS() {
         notes: notes.trim() || null,
         applyEdv: activeSettings?.taxStatus === "edv" ? (applyEdv ? 1 : 0) : 1,
         totalAmount,
-        totalPaid: isCredit ? 0 : totalAmount,
-        remainingDebt: isCredit ? totalAmount : 0,
+        loyaltyDiscountPaid: loyaltyDiscount,
+        totalPaid: isCredit ? 0 : Math.max(0, totalAmount - loyaltyDiscount),
+        remainingDebt: isCredit ? Math.max(0, totalAmount - loyaltyDiscount) : 0,
         items: basket.map((item) => ({
           productName: item.productName,
           unit: item.unit,
@@ -981,6 +1059,32 @@ export default function POS() {
       }
     }
 
+    let loyaltyDiscount = 0;
+    if (posMode === "sale" && useLoyaltyPoints) {
+      loyaltyDiscount = parseFloat(loyaltyDiscountInput) || 0;
+      if (loyaltyDiscount <= 0) {
+        toast({ title: "Xəta!", description: "Düzgün bonus məbləği daxil edin", variant: "destructive" });
+        return;
+      }
+      if (loyaltyDiscount > customerLoyaltyPoints) {
+        toast({ title: "Xəta!", description: "Müştərinin kifayət qədər bonus balı yoxdur", variant: "destructive" });
+        return;
+      }
+      if (loyaltyDiscount > totalAmount) {
+        toast({ title: "Xəta!", description: "Bonus məbləği satışın ümumi məbləğindən çox ola bilməz", variant: "destructive" });
+        return;
+      }
+      const minPoints = activeSettings?.loyaltyMinPointsRedeem ? parseFloat(activeSettings.loyaltyMinPointsRedeem) : 0;
+      if (minPoints > 0 && loyaltyDiscount < minPoints) {
+        toast({
+          title: "Xəta!",
+          description: `Minimum istifadə edilə bilən bonus balı: ${minPoints} bal`,
+          variant: "destructive"
+        });
+        return;
+      }
+    }
+
     const payload = {
       customerId,
       customerName,
@@ -998,6 +1102,8 @@ export default function POS() {
       salesChannel,
       marketplaceFee,
       warehouseId: currentUser?.warehouseId || 1,
+      shiftId: activeShift?.id || null,
+      loyaltyDiscountPaid: loyaltyDiscount,
       items: basket.map((item) => ({
         productId: item.productId,
         quantity: item.quantity,
@@ -1490,7 +1596,11 @@ export default function POS() {
                 <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Müştəri seçin</label>
                 <select
                   value={selectedCustomerId}
-                  onChange={(e) => setSelectedCustomerId(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedCustomerId(e.target.value);
+                    setUseLoyaltyPoints(false);
+                    setLoyaltyDiscountInput("0");
+                  }}
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 cursor-pointer"
                 >
                   <option value="">Müştəri seçin...</option>
@@ -1500,6 +1610,55 @@ export default function POS() {
                     </option>
                   ))}
                 </select>
+
+                {selectedCustomerId && (
+                  <div className="mt-3 p-3 bg-primary/5 border border-primary/10 rounded-xl space-y-2">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-gray-500 font-medium">Mövcud Bonus:</span>
+                      <span className="font-bold text-primary">{customerLoyaltyPoints.toFixed(2)} bal</span>
+                    </div>
+
+                    {customerLoyaltyPoints > 0 && posMode === "sale" && (
+                      <div className="space-y-2 pt-1.5 border-t border-primary/10">
+                        <label className="flex items-center gap-2 cursor-pointer font-bold text-gray-700">
+                          <input
+                            type="checkbox"
+                            checked={useLoyaltyPoints}
+                            onChange={(e) => {
+                              setUseLoyaltyPoints(e.target.checked);
+                              setLoyaltyDiscountInput(e.target.checked ? Math.min(customerLoyaltyPoints, totalAmount).toFixed(2) : "0");
+                            }}
+                            className="rounded border-gray-300 text-primary focus:ring-primary h-3.5 w-3.5"
+                          />
+                          <span>Bonus ballarından istifadə et</span>
+                        </label>
+
+                        {useLoyaltyPoints && (
+                          <div className="space-y-1 animate-in slide-in-from-top-1 duration-200">
+                            <label className="text-gray-400 text-[10px] uppercase block">İstifadə ediləcək bal (1 bal = 1 ₼)</label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              max={Math.min(customerLoyaltyPoints, totalAmount)}
+                              value={loyaltyDiscountInput}
+                              onChange={(e) => {
+                                const val = Math.min(customerLoyaltyPoints, totalAmount, parseFloat(e.target.value) || 0);
+                                setLoyaltyDiscountInput(val.toString());
+                              }}
+                              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary font-bold font-mono text-xs bg-white"
+                            />
+                            {settings?.loyaltyMinPointsRedeem && parseFloat(settings.loyaltyMinPointsRedeem) > 0 && (
+                              <span className="text-[9px] text-gray-400 block font-normal">
+                                * Minimum istifadə balı: {settings.loyaltyMinPointsRedeem} bal
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -1576,6 +1735,18 @@ export default function POS() {
                   {totalAmount.toFixed(2)} ₼
                 </span>
               </div>
+              {posMode === "sale" && useLoyaltyPoints && parseFloat(loyaltyDiscountInput) > 0 && (
+                <div className="flex justify-between text-emerald-600 font-bold animate-in fade-in">
+                  <span>Bonus Güzəşti (Çıxılan)</span>
+                  <span className="font-mono">-{parseFloat(loyaltyDiscountInput).toFixed(2)} ₼</span>
+                </div>
+              )}
+              {posMode === "sale" && useLoyaltyPoints && parseFloat(loyaltyDiscountInput) > 0 && (
+                <div className="flex justify-between text-gray-900 font-bold border-t border-dashed border-gray-100 pt-1.5 animate-in fade-in">
+                  <span>Ödəniləcək Yekun</span>
+                  <span className="font-mono text-sm">{Math.max(0, totalAmount - (parseFloat(loyaltyDiscountInput) || 0)).toFixed(2)} ₼</span>
+                </div>
+              )}
               {posMode === "sale" && salesChannel === "birmarket.az" && (
                 <>
                   <div className="flex justify-between text-purple-600 font-bold animate-in fade-in">

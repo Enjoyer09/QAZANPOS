@@ -48,6 +48,46 @@ export const stockTransfers = pgTable("stock_transfers", {
   serialNumbers: text("serial_numbers"), // Comma-separated serial numbers or JSON string
 });
 
+// 0d. Shifts Table for POS Cashier Sessions
+export const shifts = pgTable("shifts", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" })
+    .default(1),
+  cashierId: integer("cashier_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  cashierName: text("cashier_name").notNull(),
+  openedAt: text("opened_at").notNull(), // ISO timestamp
+  closedAt: text("closed_at"), // ISO timestamp, null if open
+  openingCash: doublePrecision("opening_cash").notNull().default(0.0),
+  expectedCash: doublePrecision("expected_cash").notNull().default(0.0),
+  actualCash: doublePrecision("actual_cash").notNull().default(0.0),
+  variance: doublePrecision("variance").notNull().default(0.0),
+  status: text("status").notNull().default("open"), // "open", "closed"
+});
+
+// 0e. Stock Adjustments Table for Inventory Sayım (Audits)
+export const stockAdjustments = pgTable("stock_adjustments", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" })
+    .default(1),
+  productId: integer("product_id")
+    .notNull()
+    .references(() => products.id, { onDelete: "cascade" }),
+  warehouseId: integer("warehouse_id")
+    .notNull()
+    .references(() => warehouses.id, { onDelete: "cascade" }),
+  type: text("type").notNull(), // "shrinkage" (əskik) or "found" (artıq)
+  quantity: doublePrecision("quantity").notNull(),
+  date: text("date").notNull(), // ISO timestamp
+  adjustedBy: text("adjusted_by").notNull(), // Username
+  notes: text("notes"),
+});
+
 // 1. Products Directory
 export const products = pgTable("products", {
   id: serial("id").primaryKey(),
@@ -64,6 +104,7 @@ export const products = pgTable("products", {
   warrantyMonths: integer("warranty_months"),
   isArchived: integer("is_archived").notNull().default(0), // 0 = Active, 1 = Archived
   vendorId: integer("vendor_id").references(() => vendors.id, { onDelete: "set null" }),
+  minStockLimit: doublePrecision("min_stock_limit").notNull().default(5.0),
 }, (table) => ({
   productsTenantBarcodeIdx: uniqueIndex("products_tenant_barcode_idx").on(table.tenantId, table.barcode)
 }));
@@ -193,6 +234,7 @@ export const customers = pgTable("customers", {
   address: text("address"),
   notes: text("notes"),
   createdByName: text("created_by_name").notNull().default("Sistem"),
+  loyaltyPoints: doublePrecision("loyalty_points").notNull().default(0.0),
 });
 
 // 4. Sales Table
@@ -222,6 +264,9 @@ export const sales = pgTable("sales", {
   applyEdv: integer("apply_edv").notNull().default(1),
   warehouseId: integer("warehouse_id")
     .references(() => warehouses.id, { onDelete: "set null" }),
+  shiftId: integer("shift_id").references(() => shifts.id, { onDelete: "set null" }),
+  loyaltyDiscountPaid: doublePrecision("loyalty_discount_paid").default(0.0).notNull(),
+  loyaltyPointsEarned: doublePrecision("loyalty_points_earned").default(0.0).notNull(),
 }, (table) => ({
   salesTenantOfflineIdIdx: uniqueIndex("sales_tenant_offline_id_idx").on(table.tenantId, table.offlineId)
 }));
@@ -315,6 +360,12 @@ export const settings = pgTable("settings", {
   staffCanViewVendors: integer("staff_can_view_vendors").notNull().default(1),
   staffCanViewExpenses: integer("staff_can_view_expenses").notNull().default(1),
   activeBanks: text("active_banks"),
+  loyaltyRuleRate: doublePrecision("loyalty_rule_rate").default(0.01).notNull(),
+  loyaltyMinPointsRedeem: doublePrecision("loyalty_min_points_redeem").default(1.0).notNull(),
+  smsApiKey: text("sms_api_key"),
+  smsSenderName: text("sms_sender_name"),
+  smsTemplateDebt: text("sms_template_debt"),
+  smsTemplateSale: text("sms_template_sale"),
 });
 
 // 9. Users Table for Authentication & Authorization
@@ -764,6 +815,33 @@ export const safeTransfersRelations = relations(safeTransfers, ({ one }) => ({
   tenant: one(tenants, {
     fields: [safeTransfers.tenantId],
     references: [tenants.id],
+  }),
+}));
+
+export const shiftsRelations = relations(shifts, ({ one, many }) => ({
+  tenant: one(tenants, {
+    fields: [shifts.tenantId],
+    references: [tenants.id],
+  }),
+  cashier: one(users, {
+    fields: [shifts.cashierId],
+    references: [users.id],
+  }),
+  sales: many(sales),
+}));
+
+export const stockAdjustmentsRelations = relations(stockAdjustments, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [stockAdjustments.tenantId],
+    references: [tenants.id],
+  }),
+  product: one(products, {
+    fields: [stockAdjustments.productId],
+    references: [products.id],
+  }),
+  warehouse: one(warehouses, {
+    fields: [stockAdjustments.warehouseId],
+    references: [warehouses.id],
   }),
 }));
 

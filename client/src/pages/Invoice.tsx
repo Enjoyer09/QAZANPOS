@@ -245,8 +245,10 @@ export default function Invoice({ params }: InvoiceProps) {
 
   // Calculate totals dynamically and robustly
   const totalAmount = parseFloat(invoice.totalAmount) || 0;
+  const loyaltyDiscount = parseFloat(invoice.loyaltyDiscountPaid) || 0;
+  const loyaltyPointsEarned = parseFloat(invoice.loyaltyPointsEarned) || 0;
   const totalPaid = invoice.paymentStatus === "paid"
-    ? totalAmount
+    ? totalAmount - loyaltyDiscount
     : (invoice.payments || []).reduce((acc: number, p: any) => acc + (parseFloat(p.amount) || 0), 0);
   const returnedAmount = (invoice.returns || []).reduce(
     (sum: number, r: any) => sum + (parseFloat(r.totalAmount) || 0),
@@ -254,7 +256,7 @@ export default function Invoice({ params }: InvoiceProps) {
   );
   const remainingDebt = invoice.paymentStatus === "paid"
     ? 0
-    : Math.max(0, totalAmount - totalPaid - returnedAmount);
+    : Math.max(0, totalAmount - totalPaid - returnedAmount - loyaltyDiscount);
 
   // Helper to calculate returned quantity for a specific product in this invoice
   const getReturnedQty = (productId: number) => {
@@ -516,6 +518,22 @@ export default function Invoice({ params }: InvoiceProps) {
                   <span className="font-bold text-gray-700 font-mono">
                     {(((totalAmount - returnedAmount) * (settings?.simplifiedRate ?? 2)) / 100).toFixed(2)} ₼
                   </span>
+                </div>
+              )}
+              {loyaltyDiscount > 0 && (
+                <div className="flex justify-between text-emerald-600 font-bold">
+                  <span>Bonus Güzəşti</span>
+                  <span className="font-mono text-sm">
+                    -{loyaltyDiscount.toFixed(2)} ₼
+                  </span>
+                </div>
+              )}
+              {loyaltyPointsEarned > 0 && (
+                <div className="flex justify-between items-center bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 text-amber-700">
+                  <span className="font-bold flex items-center gap-1.5">
+                    <span>🎁</span> Qazanilan Bonus Balı
+                  </span>
+                  <span className="font-black font-mono">+{loyaltyPointsEarned.toFixed(2)} bal</span>
                 </div>
               )}
               <div className="flex justify-between">

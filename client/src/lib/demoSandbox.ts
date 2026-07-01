@@ -14,10 +14,10 @@ const DEFAULT_PRODUCTS = [
 ];
 
 const DEFAULT_CUSTOMERS = [
-  { id: 1, name: "Abbas Bağırov", phone: "+994 50 200 11 22", email: "abbas@bagirov.az", address: "Bakı, Nərimanov", notes: "Daimi VIP Müştəri", createdByName: "admin" },
-  { id: 2, name: "Nərmin Məmmədova", phone: "+994 70 300 44 55", email: "nermin@mammadova.az", address: "Bakı, Gənclik", notes: "Kartla ödəniş edir", createdByName: "admin" },
-  { id: 3, name: "Tural Əliyev", phone: "+994 55 400 77 88", email: "tural@aliyev.az", address: "Xırdalan", notes: "Nisyə limiti: 1500 AZN", createdByName: "admin" },
-  { id: 4, name: "Samir Qasımov", phone: "+994 50 500 99 00", email: "samir@qasimov.az", address: "Sumqayıt", notes: "Yalnız nağd", createdByName: "admin" },
+  { id: 1, name: "Abbas Bağırov", phone: "+994 50 200 11 22", email: "abbas@bagirov.az", address: "Bakı, Nərimanov", notes: "Daimi VIP Müştəri", createdByName: "admin", loyaltyPoints: 150 },
+  { id: 2, name: "Nərmin Məmmədova", phone: "+994 70 300 44 55", email: "nermin@mammadova.az", address: "Bakı, Gənclik", notes: "Kartla ödəniş edir", createdByName: "admin", loyaltyPoints: 50 },
+  { id: 3, name: "Tural Əliyev", phone: "+994 55 400 77 88", email: "tural@aliyev.az", address: "Xırdalan", notes: "Nisyə limiti: 1500 AZN", createdByName: "admin", loyaltyPoints: 0 },
+  { id: 4, name: "Samir Qasımov", phone: "+994 50 500 99 00", email: "samir@qasimov.az", address: "Sumqayıt", notes: "Yalnız nağd", createdByName: "admin", loyaltyPoints: 10 },
 ];
 
 const DEFAULT_VENDORS = [
@@ -140,6 +140,8 @@ const DEFAULT_SETTINGS = {
   activeBanks: JSON.stringify(["Kapital Bank", "PASHA Bank"]),
   taxStatus: "edv",
   voen: "1234567890",
+  loyaltyRuleRate: 0.01,
+  loyaltyMinPointsRedeem: 1.0,
 };
 
 const DEFAULT_LOGS = [
@@ -204,6 +206,8 @@ export function initDemoDatabase() {
   sessionStorage.setItem("birsaas_demo_stock_transfers", JSON.stringify(DEFAULT_STOCK_TRANSFERS));
   sessionStorage.setItem("birsaas_demo_product_serials", JSON.stringify(DEFAULT_PRODUCT_SERIALS));
   sessionStorage.setItem("birsaas_demo_safe_transfers", JSON.stringify([]));
+  sessionStorage.setItem("birsaas_demo_shifts", JSON.stringify([]));
+  sessionStorage.setItem("birsaas_demo_stock_adjustments", JSON.stringify([]));
   sessionStorage.setItem("birsaas_demo_db_initialized", "true");
 }
 
@@ -790,6 +794,9 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
       const totalAmount = enrichedItems.reduce((acc: number, item: any) => acc + (item.quantity * item.salePrice), 0);
       const totalCost = enrichedItems.reduce((acc: number, item: any) => acc + (item.quantity * item.purchasePrice), 0);
 
+      const loyaltyDiscount = body.loyaltyDiscountPaid ? parseFloat(body.loyaltyDiscountPaid) : 0;
+      const finalPaidAmount = Math.max(0, totalAmount - loyaltyDiscount);
+      
       const newSale = {
         id: nextId,
         saleDate: new Date().toISOString(),
@@ -803,14 +810,29 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
         notes: body.notes || "",
         creditDueDate: body.creditDueDate || null,
         items: enrichedItems,
-        payments: body.paymentType === "credit" ? [] : [{ id: 1, amount: totalAmount, paymentDate: new Date().toISOString(), paymentType: body.paymentType }],
+        payments: body.paymentType === "credit" ? [] : [{ id: 1, amount: finalPaidAmount, paymentDate: new Date().toISOString(), paymentType: body.paymentType }],
         sellerName: userUsername ? userUsername.trim().toLowerCase() : (userRole === "Admin" ? "admin" : "satici"),
         applyEdv: body.applyEdv !== undefined && body.applyEdv !== null ? (body.applyEdv ? 1 : 0) : 1,
         warehouseId,
+        shiftId: body.shiftId || null,
+        loyaltyDiscountPaid: loyaltyDiscount,
       };
 
       sales.unshift(newSale);
       saveDb("sales", sales);
+
+      // Loyalty points update
+      if (body.customerId) {
+        const settings = JSON.parse(sessionStorage.getItem("birsaas_demo_settings") || "{}");
+        const rate = settings.loyaltyRuleRate !== undefined ? settings.loyaltyRuleRate : 0.01;
+        const pointsEarned = totalAmount * rate;
+        const dbCusts = getDb("customers");
+        const cIdx = dbCusts.findIndex((c: any) => c.id === body.customerId);
+        if (cIdx !== -1) {
+          dbCusts[cIdx].loyaltyPoints = Math.max(0, (dbCusts[cIdx].loyaltyPoints || 0) + pointsEarned - loyaltyDiscount);
+          saveDb("customers", dbCusts);
+        }
+      }
 
       // Link and update serials to sold
       const serials = getDb("product_serials");
@@ -1837,6 +1859,183 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
   // 17. HR Employees Mock
   if (path === "/api/employees") {
     return jsonResponse([]);
+  }
+
+  // 18. Shifts Management Mock
+  if (path === "/api/shifts/active") {
+    const shifts = getDb("shifts");
+    const seller = userUsername ? userUsername.trim().toLowerCase() : "satici";
+    const active = shifts.find((s: any) => s.cashierName === seller && s.status === "open");
+    return jsonResponse({ activeShift: active || null });
+  }
+
+  if (path === "/api/shifts/open" && method === "POST") {
+    const body = getBody();
+    const shifts = getDb("shifts");
+    const seller = userUsername ? userUsername.trim().toLowerCase() : "satici";
+    const active = shifts.find((s: any) => s.cashierName === seller && s.status === "open");
+    if (active) {
+      return jsonResponse({ message: "Aktiv növbəniz artıq açıqdır" }, 400);
+    }
+    const openingCash = parseFloat(body.openingCash) || 0;
+    const newShift = {
+      id: shifts.length + 1,
+      cashierId: 1,
+      cashierName: seller,
+      openedAt: new Date().toISOString(),
+      openingCash,
+      expectedCash: openingCash,
+      actualCash: 0,
+      variance: 0,
+      status: "open",
+    };
+    shifts.push(newShift);
+    saveDb("shifts", shifts);
+    logActivity(`Kassa növbəsi açıldı. Giriş nağd balans: ${openingCash.toFixed(2)} AZN`);
+    return jsonResponse(newShift);
+  }
+
+  if (path === "/api/shifts/close" && method === "POST") {
+    const body = getBody();
+    const shifts = getDb("shifts");
+    const seller = userUsername ? userUsername.trim().toLowerCase() : "satici";
+    const idx = shifts.findIndex((s: any) => s.cashierName === seller && s.status === "open");
+    if (idx === -1) {
+      return jsonResponse({ message: "Aktiv növbə tapılmadı" }, 404);
+    }
+    const shift = shifts[idx];
+    const actualCash = parseFloat(body.actualCash) || 0;
+
+    // Calculate expected cash in shifts
+    const sales = getDb("sales").filter((s: any) => s.shiftId === shift.id);
+    let cashSalesAmount = 0;
+    for (const sale of sales) {
+      if (sale.paymentType === "Nəğd" && sale.paymentStatus === "paid") {
+        const discount = Number(sale.loyaltyDiscountPaid) || 0;
+        cashSalesAmount += ((sale.totalAmount || 0) - discount);
+      }
+    }
+
+    const returns = getDb("returns").filter((r: any) => {
+      const sale = getDb("sales").find((s: any) => s.id === r.saleId);
+      return sale && sale.shiftId === shift.id;
+    });
+    let cashReturnsAmount = 0;
+    for (const r of returns) {
+      cashReturnsAmount += Number(r.totalAmount) || 0;
+    }
+
+    // Since in the sandbox we may have cash expenses, let's filter cash expenses since the shift started
+    const expenses = getDb("expenses").filter((e: any) => e.paymentType === "cash" && e.date >= shift.openedAt);
+    let cashExpensesAmount = 0;
+    for (const e of expenses) {
+      cashExpensesAmount += Number(e.amount) || 0;
+    }
+
+    const expectedCash = shift.openingCash + cashSalesAmount - cashReturnsAmount - cashExpensesAmount;
+    const variance = actualCash - expectedCash;
+
+    shift.closedAt = new Date().toISOString();
+    shift.expectedCash = expectedCash;
+    shift.actualCash = actualCash;
+    shift.variance = variance;
+    shift.status = "closed";
+
+    shifts[idx] = shift;
+    saveDb("shifts", shifts);
+
+    logActivity(`Kassa növbəsi bağlandı. Z-Hesabat: Gözlənilən: ${expectedCash.toFixed(2)}, Sayılan: ${actualCash.toFixed(2)}, Fərq: ${variance.toFixed(2)} AZN`);
+
+    return jsonResponse({
+      shift,
+      stats: {
+        openingCash: shift.openingCash,
+        cashSalesAmount,
+        cashReturnsAmount,
+        cashCreditRepaymentsAmount: 0,
+        cashExpensesAmount,
+        expectedCash,
+        actualCash,
+        variance
+      }
+    });
+  }
+
+  if (path === "/api/shifts" && method === "GET") {
+    return jsonResponse(getDb("shifts"));
+  }
+
+  // 19. Stock Adjustments Mock
+  if (path === "/api/stock/adjust" && method === "POST") {
+    const adjustments = getBody();
+    const dbAdjustments = getDb("stock_adjustments");
+    const products = getDb("products");
+
+    const adjusted = adjustments.map((adj: any) => {
+      const nextId = dbAdjustments.length + 1;
+      const rec = {
+        id: nextId,
+        productId: parseInt(adj.productId),
+        warehouseId: parseInt(adj.warehouseId),
+        type: adj.type,
+        quantity: parseFloat(adj.quantity),
+        date: new Date().toISOString(),
+        adjustedBy: userUsername || "system",
+        notes: adj.notes || null,
+      };
+      dbAdjustments.push(rec);
+
+      // Adjust product currentQuantity locally in sandbox
+      const pIdx = products.findIndex((p: any) => p.id === rec.productId);
+      if (pIdx !== -1) {
+        if (rec.type === "surplus") {
+          products[pIdx].currentQuantity += rec.quantity;
+        } else {
+          products[pIdx].currentQuantity = Math.max(0, products[pIdx].currentQuantity - rec.quantity);
+        }
+      }
+
+      return rec;
+    });
+
+    saveDb("stock_adjustments", dbAdjustments);
+    saveDb("products", products);
+    logActivity(`Sayım tənzimləməsi tamamlandı: ${adjustments.length} məhsul`);
+    return jsonResponse({ success: true, adjusted });
+  }
+
+  // 20. Auto PO drafts Mock
+  if (path === "/api/stock/procurement-drafts" && method === "GET") {
+    const products = getDb("products");
+    const vendors = getDb("vendors");
+    const draftMap: Record<number, { vendorName: string, items: any[] }> = {};
+
+    for (const prod of products) {
+      const currentStock = prod.currentQuantity || 0;
+      const minLimit = Number(prod.minStockLimit) || 0;
+      if (minLimit > 0 && currentStock < minLimit) {
+        const vendorId = prod.vendorId || 0;
+        let vendorName = "Təyin Edilməyib";
+        if (vendorId) {
+          const v = vendors.find((v: any) => v.id === vendorId);
+          if (v) vendorName = v.name;
+        }
+
+        if (!draftMap[vendorId]) {
+          draftMap[vendorId] = { vendorName, items: [] };
+        }
+
+        draftMap[vendorId].items.push({
+          productId: prod.id,
+          productName: prod.name,
+          barcode: prod.barcode,
+          currentStock,
+          minStockLimit: minLimit,
+          suggestedOrderQty: Math.max(1, minLimit * 2 - currentStock),
+        });
+      }
+    }
+    return jsonResponse(Object.values(draftMap));
   }
 
   // Default Fallback

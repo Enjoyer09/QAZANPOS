@@ -2258,6 +2258,31 @@ router.post("/sales", async (req, res) => {
       });
     }
 
+    // Enforce active shift check
+    const activeShift = await db.query.shifts.findFirst({
+      where: and(
+        eq(schema.shifts.tenantId, req.tenantId),
+        eq(schema.shifts.cashierName, sellerName),
+        eq(schema.shifts.status, "open")
+      )
+    });
+    if (!activeShift && !offlineId) {
+      return res.status(400).json({ message: "Satış etmək üçün əvvəlcə kassa növbəsini açmalısınız!" });
+    }
+    const shiftIdToLink = activeShift ? activeShift.id : null;
+
+    // Compute loyalty points
+    let pointsEarned = 0;
+    let discountPaid = parseFloat(req.body.loyaltyDiscountPaid) || 0;
+    if (customerId) {
+      const tenantSettings = await db.query.settings.findFirst({
+        where: eq(schema.settings.tenantId, req.tenantId)
+      });
+      const ruleRate = tenantSettings?.loyaltyRuleRate || 0.01;
+      const netAmount = Math.max(0, parseFloat(totalAmount) - discountPaid);
+      pointsEarned = parseFloat((netAmount * ruleRate).toFixed(2));
+    }
+
     // Execute database operations in a transaction
     const saleResult = await db.transaction(async (tx) => {
       // Insert sale
@@ -2282,10 +2307,28 @@ router.post("/sales", async (req, res) => {
           sellerName,
           applyEdv: applyEdv !== undefined && applyEdv !== null ? (applyEdv ? 1 : 0) : 1,
           warehouseId: targetWarehouseId,
+          shiftId: shiftIdToLink,
+          loyaltyDiscountPaid: discountPaid,
+          loyaltyPointsEarned: pointsEarned,
         })
         .returning();
 
       const saleId = newSale[0].id;
+
+      // Update customer loyalty balance
+      if (customerId) {
+        const customerRecord = await tx.query.customers.findFirst({
+          where: and(eq(schema.customers.id, customerId), eq(schema.customers.tenantId, req.tenantId))
+        });
+        if (customerRecord) {
+          const currentPoints = Number(customerRecord.loyaltyPoints) || 0;
+          const newPoints = Math.max(0, currentPoints - discountPaid + pointsEarned);
+          await tx
+            .update(schema.customers)
+            .set({ loyaltyPoints: newPoints })
+            .where(eq(schema.customers.id, customerId));
+        }
+      }
 
       // Insert items
       for (const item of processedItems) {
@@ -3326,7 +3369,8 @@ router.get("/dashboard/balances", requireAdmin, async (req, res) => {
     for (const sale of sales) {
       const isCredit = sale.paymentStatus === "credit" || sale.paymentType === "Nisyə";
       const total = Number(sale.totalAmount) || 0;
-      const paid = isCredit ? 0 : total;
+      const discount = Number(sale.loyaltyDiscountPaid) || 0;
+      const paid = isCredit ? 0 : (total - discount);
       
       if (sale.paymentType === "Nəğd") {
         kassa += paid;
@@ -5453,6 +5497,314 @@ router.get("/super/backup/export", requireSuperAdmin, async (req, res) => {
   } catch (error: any) {
     console.error("Full database backup error:", error);
     res.status(500).json({ message: "Tam sistem backup-ı alınarkən xəta baş verdi: " + error.message });
+  }
+});
+
+// --- POS Shifts Management Endpoints ---
+
+// Get active shift for cashier
+router.get("/shifts/active", async (req, res) => {
+  try {
+    const rawSeller = req.headers["x-user-username"] as string;
+    const sellerName = rawSeller ? rawSeller.trim().toLowerCase() : "satici";
+    
+    const activeShift = await db.query.shifts.findFirst({
+      where: and(
+        eq(schema.shifts.tenantId, req.tenantId),
+        eq(schema.shifts.cashierName, sellerName),
+        eq(schema.shifts.status, "open")
+      )
+    });
+    
+    res.json({ activeShift: activeShift || null });
+  } catch (error) {
+    console.error("Fetch active shift error:", error);
+    res.status(500).json({ message: "Aktiv növbə məlumatlarını çəkərkən xəta baş verdi" });
+  }
+});
+
+// Open a new shift
+router.post("/shifts/open", async (req, res) => {
+  try {
+    const rawSeller = req.headers["x-user-username"] as string;
+    const sellerName = rawSeller ? rawSeller.trim().toLowerCase() : "satici";
+    const openingCash = parseFloat(req.body.openingCash) || 0;
+
+    // Check if there is already an active shift for this user
+    const existing = await db.query.shifts.findFirst({
+      where: and(
+        eq(schema.shifts.tenantId, req.tenantId),
+        eq(schema.shifts.cashierName, sellerName),
+        eq(schema.shifts.status, "open")
+      )
+    });
+    if (existing) {
+      return res.status(400).json({ message: "Aktiv növbəniz artıq açıqdır" });
+    }
+
+    // Find user record to get cashierId
+    const cashierUser = await db.query.users.findFirst({
+      where: and(
+        eq(schema.users.username, sellerName),
+        eq(schema.users.tenantId, req.tenantId)
+      )
+    });
+    if (!cashierUser) {
+      return res.status(400).json({ message: "İstifadəçi tapılmadı" });
+    }
+
+    const newShift = await db.insert(schema.shifts).values({
+      tenantId: req.tenantId,
+      cashierId: cashierUser.id,
+      cashierName: sellerName,
+      openedAt: new Date().toISOString(),
+      openingCash,
+      expectedCash: openingCash,
+      actualCash: 0,
+      variance: 0,
+      status: "open",
+    }).returning();
+
+    await logActivity(req, "OPEN_SHIFT", `Kassa növbəsi açıldı. Giriş nağd balans: ${openingCash.toFixed(2)} AZN`);
+
+    res.json(newShift[0]);
+  } catch (error) {
+    console.error("Open shift error:", error);
+    res.status(500).json({ message: "Növbəni açarkən xəta baş verdi" });
+  }
+});
+
+// Close active shift (Generate Z-Report & Calculate variance)
+router.post("/shifts/close", async (req, res) => {
+  try {
+    const rawSeller = req.headers["x-user-username"] as string;
+    const sellerName = rawSeller ? rawSeller.trim().toLowerCase() : "satici";
+    const actualCash = parseFloat(req.body.actualCash) || 0;
+
+    const activeShift = await db.query.shifts.findFirst({
+      where: and(
+        eq(schema.shifts.tenantId, req.tenantId),
+        eq(schema.shifts.cashierName, sellerName),
+        eq(schema.shifts.status, "open")
+      )
+    });
+
+    if (!activeShift) {
+      return res.status(400).json({ message: "Bağlamaq üçün aktiv növbə tapılmadı" });
+    }
+
+    // Calculate expected cash in drawer
+    // 1. Sales during this shift
+    const salesInShift = await db.query.sales.findMany({
+      where: and(
+        eq(schema.sales.tenantId, req.tenantId),
+        eq(schema.sales.shiftId, activeShift.id)
+      )
+    });
+
+    let cashSalesAmount = 0;
+    for (const sale of salesInShift) {
+      if (sale.paymentType === "Nəğd" && sale.paymentStatus === "paid") {
+        const total = Number(sale.totalAmount) || 0;
+        const discount = Number(sale.loyaltyDiscountPaid) || 0;
+        cashSalesAmount += (total - discount);
+      }
+    }
+
+    // 2. Returns during this shift
+    const returnsInShift = await db.select({
+      totalAmount: schema.returns.totalAmount
+    }).from(schema.returns)
+      .innerJoin(schema.sales, eq(schema.sales.id, schema.returns.saleId))
+      .where(
+        and(
+          eq(schema.returns.tenantId, req.tenantId),
+          eq(schema.sales.shiftId, activeShift.id)
+        )
+      );
+    let cashReturnsAmount = 0;
+    for (const ret of returnsInShift) {
+      cashReturnsAmount += Number(ret.totalAmount) || 0;
+    }
+
+    // 3. Credit repayments during this shift
+    const creditRepaymentsInShift = await db.select({
+      amount: schema.creditPayments.amount,
+      paymentType: schema.creditPayments.paymentType,
+    }).from(schema.creditPayments)
+      .innerJoin(schema.sales, eq(schema.sales.id, schema.creditPayments.saleId))
+      .where(
+        and(
+          eq(schema.creditPayments.tenantId, req.tenantId),
+          eq(schema.sales.shiftId, activeShift.id)
+        )
+      );
+    let cashCreditRepaymentsAmount = 0;
+    for (const cp of creditRepaymentsInShift) {
+      if (cp.paymentType === "Nəğd" || !cp.paymentType) {
+        cashCreditRepaymentsAmount += Number(cp.amount) || 0;
+      }
+    }
+
+    // 4. Cash expenses during this shift (filtered by date range)
+    const expensesInShift = await db.query.expenses.findMany({
+      where: and(
+        eq(schema.expenses.tenantId, req.tenantId),
+        and(
+          eq(schema.expenses.paymentType, "cash"),
+          and(
+            sql`${schema.expenses.date} >= ${activeShift.openedAt}`,
+            sql`${schema.expenses.date} <= ${new Date().toISOString()}`
+          )
+        )
+      )
+    });
+    let cashExpensesAmount = 0;
+    for (const exp of expensesInShift) {
+      cashExpensesAmount += Number(exp.amount) || 0;
+    }
+
+    const expectedCash = activeShift.openingCash + cashSalesAmount - cashReturnsAmount + cashCreditRepaymentsAmount - cashExpensesAmount;
+    const variance = actualCash - expectedCash;
+
+    const closedShift = await db
+      .update(schema.shifts)
+      .set({
+        closedAt: new Date().toISOString(),
+        expectedCash,
+        actualCash,
+        variance,
+        status: "closed",
+      })
+      .where(eq(schema.shifts.id, activeShift.id))
+      .returning();
+
+    await logActivity(req, "CLOSE_SHIFT", `Kassa növbəsi bağlandı. Z-Hesabat: Gözlənilən: ${expectedCash.toFixed(2)}, Sayılan: ${actualCash.toFixed(2)}, Fərq: ${variance.toFixed(2)} AZN`);
+
+    res.json({
+      shift: closedShift[0],
+      stats: {
+        openingCash: activeShift.openingCash,
+        cashSalesAmount,
+        cashReturnsAmount,
+        cashCreditRepaymentsAmount,
+        cashExpensesAmount,
+        expectedCash,
+        actualCash,
+        variance
+      }
+    });
+  } catch (error) {
+    console.error("Close shift error:", error);
+    res.status(500).json({ message: "Növbəni bağlayarkən xəta baş verdi" });
+  }
+});
+
+// Get all shift logs (Admin view)
+router.get("/shifts", requireAdmin, async (req, res) => {
+  try {
+    const list = await db.select().from(schema.shifts)
+      .where(eq(schema.shifts.tenantId, req.tenantId))
+      .orderBy(desc(schema.shifts.openedAt));
+    res.json(list);
+  } catch (error) {
+    res.status(500).json({ message: "Növbə tarixçəsini çəkərkən xəta baş verdi" });
+  }
+});
+
+// --- Stock take / adjustments API ---
+router.post("/stock/adjust", async (req, res) => {
+  try {
+    const hasAccess = await checkUserPermission(req, "staffCanViewStock");
+    if (!hasAccess) {
+      return res.status(403).json({ message: "Sizin bu əməliyyat üçün səlahiyyətiniz yoxdur" });
+    }
+
+    const adjustments = req.body; // Array of { productId, warehouseId, type, quantity, notes }
+    if (!Array.isArray(adjustments)) {
+      return res.status(400).json({ message: "Məlumat massiv formatında olmalıdır" });
+    }
+
+    const username = req.headers["x-user-username"] as string || "system";
+
+    const inserted = await db.transaction(async (tx) => {
+      const records = [];
+      for (const adj of adjustments) {
+        const rec = await tx.insert(schema.stockAdjustments).values({
+          tenantId: req.tenantId,
+          productId: parseInt(adj.productId),
+          warehouseId: parseInt(adj.warehouseId),
+          type: adj.type,
+          quantity: parseFloat(adj.quantity),
+          date: new Date().toISOString(),
+          adjustedBy: username,
+          notes: adj.notes || null,
+        }).returning();
+        records.push(rec[0]);
+
+        // Log to activity logs
+        await tx.insert(schema.activityLogs).values({
+          tenantId: req.tenantId,
+          username,
+          action: "SAYIM_TƏNZİMLƏMƏ",
+          description: `Məhsul ID: ${adj.productId}, Anbar ID: ${adj.warehouseId} üzrə sayım tənzimləməsi (${adj.type === "shrinkage" ? "Əskik" : "Artıq"}): ${adj.quantity} ədəd`,
+          timestamp: new Date().toISOString(),
+        });
+      }
+      return records;
+    });
+
+    res.json({ success: true, adjusted: inserted });
+  } catch (error) {
+    console.error("Stock adjust error:", error);
+    res.status(500).json({ message: "Sayım məlumatları qeyd edilərkən xəta baş verdi" });
+  }
+});
+
+// Auto PO/Procurement drafts
+router.get("/stock/procurement-drafts", async (req, res) => {
+  try {
+    const allProducts = await db.select().from(schema.products)
+      .where(and(eq(schema.products.tenantId, req.tenantId), eq(schema.products.isArchived, 0)));
+
+    const stockMetrics = await fetchTenantStockMetrics(req.tenantId);
+
+    const draftMap: Record<number, { vendorName: string, items: any[] }> = {};
+
+    for (const prod of allProducts) {
+      const computedStock = stockMetrics.metrics.get(prod.id)?.currentQuantity || 0;
+
+      const minLimit = Number(prod.minStockLimit) || 0;
+      if (minLimit > 0 && computedStock < minLimit) {
+        const vendorId = prod.vendorId || 0;
+        let vendorName = "Təyin Edilməyib";
+        
+        if (vendorId) {
+          const v = await db.query.vendors.findFirst({
+            where: and(eq(schema.vendors.id, vendorId), eq(schema.vendors.tenantId, req.tenantId))
+          });
+          if (v) vendorName = v.name;
+        }
+
+        if (!draftMap[vendorId]) {
+          draftMap[vendorId] = { vendorName, items: [] };
+        }
+
+        draftMap[vendorId].items.push({
+          productId: prod.id,
+          productName: prod.name,
+          barcode: prod.barcode,
+          currentStock: computedStock,
+          minStockLimit: minLimit,
+          suggestedOrderQty: Math.max(1, minLimit * 2 - computedStock),
+        });
+      }
+    }
+
+    res.json(Object.values(draftMap));
+  } catch (error) {
+    console.error("Procurement drafts error:", error);
+    res.status(500).json({ message: "Avtomatik sifariş qaralamalarını hazırlayarkən xəta baş verdi" });
   }
 });
 

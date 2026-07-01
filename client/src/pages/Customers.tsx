@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Edit2, Trash2, X, Users, Phone, MapPin, ClipboardList, Lock } from "lucide-react";
+import { Plus, Edit2, Trash2, X, Users, Phone, MapPin, ClipboardList, Lock, Gift } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
 
 interface Customer {
@@ -10,6 +10,7 @@ interface Customer {
   email: string | null;
   address: string | null;
   notes: string | null;
+  loyaltyPoints: number | null;
 }
 
 const emptyCustomer = {
@@ -233,24 +234,27 @@ export default function Customers() {
                 <th className="p-4">E-poçt</th>
                 <th className="p-4">Ünvan</th>
                 <th className="p-4">Qeyd (İxtiyari)</th>
+                <th className="p-4 text-center">Bonus Balı 🎁</th>
                 <th className="p-4 text-right pr-6 w-20"></th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="p-10 text-center text-xs text-gray-400">
+                  <td colSpan={8} className="p-10 text-center text-xs text-gray-400">
                     Yüklənir...
                   </td>
                 </tr>
               ) : filteredList.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-16 text-center text-xs text-gray-400">
+                  <td colSpan={8} className="p-16 text-center text-xs text-gray-400">
                     {searchQuery ? "Axtarışa uyğun müştəri tapılmadı." : "Müştəri siyahısı boşdur."}
                   </td>
                 </tr>
               ) : (
-                filteredList.map((item, idx) => (
+                filteredList.map((item, idx) => {
+                  const pts = parseFloat(String(item.loyaltyPoints ?? 0)) || 0;
+                  return (
                   <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/30 transition-all text-xs">
                     <td className="p-4 text-center font-mono text-gray-400">{idx + 1}</td>
                     <td className="p-4 font-bold text-gray-900">{item.name}</td>
@@ -284,6 +288,16 @@ export default function Customers() {
                         "—"
                       )}
                     </td>
+                    <td className="p-4 text-center">
+                      {pts > 0 ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 text-amber-700 font-bold">
+                          <Gift className="w-3 h-3" />
+                          {pts.toFixed(2)} bal
+                        </span>
+                      ) : (
+                        <span className="text-gray-300 font-semibold">0 bal</span>
+                      )}
+                    </td>
                     <td className="p-4 text-right pr-6">
                       <div className="flex items-center justify-end gap-2">
                         <button
@@ -303,7 +317,8 @@ export default function Customers() {
                       </div>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>
