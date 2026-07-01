@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { PlusCircle, Search, HelpCircle, Lock, ArrowLeftRight, FileText, Warehouse } from "lucide-react";
+import { PlusCircle, Search, HelpCircle, Lock, ArrowLeftRight, FileText, Warehouse, ClipboardCheck, ShoppingCart, AlertTriangle, Printer, CheckCircle2, X } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
 
 interface StockLevel {
@@ -27,7 +27,7 @@ export default function Stock() {
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
   // Multi-warehouse and transfer states
-  const [activeStockTab, setActiveStockTab] = useState("list"); // "list" | "transfers"
+  const [activeStockTab, setActiveStockTab] = useState("list"); // "list" | "transfers" | "stocktake" | "po"
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("");
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [transferProductId, setTransferProductId] = useState<number>(0);
@@ -37,6 +37,12 @@ export default function Stock() {
   const [transferNotes, setTransferNotes] = useState<string>("");
   const [transferSerials, setTransferSerials] = useState<string>("");
   const [selectedTransferSerials, setSelectedTransferSerials] = useState<string[]>([]);
+
+  // Stocktake state
+  const [stocktakeCounts, setStocktakeCounts] = useState<Record<number, string>>({}); // productId -> counted qty
+  const [stocktakeNotes, setStocktakeNotes] = useState<Record<number, string>>({}); // productId -> notes
+  const [stocktakeSubmitted, setStocktakeSubmitted] = useState(false);
+  const [showPOPrint, setShowPOPrint] = useState(false);
 
   const handleCopy = (text: string, index: number) => {
     navigator.clipboard.writeText(text);
@@ -132,6 +138,40 @@ export default function Stock() {
         variant: "destructive",
       });
     },
+  });
+
+  // Stocktake adjustment mutation
+  const stockAdjustMutation = useMutation({
+    mutationFn: async (adjustments: any[]) => {
+      const res = await fetch("/api/stock/adjust", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(adjustments),
+      });
+      if (!res.ok) throw new Error("Sayim qeyd edilə bilmədi");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/stock/levels"] });
+      setStocktakeCounts({});
+      setStocktakeNotes({});
+      setStocktakeSubmitted(true);
+      toast({ title: "Sayim tamamlandı! ✅", description: "Anbar qalıqları yeniləndi.", variant: "success" });
+    },
+    onError: () => {
+      toast({ title: "Xəta!", description: "Sayim qeyd edilə bilmədi.", variant: "destructive" });
+    }
+  });
+
+  // Procurement drafts query
+  const { data: procurementDrafts = [], isLoading: isPOLoading } = useQuery<any[]>({
+    queryKey: ["/api/stock/procurement-drafts"],
+    queryFn: async () => {
+      const res = await fetch("/api/stock/procurement-drafts");
+      if (!res.ok) throw new Error();
+      return res.json();
+    },
+    enabled: activeStockTab === "po",
   });
 
   const transferProduct = list?.find(p => p.productId === transferProductId);
@@ -271,6 +311,30 @@ export default function Stock() {
             <ArrowLeftRight className="w-4 h-4" />
             Yerdəyişmə Tarixçəsi
           </button>
+          <button
+            type="button"
+            onClick={() => { setActiveStockTab("stocktake"); setStocktakeSubmitted(false); }}
+            className={`flex items-center gap-2 px-5 py-3 border-b-2 text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+              activeStockTab === "stocktake"
+                ? "border-emerald-600 text-emerald-600"
+                : "border-transparent text-gray-400 hover:text-gray-600"
+            }`}
+          >
+            <ClipboardCheck className="w-4 h-4" />
+            Sayım Et
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveStockTab("po")}
+            className={`flex items-center gap-2 px-5 py-3 border-b-2 text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+              activeStockTab === "po"
+                ? "border-orange-500 text-orange-500"
+                : "border-transparent text-gray-400 hover:text-gray-600"
+            }`}
+          >
+            <ShoppingCart className="w-4 h-4" />
+            Satınalma Sifarişi
+          </button>
         </div>
 
         {activeStockTab === "list" && (
@@ -282,6 +346,21 @@ export default function Stock() {
               className="px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-white text-xs font-bold"
             >
               <option value="">Hamısı (Bütün Anbarlar)</option>
+              {warehousesList.map((w: any) => (
+                <option key={w.id} value={w.id}>{w.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+        {activeStockTab === "stocktake" && (
+          <div className="flex items-center gap-2 pb-2 sm:pb-0">
+            <span className="text-[10px] text-gray-400 font-bold uppercase">Sayım Anbarı:</span>
+            <select
+              value={selectedWarehouseId}
+              onChange={(e) => { setSelectedWarehouseId(e.target.value); setStocktakeCounts({}); setStocktakeSubmitted(false); }}
+              className="px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-white text-xs font-bold"
+            >
+              <option value="">Anbar Seçin...</option>
               {warehousesList.map((w: any) => (
                 <option key={w.id} value={w.id}>{w.name}</option>
               ))}
@@ -522,6 +601,244 @@ export default function Stock() {
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* ========== STOCKTAKE TAB ========== */}
+      {activeStockTab === "stocktake" && (
+        <div className="space-y-5 animate-in fade-in-0">
+          {stocktakeSubmitted ? (
+            <div className="bg-white border border-green-100 rounded-2xl p-10 flex flex-col items-center justify-center gap-4 text-center glass-card shadow-xs">
+              <div className="size-16 rounded-2xl bg-green-50 flex items-center justify-center">
+                <CheckCircle2 className="w-8 h-8 text-green-600" />
+              </div>
+              <h3 className="font-black text-gray-900 text-lg">Sayım Uğurla Tamamlandı!</h3>
+              <p className="text-xs text-gray-400 font-semibold max-w-sm">Anbar qalıqları sayım nəticəsinə əsasən yeniləndi. Tənzimləmələr sistemdə qeyd edildi.</p>
+              <button
+                onClick={() => { setStocktakeSubmitted(false); setStocktakeCounts({}); setStocktakeNotes({}); }}
+                className="px-6 py-2.5 bg-primary text-white font-bold text-xs rounded-xl hover:bg-primary/90 cursor-pointer"
+              >
+                Yeni Sayım Başlat
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="bg-white border border-gray-100 p-5 rounded-2xl glass-card shadow-xs">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="size-9 rounded-xl bg-emerald-50 flex items-center justify-center">
+                    <ClipboardCheck className="w-5 h-5 text-emerald-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-gray-900 text-sm">Fiziki Anbar Sayımı</h3>
+                    <p className="text-[10px] text-gray-400 font-semibold">Saydığınız məbləği daxil edin. Fərqlər avtomatik tənzimlənəcək.</p>
+                  </div>
+                </div>
+
+                {!selectedWarehouseId ? (
+                  <div className="text-center py-8 text-xs text-gray-400 italic font-semibold border border-dashed border-gray-200 rounded-xl">
+                    Zəhmət olmasa yuxarıdan anbar seçin.
+                  </div>
+                ) : filteredList.length === 0 ? (
+                  <div className="text-center py-8 text-xs text-gray-400 italic font-semibold border border-dashed border-gray-200 rounded-xl">
+                    Seçilmiş anbarda məhsul tapilmadı.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs border-collapse min-w-[650px]">
+                      <thead>
+                        <tr className="border-b border-gray-100 bg-gray-50/50 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                          <th className="p-3 text-left">Məhsul</th>
+                          <th className="p-3 text-center">Sistemdəki Qalıq</th>
+                          <th className="p-3 text-center">Saydığınız</th>
+                          <th className="p-3 text-center">Fərq</th>
+                          <th className="p-3 text-center">Qeyd</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredList.map((item) => {
+                          const counted = parseFloat(stocktakeCounts[item.productId] ?? "");
+                          const diff = isNaN(counted) ? null : counted - item.currentQuantity;
+                          return (
+                            <tr key={item.productId} className="border-b border-gray-50 hover:bg-gray-50/30 transition-all">
+                              <td className="p-3 font-bold text-gray-900">
+                                {item.productName}
+                                {item.barcode && <div className="text-[9px] text-gray-400 font-mono">{item.barcode}</div>}
+                              </td>
+                              <td className="p-3 text-center font-mono font-bold text-gray-600">{item.currentQuantity.toFixed(2)} {item.unit}</td>
+                              <td className="p-3 text-center">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  placeholder={item.currentQuantity.toFixed(2)}
+                                  value={stocktakeCounts[item.productId] ?? ""}
+                                  onChange={(e) => setStocktakeCounts(prev => ({ ...prev, [item.productId]: e.target.value }))}
+                                  className="w-24 px-2 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500 text-center font-mono font-bold bg-white"
+                                />
+                              </td>
+                              <td className="p-3 text-center">
+                                {diff === null ? (
+                                  <span className="text-gray-300">—</span>
+                                ) : diff === 0 ? (
+                                  <span className="text-green-600 font-black">✓ Uyğun</span>
+                                ) : diff > 0 ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 border border-blue-100 text-blue-700 font-black">+{diff.toFixed(2)} Artıq</span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 border border-red-100 text-red-600 font-black">{diff.toFixed(2)} Əskik</span>
+                                )}
+                              </td>
+                              <td className="p-3">
+                                <input
+                                  type="text"
+                                  placeholder="Səbəb..."
+                                  value={stocktakeNotes[item.productId] ?? ""}
+                                  onChange={(e) => setStocktakeNotes(prev => ({ ...prev, [item.productId]: e.target.value }))}
+                                  className="w-full px-2 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-[10px]"
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {selectedWarehouseId && filteredList.length > 0 && (
+                <div className="flex items-center justify-between bg-white border border-gray-100 rounded-2xl p-4 glass-card shadow-xs">
+                  <div className="text-xs text-gray-500 font-semibold">
+                    <span className="font-black text-gray-900">{Object.keys(stocktakeCounts).length}</span> məhsul sayıldı ·
+                    {' '}<span className="text-red-500 font-black">
+                      {Object.entries(stocktakeCounts).filter(([pid]) => {
+                        const item = filteredList.find(i => i.productId === Number(pid));
+                        const cnt = parseFloat(stocktakeCounts[Number(pid)] ?? "");
+                        return item && !isNaN(cnt) && cnt < item.currentQuantity;
+                      }).length} əskik
+                    </span>{' '}·{' '}
+                    <span className="text-blue-500 font-black">
+                      {Object.entries(stocktakeCounts).filter(([pid]) => {
+                        const item = filteredList.find(i => i.productId === Number(pid));
+                        const cnt = parseFloat(stocktakeCounts[Number(pid)] ?? "");
+                        return item && !isNaN(cnt) && cnt > item.currentQuantity;
+                      }).length} artıq
+                    </span>
+                  </div>
+                  <button
+                    disabled={stockAdjustMutation.isPending || Object.keys(stocktakeCounts).length === 0}
+                    onClick={() => {
+                      const adjustments: any[] = [];
+                      for (const [pid, cntStr] of Object.entries(stocktakeCounts)) {
+                        const item = filteredList.find(i => i.productId === Number(pid));
+                        if (!item) continue;
+                        const counted = parseFloat(cntStr);
+                        if (isNaN(counted)) continue;
+                        const diff = counted - item.currentQuantity;
+                        if (diff === 0) continue;
+                        adjustments.push({
+                          productId: Number(pid),
+                          warehouseId: Number(selectedWarehouseId),
+                          type: diff > 0 ? "found" : "shrinkage",
+                          quantity: Math.abs(diff),
+                          notes: stocktakeNotes[Number(pid)] || null,
+                        });
+                      }
+                      if (adjustments.length === 0) {
+                        toast({ title: "Fərq yoxdur", description: "Heç bir məhsulda fərq qeyd edilmədi.", variant: "destructive" });
+                        return;
+                      }
+                      stockAdjustMutation.mutate(adjustments);
+                    }}
+                    className="px-6 py-2.5 bg-emerald-600 text-white font-extrabold text-xs rounded-xl hover:bg-emerald-700 cursor-pointer shadow-sm transition-all disabled:opacity-50"
+                  >
+                    {stockAdjustMutation.isPending ? "Qeyd edilir..." : "Sayımı Tamamla ✓"}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ========== AUTO PO TAB ========== */}
+      {activeStockTab === "po" && (
+        <div className="space-y-5 animate-in fade-in-0">
+          <div className="bg-white border border-gray-100 p-5 rounded-2xl glass-card shadow-xs">
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-3">
+                <div className="size-9 rounded-xl bg-orange-50 flex items-center justify-center">
+                  <ShoppingCart className="w-5 h-5 text-orange-500" />
+                </div>
+                <div>
+                  <h3 className="font-black text-gray-900 text-sm">Avtomatik Satınalma Sifarişi</h3>
+                  <p className="text-[10px] text-gray-400 font-semibold">Minimum limitdən aşağı düşən məhsullar tədariükçüərə görə qruplaşdırıldı.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => window.print()}
+                className="flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-600 font-bold text-xs rounded-xl hover:bg-gray-50 cursor-pointer transition-all print:hidden"
+              >
+                <Printer className="w-3.5 h-3.5" /> Çap Et (A4)
+              </button>
+            </div>
+
+            {isPOLoading ? (
+              <div className="text-center py-10 text-xs text-gray-400">Siyahı hazırlanır...</div>
+            ) : procurementDrafts.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
+                <div className="size-12 rounded-xl bg-green-50 flex items-center justify-center">
+                  <CheckCircle2 className="w-6 h-6 text-green-500" />
+                </div>
+                <p className="text-sm font-black text-gray-900">Bütün məhsullar Normaldır!</p>
+                <p className="text-xs text-gray-400 font-semibold">Heç bir məhsula minimum limitdən az qalıq qeyd edilməyib.</p>
+              </div>
+            ) : (
+              <div className="space-y-6 print:space-y-4">
+                {procurementDrafts.map((group: any, gi: number) => (
+                  <div key={gi} className="border border-orange-100 rounded-2xl overflow-hidden">
+                    <div className="bg-gradient-to-r from-orange-50 to-amber-50 px-5 py-3 flex items-center justify-between border-b border-orange-100">
+                      <div>
+                        <p className="font-black text-orange-800 text-xs">🚨 Tədariükçü: {group.vendorName}</p>
+                        <p className="text-[10px] text-orange-600 font-semibold">{group.items.length} məhsul — təcili sifariş lazımdır</p>
+                      </div>
+                      <AlertTriangle className="w-4 h-4 text-orange-500" />
+                    </div>
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="bg-gray-50/50 text-[10px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100">
+                          <th className="p-3 text-left">Məhsul</th>
+                          <th className="p-3 text-center">Cari Qalıq</th>
+                          <th className="p-3 text-center">Min. Limit</th>
+                          <th className="p-3 text-center font-black text-orange-600">Təklif Edilən Sifariş</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {group.items.map((item: any, ii: number) => (
+                          <tr key={ii} className="border-b border-gray-50 hover:bg-orange-50/20 transition-all">
+                            <td className="p-3 font-bold text-gray-900">
+                              {item.productName}
+                              {item.barcode && <div className="text-[9px] text-gray-400 font-mono">{item.barcode}</div>}
+                            </td>
+                            <td className="p-3 text-center">
+                              <span className={`font-black font-mono ${item.currentStock <= 0 ? "text-red-600" : "text-amber-600"}`}>
+                                {item.currentStock.toFixed(2)}
+                              </span>
+                            </td>
+                            <td className="p-3 text-center font-mono text-gray-500 font-semibold">{item.minStockLimit.toFixed(2)}</td>
+                            <td className="p-3 text-center">
+                              <span className="inline-flex items-center px-3 py-1 rounded-full bg-orange-100 border border-orange-200 text-orange-800 font-black">
+                                {item.suggestedOrderQty.toFixed(2)} ədəd
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

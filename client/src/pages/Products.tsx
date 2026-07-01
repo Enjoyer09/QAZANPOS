@@ -17,6 +17,7 @@ interface Product {
   isArchived?: number;
   hasHistory?: boolean;
   vendorId?: number | null;
+  minStockLimit?: number | null;
 }
 
 const emptyProduct = {
@@ -29,6 +30,7 @@ const emptyProduct = {
   serialNumber: "",
   warrantyMonths: "",
   vendorId: "",
+  minStockLimit: "",
 };
 
 export default function Products() {
@@ -272,6 +274,7 @@ export default function Products() {
       serialNumber: "",
       warrantyMonths: product.warrantyMonths ? String(product.warrantyMonths) : "",
       vendorId: product.vendorId ? String(product.vendorId) : "",
+      minStockLimit: product.minStockLimit != null ? String(product.minStockLimit) : "",
     });
     setIsOpen(true);
   };
@@ -791,6 +794,22 @@ export default function Products() {
                   onChange={(e) => setFormData((prev) => ({ ...prev, warrantyMonths: e.target.value }))}
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 font-bold"
                 />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Min. Anbar Limiti (Avtomatik PO 🛒)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="Məs. 5 (bu limitdən aşağı düşəndə sifariş təklifi yaranir)"
+                  value={(formData as any).minStockLimit ?? ""}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, minStockLimit: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-orange-400 bg-orange-50/30 font-bold"
+                />
+                <p className="text-[10px] text-orange-600/80 font-medium">
+                  Stok bu rəqəmdən aşağı düşəndə Avtomatik Satınalma Sifarişi siyahısına avtomatik əlavə edilir.
+                </p>
               </div>
 
               <div className="space-y-1.5">
