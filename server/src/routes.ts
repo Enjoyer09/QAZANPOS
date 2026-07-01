@@ -3170,18 +3170,21 @@ router.get("/credits/pending", async (req, res) => {
 // 6. EXPENSES ENDPOINTS
 // ----------------------------------------------------
 
-// List expenses with category and description filters
+// List expenses with category, description, and paymentType filters
 router.get("/expenses", async (req, res) => {
   try {
     if (!await checkUserPermission(req, "staffCanViewExpenses")) {
       return res.status(403).json({ message: "Xərclər modulu məlumatlarına giriş administrator tərəfindən məhdudlaşdırılıb" });
     }
 
-    const { category, search } = req.query;
+    const { category, search, paymentType } = req.query;
     const queryConditions = [eq(schema.expenses.tenantId, req.tenantId)];
 
     if (category) {
       queryConditions.push(eq(schema.expenses.category, category as string));
+    }
+    if (paymentType) {
+      queryConditions.push(eq(schema.expenses.paymentType, paymentType as string));
     }
     if (search) {
       queryConditions.push(sql`${schema.expenses.description} ILIKE ${"%" + search + "%"}`);
@@ -3202,7 +3205,7 @@ router.get("/expenses", async (req, res) => {
 // Create expense
 router.post("/expenses", requireAdmin, async (req, res) => {
   try {
-    const { amount, category, description } = req.body;
+    const { amount, category, description, paymentType } = req.body;
     if (!amount || !category) {
       return res.status(400).json({ message: "Məbləğ və kateqoriya daxil edilməlidir" });
     }
@@ -3214,11 +3217,12 @@ router.post("/expenses", requireAdmin, async (req, res) => {
         amount: parseFloat(amount),
         category,
         description: description || null,
+        paymentType: paymentType || "cash",
         date: new Date().toISOString(),
       })
       .returning();
 
-    await logActivity(req, "CREATE_EXPENSE", `Yeni xərc maddəsi əlavə etdi: ${amount} ₼ (Kateqoriya: ${category}, Təsvir: ${description || "yoxdur"})`);
+    await logActivity(req, "CREATE_EXPENSE", `Yeni xərc maddəsi əlavə etdi: ${amount} ₼ (Kateqoriya: ${category}, Ödəniş Növü: ${paymentType || "cash"}, Təsvir: ${description || "yoxdur"})`);
 
     res.json(newExpense[0]);
   } catch (error) {

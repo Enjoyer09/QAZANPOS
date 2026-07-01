@@ -8,6 +8,7 @@ interface Expense {
   amount: number;
   category: string;
   description: string | null;
+  paymentType: string;
   date: string;
 }
 
@@ -19,6 +20,20 @@ const categoryBadges: Record<string, string> = {
   Kommunal: "bg-amber-50 text-amber-700 border-amber-100",
   Nəqliyyat: "bg-orange-50 text-orange-700 border-orange-100",
   Digər: "bg-gray-50 text-gray-700 border-gray-100",
+};
+
+const paymentTypeLabels: Record<string, string> = {
+  cash: "Nəqd",
+  card: "Kart / Bank",
+  investor_debt: "İnvestor Borcu",
+  other: "Digər",
+};
+
+const paymentTypeBadges: Record<string, string> = {
+  cash: "bg-emerald-50 text-emerald-700 border-emerald-100",
+  card: "bg-blue-50 text-blue-700 border-blue-100",
+  investor_debt: "bg-purple-50 text-purple-700 border-purple-100",
+  other: "bg-gray-50 text-gray-700 border-gray-100",
 };
 
 export default function Expenses() {
@@ -52,6 +67,7 @@ export default function Expenses() {
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("Digər");
   const [description, setDescription] = useState("");
+  const [paymentType, setPaymentType] = useState("cash");
 
   // Queries & Mutations
   const params = filterActive ? `?from=${fromDate}&to=${toDate}` : "";
@@ -68,8 +84,10 @@ export default function Expenses() {
   const filteredList = (list || []).filter((item) => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return true;
+    const payLabel = paymentTypeLabels[item.paymentType || "cash"] || "";
     return (
       item.category.toLowerCase().includes(q) ||
+      payLabel.toLowerCase().includes(q) ||
       (item.description && item.description.toLowerCase().includes(q))
     );
   });
@@ -91,6 +109,7 @@ export default function Expenses() {
       setAmount("");
       setDescription("");
       setCategory("Digər");
+      setPaymentType("cash");
     },
     onError: () => {
       toast({ title: "Xəta!", description: "Xərc əlavə edilərkən xəta baş verdi.", variant: "destructive" });
@@ -138,10 +157,24 @@ export default function Expenses() {
       amount: amt,
       category,
       description: description.trim() || null,
+      paymentType,
     });
   };
 
   const totalExpenses = filteredList ? filteredList.reduce((sum, e) => sum + e.amount, 0) : 0;
+
+  const cashExpenses = filteredList
+    ? filteredList.filter(e => (e.paymentType || "cash") === "cash").reduce((sum, e) => sum + e.amount, 0)
+    : 0;
+  const cardExpenses = filteredList
+    ? filteredList.filter(e => e.paymentType === "card").reduce((sum, e) => sum + e.amount, 0)
+    : 0;
+  const investorDebtExpenses = filteredList
+    ? filteredList.filter(e => e.paymentType === "investor_debt").reduce((sum, e) => sum + e.amount, 0)
+    : 0;
+  const otherExpenses = filteredList
+    ? filteredList.filter(e => e.paymentType === "other").reduce((sum, e) => sum + e.amount, 0)
+    : 0;
 
   if (user?.role !== "Admin" && currentUser?.staffCanViewExpenses === 0) {
     return (
@@ -248,6 +281,21 @@ export default function Expenses() {
               </select>
             </div>
 
+            {/* Payment Source */}
+            <div className="space-y-1.5">
+              <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Ödəniş Mənbəyi *</label>
+              <select
+                value={paymentType}
+                onChange={(e) => setPaymentType(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 cursor-pointer"
+              >
+                <option value="cash">Nəqd (Kassa)</option>
+                <option value="card">Kart / Bank Hesabı</option>
+                <option value="investor_debt">İnvestor Borcu</option>
+                <option value="other">Digər</option>
+              </select>
+            </div>
+
             {/* Description */}
             <div className="space-y-1.5">
               <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Təsvir / Açıqlama</label>
@@ -272,21 +320,56 @@ export default function Expenses() {
 
         {/* Expenses List Table Card */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Total Period Expenses card */}
+          {/* Total & Breakdown Grid */}
           {!isLoading && list && (
-            <div className="bg-red-500/5 border border-red-500/10 rounded-2xl p-5 flex items-center justify-between glass">
-              <div className="flex items-center gap-3">
-                <div className="size-10 rounded-xl bg-red-500/10 text-red-500 flex items-center justify-center">
-                  <TrendingDown className="w-5 h-5" />
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 animate-in fade-in duration-300">
+              {/* Total Expenses Card */}
+              <div className="col-span-2 sm:col-span-5 bg-gradient-to-r from-red-500/10 via-red-500/5 to-transparent border border-red-500/20 rounded-2xl p-5 flex items-center justify-between glass shadow-xs">
+                <div className="flex items-center gap-3.5">
+                  <div className="size-11 rounded-2xl bg-red-500 text-white flex items-center justify-center shadow-lg shadow-red-500/20 shrink-0">
+                    <TrendingDown className="w-5.5 h-5.5" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Ümumi Dövr Xərcləri</span>
+                    <span className="text-2xl font-black text-red-600 font-mono mt-0.5 block">
+                      {totalExpenses.toFixed(2)} ₼
+                    </span>
+                  </div>
                 </div>
-                <div>
-                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Cəmi Xərclər</span>
-                  <span className="text-2xl font-black text-red-500 font-mono block mt-0.5">
-                    {totalExpenses.toFixed(2)} ₼
-                  </span>
-                </div>
+                <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider hidden sm:inline">QAZANPOS XƏRC HESABATI</span>
               </div>
-              <span className="text-[10px] text-gray-400 font-medium">seçilmiş dövr üzrə xərclərin cəmi</span>
+
+              {/* Cash Card */}
+              <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-xs glass flex flex-col justify-between hover:border-emerald-500/20 transition-all">
+                <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider block">Nəqd (Kassa)</span>
+                <span className="text-lg font-black text-emerald-700 font-mono mt-2 block">
+                  {cashExpenses.toFixed(2)} ₼
+                </span>
+              </div>
+
+              {/* Card / Bank Card */}
+              <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-xs glass flex flex-col justify-between hover:border-blue-500/20 transition-all">
+                <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider block">Kart / Bank</span>
+                <span className="text-lg font-black text-blue-700 font-mono mt-2 block">
+                  {cardExpenses.toFixed(2)} ₼
+                </span>
+              </div>
+
+              {/* Investor Debt Card */}
+              <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-xs glass flex flex-col justify-between hover:border-purple-500/20 transition-all col-span-2 sm:col-span-1">
+                <span className="text-[10px] font-bold text-purple-600 uppercase tracking-wider block">İnvestor Borcu</span>
+                <span className="text-lg font-black text-purple-700 font-mono mt-2 block">
+                  {investorDebtExpenses.toFixed(2)} ₼
+                </span>
+              </div>
+
+              {/* Other Card */}
+              <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-xs glass flex flex-col justify-between hover:border-gray-300 transition-all col-span-2 sm:col-span-1">
+                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Digər</span>
+                <span className="text-lg font-black text-gray-600 font-mono mt-2 block">
+                  {otherExpenses.toFixed(2)} ₼
+                </span>
+              </div>
             </div>
           )}
 
@@ -295,7 +378,7 @@ export default function Expenses() {
               <h3 className="font-extrabold text-gray-900 text-sm">Xərclərin Reyestri</h3>
               <input
                 type="text"
-                placeholder="Xərc axtar (kateqoriya, açıqlama...)"
+                placeholder="Xərc axtar (kateqoriya, açıqlama, ödəniş...)"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="px-3 py-1.5 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 w-full sm:w-60"
@@ -306,6 +389,7 @@ export default function Expenses() {
                 <thead>
                   <tr className="border-b border-gray-100 text-xs font-bold text-gray-400 uppercase tracking-wider">
                     <th className="py-2.5 px-2">Kateqoriya</th>
+                    <th className="py-2.5 px-2">Ödəniş Mənbəyi</th>
                     <th className="py-2.5 px-2">Açıqlama</th>
                     <th className="py-2.5 px-2">Tarix</th>
                     <th className="py-2.5 px-2 text-right">Məbləğ</th>
@@ -315,13 +399,13 @@ export default function Expenses() {
                 <tbody>
                   {isLoading ? (
                     <tr>
-                      <td colSpan={5} className="py-8 text-center text-xs text-gray-400">
+                      <td colSpan={6} className="py-8 text-center text-xs text-gray-400">
                         Yüklənir...
                       </td>
                     </tr>
                   ) : filteredList.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="py-12 text-center text-xs text-gray-400">
+                      <td colSpan={6} className="py-12 text-center text-xs text-gray-400">
                         {searchQuery ? "Axtarışa uyğun xərc qeydi tapılmadı." : "Heç bir xərc qeydi tapılmadı."}
                       </td>
                     </tr>
@@ -331,6 +415,11 @@ export default function Expenses() {
                         <td className="py-4 px-2">
                           <span className={`px-2.5 py-0.5 border rounded-full text-[9px] font-bold uppercase tracking-wider ${categoryBadges[item.category] || "bg-gray-50 text-gray-500"}`}>
                             {item.category}
+                          </span>
+                        </td>
+                        <td className="py-4 px-2">
+                          <span className={`px-2.5 py-0.5 border rounded-full text-[9px] font-bold uppercase tracking-wider ${paymentTypeBadges[item.paymentType || "cash"]}`}>
+                            {paymentTypeLabels[item.paymentType || "cash"]}
                           </span>
                         </td>
                         <td className="py-4 px-2 text-gray-500 font-medium max-w-xs truncate">

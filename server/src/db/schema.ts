@@ -269,6 +269,7 @@ export const expenses = pgTable("expenses", {
   amount: doublePrecision("amount").notNull(),
   category: text("category").notNull(), // "Maaş", "İcarə", "Kommunal", "Nəqliyyat", "Digər"
   description: text("description"),
+  paymentType: text("payment_type").notNull().default("cash"), // "cash", "card", "investor_debt", "other"
   date: text("date").notNull(), // ISO timestamp
 });
 

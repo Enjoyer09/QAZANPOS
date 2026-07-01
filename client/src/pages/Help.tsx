@@ -74,6 +74,45 @@ export default function Help() {
       )
     },
     {
+      id: "expense-sources",
+      title: "💸 Xərclərin İdarə Edilməsi və Ödəniş Mənbələri (Nəqd, Kart, İnvestor)",
+      category: "maliyye",
+      icon: DollarSign,
+      content: (
+        <div className="space-y-3 leading-relaxed text-gray-700">
+          <p>
+            Sistemdə mağazanın və ya müəssisənin bütün əməliyyat xərclərini (icarə haqqı, kommunal xidmətlər, əməkhaqqı, nəqliyyat və digər xərclər) qeydə almaq və bu xərclərin hansı mənbədən ödənildiyini (Nəqd kassa, Bank kartı, İnvestor borcu) izləmək üçün <b>"Xərclər Portalı"</b> modulundan istifadə edə bilərsiniz.
+          </p>
+          
+          <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-3.5 space-y-1">
+            <span className="text-[10px] font-black text-blue-700 uppercase block tracking-wider">Ödəniş Mənbəyi Növləri:</span>
+            <ul className="list-disc pl-4 text-xs text-blue-950 font-semibold space-y-1">
+              <li><b>Nəqd (Kassa):</b> Şirkətin fiziki kassasından/kassir drawer-indən nağd şəkildə çıxan xərclər üçün.</li>
+              <li><b>Kart / Bank Hesabı:</b> Bank kartı və ya cari hesab vasitəsilə köçürülən rəqəmsal xərclər üçün.</li>
+              <li><b>İnvestor Borcu:</b> Şirkətin dövriyyə vəsaitindən deyil, investorun və ya təsisçinin şəxsi cibindən (sonradan ödənilmək şərtilə) qarşılanan xərclər üçün.</li>
+              <li><b>Digər:</b> Yuxarıdakı kateqoriyalara aid olmayan digər xüsusi ödəniş formaları üçün.</li>
+            </ul>
+          </div>
+
+          <h4 className="font-extrabold text-gray-900 text-xs mt-3 uppercase tracking-wider">İstifadə və Qeydiyyat Addımları:</h4>
+          <ol className="list-decimal pl-4 space-y-2 text-xs font-semibold">
+            <li>
+              <b>Xərclər Bölməsinə Keçin:</b> Sol menyudan <b>Xərclər Portalı</b> linkinə daxil olun.
+            </li>
+            <li>
+              <b>Formu Doldurun:</b> Xərcin <b>Məbləğini</b>, <b>Kateqoriyasını</b> (Maaş, İcarə, Kommunal, Nəqliyyat, Digər) və yeni əlavə edilmiş <b>"Ödəniş Mənbəyi"</b> dropdown-dan müvafiq ödəniş növünü seçin. Lazım gələrsə, Açıqlama hissəsinə ətraflı qeydlər yazın.
+            </li>
+            <li>
+              <b>Xərci Təsdiqləyin:</b> "Xərci Qeyd Et" düyməsinə klikləyin. Məlumat dərhal bazada qeyd ediləcək və həm serverdə, həm də local demo rejimində yadda saxlanılacaqdır.
+            </li>
+            <li>
+              <b>Analitika və Axtarış:</b> Səhifənin yuxarı hissəsində dövr üzrə ümumi xərcinizlə yanaşı, <i>Nəqd, Kart</i> və <i>İnvestor Borcu</i> üzrə ayrı-ayrılıqda cəmlənmiş məbləğləri görə bilərsiniz. Axtarış qutusuna məsələn "kart" və ya "nəqd" yazaraq yalnız həmin mənbəyə aid xərcləri filter edə bilərsiniz.
+            </li>
+          </ol>
+        </div>
+      )
+    },
+    {
       id: "tax-ayarlar",
       title: "🏛️ Azərbaycan Vergi Sistemi və VÖEN Ayarları",
       category: "sistem",

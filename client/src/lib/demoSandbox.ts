@@ -117,9 +117,9 @@ const DEFAULT_RETURNS: any[] = [];
 const DEFAULT_VENDOR_RETURNS: any[] = [];
 
 const DEFAULT_EXPENSES = [
-  { id: 1, amount: 800, category: "Kira", description: "Mağaza Aylıq İcarə Haqqı", date: getPastIsoDate(10) },
-  { id: 2, amount: 120, category: "Komunal", description: "Elektrik enerjisi borcu", date: getPastIsoDate(8) },
-  { id: 3, amount: 30, category: "Rabitə", description: "Fiber İnternet Aylıq abunə", date: getPastIsoDate(7) }
+  { id: 1, amount: 800, category: "İcarə", description: "Mağaza Aylıq İcarə Haqqı", paymentType: "card", date: getPastIsoDate(10) },
+  { id: 2, amount: 120, category: "Kommunal", description: "Elektrik enerjisi borcu", paymentType: "cash", date: getPastIsoDate(8) },
+  { id: 3, amount: 30, category: "Digər", description: "Fiber İnternet Aylıq abunə", paymentType: "cash", date: getPastIsoDate(7) }
 ];
 
 const DEFAULT_SETTINGS = {
@@ -1244,7 +1244,12 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
   // 7. Expenses Endpoints
   if (path === "/api/expenses") {
     if (method === "GET") {
-      return jsonResponse(getDb("expenses"));
+      const expenses = getDb("expenses");
+      const sanitized = expenses.map(e => ({
+        ...e,
+        paymentType: e.paymentType || "cash"
+      }));
+      return jsonResponse(sanitized);
     }
     if (method === "POST") {
       const body = getBody();
@@ -1255,11 +1260,12 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
         amount: parseFloat(body.amount || 0),
         category: body.category || "Digər",
         description: body.description || "",
+        paymentType: body.paymentType || "cash",
         date: body.date || new Date().toISOString()
       };
       expenses.push(newExpense);
       saveDb("expenses", expenses);
-      logActivity(`Xərc əlavə edildi: ${newExpense.category} (${newExpense.amount.toFixed(2)} AZN)`);
+      logActivity(`Xərc əlavə edildi: ${newExpense.category} (${newExpense.amount.toFixed(2)} AZN, Ödəniş: ${newExpense.paymentType})`);
       return jsonResponse(newExpense);
     }
   }
