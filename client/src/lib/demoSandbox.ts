@@ -715,7 +715,23 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
   }
 
   if (path.startsWith("/api/customers/")) {
-    const id = parseInt(path.split("/").pop() || "0");
+    const parts = path.split("/");
+    if (parts[parts.length - 1] === "sales") {
+      const id = parseInt(parts[parts.length - 2] || "0");
+      const sales = getDb("sales") || [];
+      const returns = getDb("returns") || [];
+      const customerSales = sales.filter((s: any) => s.customerId === id);
+      const mapped = customerSales.map((s: any) => {
+        const saleReturns = returns.filter((r: any) => r.saleId === s.id);
+        return {
+          ...s,
+          returns: saleReturns
+        };
+      });
+      return jsonResponse(mapped);
+    }
+
+    const id = parseInt(parts.pop() || "0");
     const customers = getDb("customers");
 
     if (method === "PUT") {
