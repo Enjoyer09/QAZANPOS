@@ -154,6 +154,14 @@ const queryClient = new QueryClient({
   },
 });
 
+function getIconAnimationClass(label: string) {
+  const labelLower = label.toLowerCase();
+  if (labelLower.includes("ayar")) return "hover-spin-slow";
+  if (labelLower.includes("loq") || labelLower.includes("yenil") || labelLower.includes("tarix") || labelLower.includes("satis")) return "hover-spin-loop";
+  if (labelLower.includes("pos") || labelLower.includes("nisye") || labelLower.includes("xercl") || labelLower.includes("maas")) return "hover-spring";
+  return "hover-bounce-up";
+}
+
 function AppLayout({ children, user, currentUser, onLogout }: { children: React.ReactNode; user: any; currentUser: any; onLogout: () => void }) {
   const [location, setLocation] = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -430,11 +438,11 @@ function AppLayout({ children, user, currentUser, onLogout }: { children: React.
                           ? "bg-blue-600 text-white font-extrabold shadow-lg shadow-blue-600/20 hover:bg-blue-700 hover-elevate"
                           : "bg-blue-50 text-blue-600 font-extrabold border border-blue-100 hover:bg-blue-100/60 shadow-xs hover-elevate"
                         : isActive
-                        ? "bg-primary/10 text-primary font-extrabold border border-primary/20 shadow-xs"
+                        ? "bg-primary/10 text-primary font-extrabold border border-primary/20 shadow-xs active-neon-glow"
                         : "text-gray-500 hover:text-gray-900 hover:bg-gray-50/50"
                     }`}
                   >
-                    <item.icon className="w-3.5 h-3.5 shrink-0" />
+                    <item.icon className={`w-3.5 h-3.5 shrink-0 ${getIconAnimationClass(item.label)}`} />
                     <span>{item.label}</span>
                   </div>
                 </Link>
@@ -456,11 +464,11 @@ function AppLayout({ children, user, currentUser, onLogout }: { children: React.
                   }}
                   className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-extrabold text-[11px] xl:text-xs transition-all cursor-pointer select-none border border-transparent ${
                     hasActiveChild
-                      ? "bg-primary/10 text-primary border-primary/20"
+                      ? "bg-primary/10 text-primary border-primary/20 active-neon-glow"
                       : "text-gray-500 hover:text-gray-900 hover:bg-gray-50/50"
                   }`}
                 >
-                  <group.icon className="w-3.5 h-3.5 shrink-0" />
+                  <group.icon className={`w-3.5 h-3.5 shrink-0 ${getIconAnimationClass(group.label)}`} />
                   <span>{group.label}</span>
                   <ChevronDown className={`w-3 h-3 transition-transform duration-200 shrink-0 ${isOpen ? "rotate-180" : ""}`} />
                 </button>
@@ -509,7 +517,7 @@ function AppLayout({ children, user, currentUser, onLogout }: { children: React.
                                   : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
                               }`}
                             >
-                              <Icon className={`w-4 h-4 shrink-0 ${isItemDisabled ? "text-gray-300" : isActive ? "text-white" : "text-gray-400"}`} />
+                              <Icon className={`w-4 h-4 shrink-0 ${getIconAnimationClass(item.label)} ${isItemDisabled ? "text-gray-300" : isActive ? "text-white" : "text-gray-400"}`} />
                               <span>{item.label}</span>
                               {isItemDisabled && <span className="text-[9px] ml-auto">🔒</span>}
                             </div>
@@ -645,12 +653,12 @@ function AppLayout({ children, user, currentUser, onLogout }: { children: React.
                               ? isActive
                                 ? "bg-blue-600 text-white font-extrabold shadow-md shadow-blue-500/20"
                                 : "bg-blue-50 text-blue-600 font-extrabold border border-blue-100"
-                              : isActive
+                      : isActive
                               ? "bg-primary/10 text-primary font-extrabold"
                               : "text-gray-600 hover:text-gray-900 hover:bg-gray-50/50"
                           }`}
                         >
-                          <item.icon className="w-4 h-4 shrink-0" />
+                          <item.icon className={`w-4 h-4 shrink-0 ${getIconAnimationClass(item.label)}`} />
                           <span>{item.label}</span>
                           {isItemDisabled && <span className="text-[9px] text-gray-400 ml-auto">🔒</span>}
                         </div>
@@ -668,7 +676,7 @@ function AppLayout({ children, user, currentUser, onLogout }: { children: React.
                         }`}
                       >
                         <div className="flex items-center gap-2.5">
-                          <group.icon className="w-4 h-4 shrink-0" />
+                          <group.icon className={`w-4 h-4 shrink-0 ${getIconAnimationClass(group.label)}`} />
                           <span>{group.label}</span>
                         </div>
                         <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isGroupOpen ? "rotate-180" : ""}`} />
@@ -714,7 +722,7 @@ function AppLayout({ children, user, currentUser, onLogout }: { children: React.
                                       : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
                                   }`}
                                 >
-                                  <Icon className={`w-3.5 h-3.5 shrink-0 ${isItemDisabled ? "text-gray-300" : ""}`} />
+                                  <Icon className={`w-3.5 h-3.5 shrink-0 ${getIconAnimationClass(item.label)} ${isItemDisabled ? "text-gray-300" : ""}`} />
                                   <span>{item.label}</span>
                                   {isItemDisabled && <span className="text-[9px] text-gray-400 ml-auto">🔒</span>}
                                 </div>
