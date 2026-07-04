@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "./db/index.js";
 import * as schema from "./db/schema.js";
-import { eq, and, lte, gte, sql, desc, asc, inArray } from "drizzle-orm";
+import { eq, and, lte, gte, lt, sql, desc, asc, inArray } from "drizzle-orm";
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
@@ -296,6 +296,51 @@ async function fetchTenantStockMetrics(tenantId: number, warehouseId?: number) {
   const globalVendorReturnedMap = new Map<number, number>();
   globalVendorReturnsGroup.forEach(g => globalVendorReturnedMap.set(g.productId, parseFloat((g.totalReturned as string) || "0")));
 
+  // Fetch global stock adjustments
+  const globalAdjustmentsGroup = await db
+    .select({
+      productId: schema.stockAdjustments.productId,
+      type: schema.stockAdjustments.type,
+      totalQty: sql`SUM(${schema.stockAdjustments.quantity})`
+    })
+    .from(schema.stockAdjustments)
+    .where(eq(schema.stockAdjustments.tenantId, tenantId))
+    .groupBy(schema.stockAdjustments.productId, schema.stockAdjustments.type);
+
+  const globalAdjustmentsMap = new Map<number, number>();
+  globalAdjustmentsGroup.forEach(g => {
+    const pid = g.productId;
+    const qty = parseFloat((g.totalQty as string) || "0");
+    const current = globalAdjustmentsMap.get(pid) || 0;
+    const change = g.type === "found" ? qty : -qty;
+    globalAdjustmentsMap.set(pid, current + change);
+  });
+
+  // Local stock adjustments map
+  const adjustmentsMap = new Map<number, number>();
+  if (warehouseId) {
+    const adjustmentsGroup = await db
+      .select({
+        productId: schema.stockAdjustments.productId,
+        type: schema.stockAdjustments.type,
+        totalQty: sql`SUM(${schema.stockAdjustments.quantity})`
+      })
+      .from(schema.stockAdjustments)
+      .where(and(eq(schema.stockAdjustments.tenantId, tenantId), eq(schema.stockAdjustments.warehouseId, warehouseId)))
+      .groupBy(schema.stockAdjustments.productId, schema.stockAdjustments.type);
+    adjustmentsGroup.forEach(g => {
+      const pid = g.productId;
+      const qty = parseFloat((g.totalQty as string) || "0");
+      const current = adjustmentsMap.get(pid) || 0;
+      const change = g.type === "found" ? qty : -qty;
+      adjustmentsMap.set(pid, current + change);
+    });
+  } else {
+    allProducts.forEach(product => {
+      adjustmentsMap.set(product.id, globalAdjustmentsMap.get(product.id) || 0);
+    });
+  }
+
   // 3. Setup warehouse-specific or global variables for local stock level
   const restockedMap = new Map<number, number>();
   const soldMap = new Map<number, number>();
@@ -445,19 +490,22 @@ async function fetchTenantStockMetrics(tenantId: number, warehouseId?: number) {
     const totalVendorReturned = vendorReturnedMap.get(productId) || 0;
     const totalTransferredOut = transferredOutMap.get(productId) || 0;
     const totalTransferredIn = transferredInMap.get(productId) || 0;
+    const localAdjustments = adjustmentsMap.get(productId) || 0;
 
-    const currentQuantity = totalRestocked - totalSold + totalReturned - totalVendorReturned - totalTransferredOut + totalTransferredIn;
+    const currentQuantity = totalRestocked - totalSold + totalReturned - totalVendorReturned - totalTransferredOut + totalTransferredIn + localAdjustments;
 
     // B. Global quantity (needed to scale the FIFO value)
     const gRestocked = globalRestockedMap.get(productId) || 0;
     const gSold = globalSoldMap.get(productId) || 0;
     const gReturned = globalReturnedMap.get(productId) || 0;
     const gVendorReturned = globalVendorReturnedMap.get(productId) || 0;
-    const globalQuantity = gRestocked - gSold + gReturned - gVendorReturned;
+    const gAdjustments = globalAdjustmentsMap.get(productId) || 0;
+    const globalQuantity = gRestocked - gSold + gReturned - gVendorReturned + gAdjustments;
 
     // C. Global FIFO value and next unit cost calculation
     const productEntries = entriesMap.get(productId) || [];
-    const netSold = Math.max(0, gSold - gReturned);
+    const soldAdjustment = gAdjustments < 0 ? -gAdjustments : 0;
+    const netSold = Math.max(0, gSold - gReturned + soldAdjustment);
 
     let soldRemaining = netSold;
     let globalTotalValue = 0;
@@ -484,6 +532,10 @@ async function fetchTenantStockMetrics(tenantId: number, warehouseId?: number) {
 
     if (!foundNextUnit && productEntries.length > 0) {
       nextUnitCost = productEntries[productEntries.length - 1].purchasePrice;
+    }
+
+    if (gAdjustments > 0) {
+      globalTotalValue += gAdjustments * nextUnitCost;
     }
 
     const lastPurchaseDate = productEntries.length > 0 ? productEntries[productEntries.length - 1].entryDate : null;
@@ -581,7 +633,7 @@ router.put("/warehouses/:id", requireAdmin, async (req, res) => {
         location: location !== undefined ? location : existing.location,
         isDefault: isDefault !== undefined ? isDefault : existing.isDefault,
       })
-      .where(eq(schema.warehouses.id, id))
+      .where(and(eq(schema.warehouses.id, id), eq(schema.warehouses.tenantId, req.tenantId)))
       .returning();
 
     res.json(updated);
@@ -627,7 +679,7 @@ router.delete("/warehouses/:id", requireAdmin, async (req, res) => {
       }
     }
 
-    await db.delete(schema.warehouses).where(eq(schema.warehouses.id, id));
+    await db.delete(schema.warehouses).where(and(eq(schema.warehouses.id, id), eq(schema.warehouses.tenantId, req.tenantId)));
     res.json({ success: true, message: "Anbar uğurla silindi" });
   } catch (error: any) {
     res.status(500).json({ message: "Anbar silinərkən xəta baş verdi: " + error.message });
@@ -1809,17 +1861,35 @@ router.get("/stock/my-debts", requireAdmin, async (req, res) => {
       orderBy: [desc(schema.stockEntries.entryDate)],
     });
 
-    const result = debts.map((d) => ({
-      id: d.id,
-      productId: d.productId,
-      productName: d.product.name,
-      quantity: d.quantity,
-      purchasePrice: d.purchasePrice,
-      totalAmount: d.quantity * d.purchasePrice,
-      supplier: d.supplier,
-      creditDueDate: d.creditDueDate,
-      entryDate: d.entryDate,
-    }));
+    const vendorReturns = await db
+      .select({
+        stockEntryId: schema.vendorReturnItems.stockEntryId,
+        totalReturned: sql`SUM(${schema.vendorReturnItems.quantity})`
+      })
+      .from(schema.vendorReturnItems)
+      .where(eq(schema.vendorReturnItems.tenantId, req.tenantId))
+      .groupBy(schema.vendorReturnItems.stockEntryId);
+    
+    const vrMap = new Map<number, number>();
+    vendorReturns.forEach(v => {
+      if (v.stockEntryId) vrMap.set(v.stockEntryId, parseFloat((v.totalReturned as string) || "0"));
+    });
+
+    const result = debts.map((d) => {
+      const returnedQty = vrMap.get(d.id) || 0;
+      const remainingQty = Math.max(0, d.quantity - returnedQty);
+      return {
+        id: d.id,
+        productId: d.productId,
+        productName: d.product.name,
+        quantity: d.quantity,
+        purchasePrice: d.purchasePrice,
+        totalAmount: remainingQty * d.purchasePrice,
+        supplier: d.supplier,
+        creditDueDate: d.creditDueDate,
+        entryDate: d.entryDate,
+      };
+    });
 
     res.json(result);
   } catch (error) {
@@ -1958,41 +2028,8 @@ router.put("/stock/entries/:id", async (req, res) => {
 
     // Calculate current stock to prevent negative stock level
     if (parsedQty < entry.quantity) {
-      // 1. Calculate total restocked
-      const restockedResult = await db
-        .select({ total: sql`SUM(quantity)` })
-        .from(schema.stockEntries)
-        .where(and(eq(schema.stockEntries.productId, product.id), eq(schema.stockEntries.tenantId, req.tenantId)));
-      const totalRestocked = parseFloat((restockedResult[0]?.total as string) || "0");
-
-      // 2. Calculate total sold
-      const soldResult = await db
-        .select({ total: sql`SUM(quantity)` })
-        .from(schema.saleItems)
-        .where(and(eq(schema.saleItems.productId, product.id), eq(schema.saleItems.tenantId, req.tenantId)));
-      const totalSold = parseFloat((soldResult[0]?.total as string) || "0");
-
-      // 3. Calculate total returned
-      const returnedResult = await db
-        .select({ total: sql`SUM(quantity)` })
-        .from(schema.returnItems)
-        .where(
-          and(
-            eq(schema.returnItems.productId, product.id),
-            eq(schema.returnItems.tenantId, req.tenantId),
-            eq(schema.returnItems.status, "returned_to_stock")
-          )
-        );
-      const totalReturned = parseFloat((returnedResult[0]?.total as string) || "0");
-
-      // 4. Calculate total vendor returned
-      const vendorReturnedResult = await db
-        .select({ total: sql`SUM(quantity)` })
-        .from(schema.vendorReturnItems)
-        .where(and(eq(schema.vendorReturnItems.productId, product.id), eq(schema.vendorReturnItems.tenantId, req.tenantId)));
-      const totalVendorReturned = parseFloat((vendorReturnedResult[0]?.total as string) || "0");
-
-      const currentQuantity = totalRestocked - totalSold + totalReturned - totalVendorReturned;
+      const stockMetrics = await fetchTenantStockMetrics(req.tenantId, entry.warehouseId || undefined);
+      const currentQuantity = stockMetrics.metrics.get(product.id)?.currentQuantity || 0;
       const difference = parsedQty - entry.quantity; // will be negative
       if (currentQuantity + difference < 0) {
         return res.status(400).json({ 
@@ -2308,7 +2345,10 @@ router.post("/sales", async (req, res) => {
     let calculatedTotalCost = 0;
     for (const item of items) {
       const qty = parseFloat(item.quantity);
-      const fifoCost = await computeFIFOSaleCost(item.productId, req.tenantId, qty);
+      let fifoCost = await computeFIFOSaleCost(item.productId, req.tenantId, qty);
+      if (fifoCost <= 0) {
+        fifoCost = parseFloat(item.salePrice) || 0;
+      }
       calculatedTotalCost += qty * fifoCost;
       processedItems.push({
         productId: item.productId,
@@ -2433,6 +2473,7 @@ router.post("/sales", async (req, res) => {
           saleId,
           paymentDate: new Date().toISOString(),
           amount: parseFloat(paidAmount),
+          paymentType: req.body.downpaymentType || "Nəğd",
         });
       }
 
@@ -3204,7 +3245,7 @@ router.get("/credits/overdue", async (req, res) => {
     const overdueSales = await db.query.sales.findMany({
       where: and(
         eq(schema.sales.paymentStatus, "credit"),
-        lte(schema.sales.creditDueDate, today),
+        lt(schema.sales.creditDueDate, today),
         eq(schema.sales.tenantId, req.tenantId)
       ),
       with: { payments: true, returns: true },
@@ -3414,7 +3455,10 @@ router.get("/dashboard/balances", requireAdmin, async (req, res) => {
   try {
     const tenantId = req.tenantId;
     const sales = await db.select().from(schema.sales).where(eq(schema.sales.tenantId, tenantId));
-    const returns = await db.select().from(schema.returns).where(eq(schema.returns.tenantId, tenantId));
+    const returns = await db.query.returns.findMany({
+      where: eq(schema.returns.tenantId, tenantId),
+      with: { sale: true }
+    });
     const expenses = await db.select().from(schema.expenses).where(eq(schema.expenses.tenantId, tenantId));
     const creditPayments = await db.select().from(schema.creditPayments).where(eq(schema.creditPayments.tenantId, tenantId));
     const vendorPayments = await db.select().from(schema.vendorPayments).where(eq(schema.vendorPayments.tenantId, tenantId));
@@ -3445,7 +3489,18 @@ router.get("/dashboard/balances", requireAdmin, async (req, res) => {
     }
 
     for (const ret of returns) {
-      kassa -= ret.totalAmount;
+      if (ret.sale) {
+        const isCreditSale = ret.sale.paymentStatus === "credit" || ret.sale.paymentType === "Nisyə";
+        if (isCreditSale) {
+          debt -= ret.totalAmount;
+        } else if (["Kart", "Kart2Kart", "Köçürmə"].includes(ret.sale.paymentType || "")) {
+          bank -= ret.totalAmount;
+        } else {
+          kassa -= ret.totalAmount;
+        }
+      } else {
+        kassa -= ret.totalAmount;
+      }
     }
 
     for (const exp of expenses) {
@@ -4410,8 +4465,8 @@ router.put("/users/:id/password", async (req, res) => {
 
     await db
       .update(schema.users)
-      .set({ password: password.trim() })
-      .where(eq(schema.users.id, targetUserId));
+      .set({ password: hashPassword(password.trim()) })
+      .where(and(eq(schema.users.id, targetUserId), eq(schema.users.tenantId, req.tenantId)));
 
     await logActivity(req, "CHANGE_PASSWORD", `'${targetUser.username}' istifadəçisinin sistem şifrəsini yenilədi`);
 
@@ -4442,7 +4497,7 @@ router.delete("/users/:id", requireAdmin, async (req, res) => {
 
     await db
       .delete(schema.users)
-      .where(eq(schema.users.id, targetUserId));
+      .where(and(eq(schema.users.id, targetUserId), eq(schema.users.tenantId, req.tenantId)));
 
     await logActivity(req, "DELETE_USER", `'${targetUser.username}' (Rol: ${targetUser.role}) istifadəçi hesabını sistemdən sildi`);
 
