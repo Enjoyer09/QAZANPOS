@@ -1,6 +1,6 @@
 import crypto from "crypto";
 
-const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString("hex");
+const JWT_SECRET = process.env.JWT_SECRET || "qazanpos_jwt_fallback_secret_key_2026_secure_key";
 const PASSWORD_SALT = process.env.PASSWORD_SALT || "qazanpos_salt_2026";
 
 /**

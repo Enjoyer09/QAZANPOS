@@ -124,6 +124,13 @@ window.fetch = async (input, init) => {
     }
   }
   const response = await originalFetch(input, init);
+  if (response.status === 401) {
+    const isAuthRequest = typeof input === "string" && (input.includes("/auth/login") || input.includes("/auth/2fa-verify") || input.includes("/auth/2fa-setup") || input.includes("/auth/2fa-activate"));
+    if (!isAuthRequest) {
+      localStorage.removeItem("qazanpos_user");
+      window.location.reload();
+    }
+  }
   if (response.status === 402) {
     try {
       const clone = response.clone();
