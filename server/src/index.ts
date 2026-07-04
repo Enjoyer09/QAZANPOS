@@ -6,6 +6,8 @@ import { fileURLToPath } from "url";
 import { eq, desc, isNull, and } from "drizzle-orm";
 import fs from "fs";
 import https from "https";
+import { hashPassword } from "./lib/auth.js";
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -109,7 +111,7 @@ async function ensureDefaultTenantsAndUsers() {
       await db.insert(schema.users).values({
         tenantId: 1,
         username: "admin",
-        password: "admin123",
+        password: hashPassword("admin123"),
         role: "Admin",
       });
     }
@@ -122,7 +124,7 @@ async function ensureDefaultTenantsAndUsers() {
       await db.insert(schema.users).values({
         tenantId: 1,
         username: "satici",
-        password: "satici123",
+        password: hashPassword("satici123"),
         role: "Staff",
       });
     }
@@ -136,7 +138,7 @@ async function ensureDefaultTenantsAndUsers() {
       await db.insert(schema.users).values({
         tenantId: 2,
         username: "superadmin",
-        password: "superadmin123",
+        password: hashPassword("superadmin123"),
         role: "Admin",
       });
     }
@@ -410,9 +412,36 @@ async function executeScheduledBackups(timeStr: string) {
   }
 }
 
+async function migrateUserPasswords() {
+  try {
+    console.log("Database Migration: Hashing plain text passwords...");
+    const allUsers = await db.select().from(schema.users);
+    const isSha256 = (str: string) => /^[0-9a-f]{64}$/i.test(str);
+    
+    let migratedCount = 0;
+    for (const user of allUsers) {
+      if (!isSha256(user.password)) {
+        const hashed = hashPassword(user.password);
+        await db.update(schema.users)
+          .set({ password: hashed })
+          .where(eq(schema.users.id, user.id));
+        migratedCount++;
+      }
+    }
+    if (migratedCount > 0) {
+      console.log(`Database Migration: Successfully hashed ${migratedCount} plain text password(s).`);
+    } else {
+      console.log("Database Migration: All passwords are securely hashed.");
+    }
+  } catch (error) {
+    console.error("Database Migration error during password hashing:", error);
+  }
+}
+
 app.listen(PORT, async () => {
   console.log(`Server listening on port ${PORT}`);
   await ensureDefaultTenantsAndUsers();
+  await migrateUserPasswords();
   await selfHealDatabaseTotals();
 
   // Start the background cron check for backups every 60 seconds

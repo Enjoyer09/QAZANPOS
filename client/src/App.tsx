@@ -79,6 +79,9 @@ window.fetch = async (input, init) => {
       if (init.headers instanceof Headers) {
         init.headers.set("x-user-role", user.role);
         init.headers.set("x-user-username", user.username);
+        if (user.token) {
+          init.headers.set("Authorization", `Bearer ${user.token}`);
+        }
       } else if (Array.isArray(init.headers)) {
         const hasHeaderRole = init.headers.some(([k]) => k.toLowerCase() === "x-user-role");
         if (!hasHeaderRole) {
@@ -88,9 +91,18 @@ window.fetch = async (input, init) => {
         if (!hasHeaderUser) {
           init.headers.push(["x-user-username", user.username]);
         }
+        if (user.token) {
+          const hasAuth = init.headers.some(([k]) => k.toLowerCase() === "authorization");
+          if (!hasAuth) {
+            init.headers.push(["Authorization", `Bearer ${user.token}`]);
+          }
+        }
       } else {
         (init.headers as Record<string, string>)["x-user-role"] = user.role;
         (init.headers as Record<string, string>)["x-user-username"] = user.username;
+        if (user.token) {
+          (init.headers as Record<string, string>)["Authorization"] = `Bearer ${user.token}`;
+        }
       }
     } catch (e) {
       // Ignore

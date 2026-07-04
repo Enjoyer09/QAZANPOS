@@ -8,6 +8,8 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { verifyTOTP, generateSecret, getOTPAuthURI } from "./db/totp.js";
 import { sendTelegramNotification } from "./lib/telegram.js";
+import { hashPassword, generateToken, verifyToken } from "./lib/auth.js";
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -79,6 +81,44 @@ async function resolveTenant(req: any, res: any, next: any) {
 
 // Mount the resolver globally for all API endpoints under this router
 router.use(resolveTenant);
+
+// Middleware to authenticate token (JWT) for non-public API endpoints
+function authenticate(req: any, res: any, next: any) {
+  // Public endpoints bypass token verification
+  const publicPaths = ["/auth/login", "/auth/2fa-verify"];
+  if (publicPaths.includes(req.path)) {
+    return next();
+  }
+
+  const authHeader = req.headers["authorization"];
+  const token = authHeader && authHeader.split(" ")[1];
+
+  if (!token) {
+    return res.status(401).json({ message: "Giriş edilməyib və ya token tapılmadı" });
+  }
+
+  const decoded = verifyToken(token);
+  if (!decoded) {
+    return res.status(401).json({ message: "Sessiyanızın vaxtı bitib və ya token etibarsızdır" });
+  }
+
+  // Cross-tenant protection: verify that the token's tenant matches the request's resolved tenant
+  if (decoded.tenantId !== req.tenantId) {
+    return res.status(403).json({ message: "Bu biznes hesabı üzrə sorğu göndərmək səlahiyyətiniz yoxdur" });
+  }
+
+  // Set the validated user properties on the request
+  req.user = decoded;
+  // Override incoming headers with secure validated token data to prevent header injection
+  req.headers["x-user-role"] = decoded.role;
+  req.headers["x-user-username"] = decoded.username;
+  
+  next();
+}
+
+// Mount the token verification globally
+router.use(authenticate);
+
 
 // Middleware to verify user role is Admin
 function requireAdmin(req: any, res: any, next: any) {
@@ -894,7 +934,7 @@ router.post("/auth/login", async (req, res) => {
     const user = await db.query.users.findFirst({
       where: and(
         eq(schema.users.username, username.trim().toLowerCase()),
-        eq(schema.users.password, password),
+        eq(schema.users.password, hashPassword(password)),
         eq(schema.users.tenantId, req.tenantId)
       )
     });
@@ -937,13 +977,22 @@ router.post("/auth/login", async (req, res) => {
       }
     }
 
+    // Generate JWT token
+    const token = generateToken({
+      userId: user.id,
+      username: user.username,
+      role: user.role,
+      tenantId: req.tenantId
+    });
+
     res.json({
       id: user.id,
       username: user.username,
       role: user.role,
       tenantId: req.tenantId,
       tenantName: tenant?.name || "Qazan POS",
-      tenantSlug: req.tenantSlug
+      tenantSlug: req.tenantSlug,
+      token
     });
   } catch (error) {
     res.status(500).json({ message: "Giriş zamanı xəta baş verdi" });
@@ -1035,7 +1084,10 @@ router.post("/auth/2fa-verify", async (req, res) => {
     }
 
     const user = await db.query.users.findFirst({
-      where: eq(schema.users.id, Number(userId))
+      where: and(
+        eq(schema.users.id, Number(userId)),
+        eq(schema.users.tenantId, req.tenantId)
+      )
     });
 
     if (!user || !user.twoFactorSecret) {
@@ -1071,6 +1123,14 @@ router.post("/auth/2fa-verify", async (req, res) => {
       where: eq(schema.tenants.id, user.tenantId)
     });
 
+    // Generate JWT token
+    const tokenStr = generateToken({
+      userId: user.id,
+      username: user.username,
+      role: user.role,
+      tenantId: user.tenantId
+    });
+
     res.json({
       id: user.id,
       username: user.username,
@@ -1078,7 +1138,8 @@ router.post("/auth/2fa-verify", async (req, res) => {
       tenantId: user.tenantId,
       tenantName: tenant?.name || "Qazan POS",
       tenantSlug: tenant?.slug || "demo",
-      deviceToken: rememberDevice ? deviceToken : undefined
+      deviceToken: rememberDevice ? deviceToken : undefined,
+      token: tokenStr
     });
   } catch (error) {
     res.status(500).json({ message: "2FA təsdiqlənməsi zamanı xəta baş verdi" });
@@ -1851,7 +1912,7 @@ router.put("/stock/entries/:id", async (req, res) => {
       where: and(
         eq(schema.users.tenantId, req.tenantId),
         eq(schema.users.role, "Admin"),
-        eq(schema.users.password, adminPassword.trim())
+        eq(schema.users.password, hashPassword(adminPassword.trim()))
       )
     });
 
@@ -2747,7 +2808,7 @@ router.post("/returns", async (req, res) => {
         where: and(
           eq(schema.users.tenantId, req.tenantId),
           eq(schema.users.role, "Admin"),
-          eq(schema.users.password, adminPassword.trim())
+          eq(schema.users.password, hashPassword(adminPassword.trim()))
         )
       });
 
@@ -4302,7 +4363,7 @@ router.post("/users", requireAdmin, async (req, res) => {
       .values({
         tenantId: req.tenantId,
         username: normalizedUsername,
-        password: password.trim(),
+        password: hashPassword(password.trim()),
         role: role || "Staff",
       })
       .returning();
@@ -4529,7 +4590,7 @@ router.post("/super/tenants", requireSuperAdmin, async (req, res) => {
     await db.insert(schema.users).values({
       tenantId,
       username: normalizedUsername,
-      password: adminPassword.trim(),
+      password: hashPassword(adminPassword.trim()),
       role: "Admin"
     });
 
@@ -5387,57 +5448,57 @@ router.post("/settings/backup/import", requireAdmin, async (req, res) => {
       await tx.delete(schema.settings).where(eq(schema.settings.tenantId, tenantId));
       await tx.delete(schema.users).where(eq(schema.users.tenantId, tenantId));
 
-      // 2. Insert rows from backup
+      // 2. Insert rows from backup and force authenticated tenantId
       if (data.users && data.users.length > 0) {
-        await tx.insert(schema.users).values(data.users);
+        await tx.insert(schema.users).values(data.users.map((u: any) => ({ ...u, tenantId })));
       }
       if (data.settings && data.settings.length > 0) {
-        await tx.insert(schema.settings).values(data.settings);
+        await tx.insert(schema.settings).values(data.settings.map((s: any) => ({ ...s, tenantId })));
       }
       if (data.products && data.products.length > 0) {
-        await tx.insert(schema.products).values(data.products);
+        await tx.insert(schema.products).values(data.products.map((p: any) => ({ ...p, tenantId })));
       }
       if (data.vendors && data.vendors.length > 0) {
-        await tx.insert(schema.vendors).values(data.vendors);
+        await tx.insert(schema.vendors).values(data.vendors.map((v: any) => ({ ...v, tenantId })));
       }
       if (data.customers && data.customers.length > 0) {
-        await tx.insert(schema.customers).values(data.customers);
+        await tx.insert(schema.customers).values(data.customers.map((c: any) => ({ ...c, tenantId })));
       }
       if (data.employees && data.employees.length > 0) {
-        await tx.insert(schema.employees).values(data.employees);
+        await tx.insert(schema.employees).values(data.employees.map((e: any) => ({ ...e, tenantId })));
       }
       if (data.payroll && data.payroll.length > 0) {
-        await tx.insert(schema.payroll).values(data.payroll);
+        await tx.insert(schema.payroll).values(data.payroll.map((p: any) => ({ ...p, tenantId })));
       }
       if (data.salaryPayments && data.salaryPayments.length > 0) {
-        await tx.insert(schema.salaryPayments).values(data.salaryPayments);
+        await tx.insert(schema.salaryPayments).values(data.salaryPayments.map((s: any) => ({ ...s, tenantId })));
       }
       if (data.stockEntries && data.stockEntries.length > 0) {
-        await tx.insert(schema.stockEntries).values(data.stockEntries);
+        await tx.insert(schema.stockEntries).values(data.stockEntries.map((s: any) => ({ ...s, tenantId })));
       }
       if (data.vendorPayments && data.vendorPayments.length > 0) {
-        await tx.insert(schema.vendorPayments).values(data.vendorPayments);
+        await tx.insert(schema.vendorPayments).values(data.vendorPayments.map((v: any) => ({ ...v, tenantId })));
       }
       if (data.sales && data.sales.length > 0) {
-        await tx.insert(schema.sales).values(data.sales);
+        await tx.insert(schema.sales).values(data.sales.map((s: any) => ({ ...s, tenantId })));
       }
       if (data.saleItems && data.saleItems.length > 0) {
-        await tx.insert(schema.saleItems).values(data.saleItems);
+        await tx.insert(schema.saleItems).values(data.saleItems.map((s: any) => ({ ...s, tenantId })));
       }
       if (data.creditPayments && data.creditPayments.length > 0) {
-        await tx.insert(schema.creditPayments).values(data.creditPayments);
+        await tx.insert(schema.creditPayments).values(data.creditPayments.map((c: any) => ({ ...c, tenantId })));
       }
       if (data.expenses && data.expenses.length > 0) {
-        await tx.insert(schema.expenses).values(data.expenses);
+        await tx.insert(schema.expenses).values(data.expenses.map((e: any) => ({ ...e, tenantId })));
       }
       if (data.activityLogs && data.activityLogs.length > 0) {
-        await tx.insert(schema.activityLogs).values(data.activityLogs);
+        await tx.insert(schema.activityLogs).values(data.activityLogs.map((a: any) => ({ ...a, tenantId })));
       }
       if (data.returns && data.returns.length > 0) {
-        await tx.insert(schema.returns).values(data.returns);
+        await tx.insert(schema.returns).values(data.returns.map((r: any) => ({ ...r, tenantId })));
       }
       if (data.returnItems && data.returnItems.length > 0) {
-        await tx.insert(schema.returnItems).values(data.returnItems);
+        await tx.insert(schema.returnItems).values(data.returnItems.map((r: any) => ({ ...r, tenantId })));
       }
 
       // 3. Reset primary key sequences for all tables so that subsequent inserts don't collide
