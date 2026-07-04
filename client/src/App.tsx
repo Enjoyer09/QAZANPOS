@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Link, Route, Switch, useLocation } from "wouter";
+import { Link, Route, Switch, useLocation, Router } from "wouter";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard,
@@ -775,6 +775,38 @@ function AppLayout({ children, user, currentUser, onLogout }: { children: React.
   );
 }
 
+function TransitionSwitch({ children }: { children: React.ReactNode }) {
+  const [location, setLocation] = useLocation();
+  const [displayLocation, setDisplayLocation] = useState(location);
+  const [renderedChildren, setRenderedChildren] = useState(children);
+
+  useEffect(() => {
+    if (location !== displayLocation) {
+      if ((document as any).startViewTransition) {
+        (document as any).startViewTransition(() => {
+          React.startTransition(() => {
+            setDisplayLocation(location);
+            setRenderedChildren(children);
+          });
+        });
+      } else {
+        setDisplayLocation(location);
+        setRenderedChildren(children);
+      }
+    } else {
+      setRenderedChildren(children);
+    }
+  }, [location, children, displayLocation]);
+
+  const customHook = () => [displayLocation, setLocation] as [string, (to: string, options?: any) => void];
+
+  return (
+    <Router hook={customHook}>
+      {renderedChildren}
+    </Router>
+  );
+}
+
 // 3. Overdue debt check component
 function OverdueDebtCheck() {
   const [isOpen, setIsOpen] = useState(false);
@@ -883,51 +915,53 @@ function MainRoutes({ user, onLogout }: { user: any; onLogout: () => void }) {
 
   return (
     <AppLayout user={user} currentUser={currentUser} onLogout={onLogout}>
-      {isSuperTenant ? (
-        <Switch>
-          <Route path="/" component={SuperDashboard} />
-          <Route path="/loqlar" component={Logs} />
-          <Route>
-            <div className="flex flex-col items-center justify-center py-20">
-              <h1 className="text-6xl font-extrabold text-primary">403</h1>
-              <p className="text-gray-500 mt-2 font-medium">Giriş qadağandır və ya səhifə mövcud deyil.</p>
-              <Link href="/" className="mt-4 text-sm text-primary font-bold hover:underline">
-                Geri qayıt
-              </Link>
-            </div>
-          </Route>
-        </Switch>
-      ) : (
-        <Switch>
-          {isAdmin && <Route path="/" component={Dashboard} />}
-          <Route path="/pos" component={POS} />
-          {(isAdmin || currentUser?.staffCanViewDebts !== 0) && <Route path="/nisye" component={Debts} />}
-           <Route path="/musteriler" component={Customers} />
-           {isAdmin && <Route path="/tedarukculer" component={Vendors} />}
-           {isAdmin && <Route path="/hr" component={Payroll} />}
-           <Route path="/anbar" component={Stock} />
-           {(isAdmin || currentUser?.staffCanViewStock !== 0) && <Route path="/anbar/daxil" component={StockIn} />}
-           {(isAdmin || currentUser?.staffCanViewStock !== 0) && <Route path="/anbar/qaytaris" component={VendorReturns} />}
-          {(isAdmin || currentUser?.staffCanManageCatalog !== 0) && <Route path="/mehsullar" component={Products} />}
-          {isAdmin && <Route path="/etiketler" component={Labels} />}
-          <Route path="/satislar" component={SalesHistory} />
-          <Route path="/satislar/:id" component={Invoice} />
-          <Route path="/qaytarislar/:id" component={ReturnInvoice} />
-          {isAdmin && <Route path="/xercler" component={Expenses} />}
-          {isAdmin && <Route path="/loqlar" component={Logs} />}
-          <Route path="/ayarlar" component={SettingsPage} />
-          <Route path="/yardim" component={Help} />
-          <Route>
-            <div className="flex flex-col items-center justify-center py-20">
-              <h1 className="text-6xl font-extrabold text-primary">403</h1>
-              <p className="text-gray-500 mt-2 font-medium">Giriş qadağandır və ya səhifə mövcud deyil.</p>
-              <Link href={isAdmin ? "/" : "/pos"} className="mt-4 text-sm text-primary font-bold hover:underline">
-                Geri qayıt
-              </Link>
-            </div>
-          </Route>
-        </Switch>
-      )}
+      <TransitionSwitch>
+        {isSuperTenant ? (
+          <Switch>
+            <Route path="/" component={SuperDashboard} />
+            <Route path="/loqlar" component={Logs} />
+            <Route>
+              <div className="flex flex-col items-center justify-center py-20">
+                <h1 className="text-6xl font-extrabold text-primary">403</h1>
+                <p className="text-gray-500 mt-2 font-medium">Giriş qadağandır və ya səhifə mövcud deyil.</p>
+                <Link href="/" className="mt-4 text-sm text-primary font-bold hover:underline">
+                  Geri qayıt
+                </Link>
+              </div>
+            </Route>
+          </Switch>
+        ) : (
+          <Switch>
+            {isAdmin && <Route path="/" component={Dashboard} />}
+            <Route path="/pos" component={POS} />
+            {(isAdmin || currentUser?.staffCanViewDebts !== 0) && <Route path="/nisye" component={Debts} />}
+             <Route path="/musteriler" component={Customers} />
+             {isAdmin && <Route path="/tedarukculer" component={Vendors} />}
+             {isAdmin && <Route path="/hr" component={Payroll} />}
+             <Route path="/anbar" component={Stock} />
+             {(isAdmin || currentUser?.staffCanViewStock !== 0) && <Route path="/anbar/daxil" component={StockIn} />}
+             {(isAdmin || currentUser?.staffCanViewStock !== 0) && <Route path="/anbar/qaytaris" component={VendorReturns} />}
+            {(isAdmin || currentUser?.staffCanManageCatalog !== 0) && <Route path="/mehsullar" component={Products} />}
+            {isAdmin && <Route path="/etiketler" component={Labels} />}
+            <Route path="/satislar" component={SalesHistory} />
+            <Route path="/satislar/:id" component={Invoice} />
+            <Route path="/qaytarislar/:id" component={ReturnInvoice} />
+            {isAdmin && <Route path="/xercler" component={Expenses} />}
+            {isAdmin && <Route path="/loqlar" component={Logs} />}
+            <Route path="/ayarlar" component={SettingsPage} />
+            <Route path="/yardim" component={Help} />
+            <Route>
+              <div className="flex flex-col items-center justify-center py-20">
+                <h1 className="text-6xl font-extrabold text-primary">403</h1>
+                <p className="text-gray-500 mt-2 font-medium">Giriş qadağandır və ya səhifə mövcud deyil.</p>
+                <Link href={isAdmin ? "/" : "/pos"} className="mt-4 text-sm text-primary font-bold hover:underline">
+                  Geri qayıt
+                </Link>
+              </div>
+            </Route>
+          </Switch>
+        )}
+      </TransitionSwitch>
     </AppLayout>
   );
 }
