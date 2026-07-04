@@ -85,7 +85,7 @@ router.use(resolveTenant);
 // Middleware to authenticate token (JWT) for non-public API endpoints
 function authenticate(req: any, res: any, next: any) {
   // Public endpoints bypass token verification
-  const publicPaths = ["/auth/login", "/auth/2fa-verify"];
+  const publicPaths = ["/auth/login", "/auth/2fa-verify", "/settings"];
   if (publicPaths.includes(req.path)) {
     return next();
   }
