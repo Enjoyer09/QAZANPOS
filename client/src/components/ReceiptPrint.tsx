@@ -505,13 +505,13 @@ export async function printReceipt(sale: any, settings: any): Promise<boolean> {
   // Try to connect to QZ Tray if not connected yet
   let isQzConnected = qzService.isConnected();
   if (!isQzConnected) {
-    console.log("QZ Tray not connected, attempting connection...");
+    console.info("QZ Tray not connected, attempting connection...");
     isQzConnected = await qzService.connect();
   }
   
   if (isQzConnected && savedPrinter) {
     try {
-      console.log(`QZ Tray: Silent printing to ${savedPrinter}`);
+      console.info(`QZ Tray: Silent printing to ${savedPrinter}`);
       await qzService.printHTML(savedPrinter, html, { width });
       return true;
     } catch (err) {
@@ -703,11 +703,11 @@ export async function printZReport(stats: any, settings: any): Promise<boolean> 
           iframe.contentWindow?.print();
           document.body.removeChild(iframe);
           resolve(true);
-        } catch (e) {
+        } catch {
           resolve(false);
         }
       }, 300);
-    } catch (err) {
+    } catch {
       resolve(false);
     }
   });
@@ -870,11 +870,11 @@ export function printPickTicket(basketItems: any[], userLabel: string): Promise<
           iframe.contentWindow?.print();
           document.body.removeChild(iframe);
           resolve(true);
-        } catch (e) {
+        } catch {
           resolve(false);
         }
       }, 300);
-    } catch (err) {
+    } catch {
       resolve(false);
     }
   });

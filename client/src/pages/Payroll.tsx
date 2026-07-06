@@ -9,14 +9,11 @@ import {
   Calendar, 
   DollarSign, 
   AlertCircle, 
-  CheckCircle,
-  FileText,
   CreditCard,
   History,
   Trash2,
   Edit2,
   TrendingUp,
-  UserCheck,
   Percent
 } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";

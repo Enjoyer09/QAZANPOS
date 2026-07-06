@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";import {
-  Plus, Edit2, Trash2, X, Tag, Sliders, Info, Lock, Archive, RotateCcw, ChevronLeft, ChevronRight
-} from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Plus, Edit2, Trash2, X, Tag, Lock, Archive, RotateCcw, ChevronLeft, ChevronRight } from "lucide-react";
 import { TableSkeleton } from "../components/Skeleton.tsx";
 import { useToast } from "../components/Toast.tsx";
 import { generateValidEAN13 } from "../components/Barcode.tsx";
@@ -43,7 +42,7 @@ export default function Products() {
     try {
       const userStr = localStorage.getItem("qazanpos_user");
       return userStr ? JSON.parse(userStr) : null;
-    } catch (e) {
+    } catch {
       return null;
     }
   })();

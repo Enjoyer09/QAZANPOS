@@ -96,7 +96,6 @@ describe("PaymentPanel", () => {
     render(<PaymentPanel {...defaultProps} onSalesChannel={onChannel} />);
     // Find the sales channel select by its label text and get the adjacent select
     const selects = screen.getAllByRole("combobox");
-    const channelSelect = selects.find((s) => s.closest(".space-y-1\\:5")?.querySelector("label")?.textContent?.includes("Satış Kanalı"));
     const firstSelect = selects[0]; // First combobox is the sales channel
     fireEvent.change(firstSelect, { target: { value: "birmarket.az" } });
     expect(onChannel).toHaveBeenCalledWith("birmarket.az");

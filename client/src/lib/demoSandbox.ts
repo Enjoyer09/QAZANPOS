@@ -303,7 +303,7 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
     }
   }
   
-  console.log(`[Demo Sandbox Mock API] ${method} ${urlStr}`);
+  console.info(`[Demo Sandbox Mock API] ${method} ${urlStr}`);
 
   // Helpers to structure mock standard JSON response
   const jsonResponse = (data: any, status = 200) => {
@@ -1361,7 +1361,7 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
       try {
         const u = JSON.parse(userStr);
         currentUsername = u.username || "system";
-      } catch (e) {}
+      } catch {}
     }
 
     const newTx = {

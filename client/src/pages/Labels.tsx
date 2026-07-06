@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { 
   Printer, 
@@ -6,8 +6,6 @@ import {
   Trash2, 
   Maximize2, 
   Type, 
-  Barcode as BarcodeIcon, 
-  Building, 
   Move, 
   Grid, 
   RefreshCw,
@@ -138,7 +136,7 @@ export default function Labels() {
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
   const [draggedElementId, setDraggedElementId] = useState<string | null>(null);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [isPrinting, setIsPrinting] = useState(false);
+  const [, setIsPrinting] = useState(false);
 
   // Update selection focus
   const selectedElement = elements.find((el) => el.id === selectedElementId);

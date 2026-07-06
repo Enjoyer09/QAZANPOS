@@ -2,17 +2,11 @@ import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
-  Search,
-  ShoppingCart,
   Trash2,
   CheckCircle,
   Plus,
-  Minus,
-  Barcode,
   Receipt,
-  UserPlus,
   AlertTriangle,
-  Globe,
   Zap,
   X,
   Bookmark,
@@ -922,7 +916,7 @@ export default function POS() {
   const parsedCommissions = React.useMemo(() => {
     try {
       return settings?.marketplaceCommissions ? JSON.parse(settings?.marketplaceCommissions) : {};
-    } catch (e) {
+    } catch {
       return {};
     }
   }, [settings?.marketplaceCommissions]);
@@ -1106,7 +1100,7 @@ export default function POS() {
             description: "Qaytarış yaddaşda saxlanıldı. İnternet bərpa olunduqda avtomatik sinxronizasiya ediləcək.",
             variant: "success",
           });
-        } catch (err) {
+        } catch {
           toast({
             title: "Xəta!",
             description: "Oflayn qaytarışı qeydə alarkən xəta baş verdi.",
@@ -1256,7 +1250,7 @@ export default function POS() {
           description: `Satış yaddaşda saxlanıldı. İnternet bərpa olunduqda avtomatik buluda sinxronizasiya ediləcək.`,
           variant: "success",
         });
-      } catch (err) {
+      } catch {
         toast({
           title: "Xəta!",
           description: "Oflayn satışı qeydə alarkən xəta baş verdi.",
@@ -1845,7 +1839,7 @@ export default function POS() {
                         variant: "destructive",
                       });
                     }
-                  } catch (e) {
+                  } catch {
                     toast({
                       title: "Xəta!",
                       description: "Qəbz çapında xəta baş verdi.",

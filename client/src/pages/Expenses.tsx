@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2, ArrowRight, TrendingDown, ClipboardList, Lock } from "lucide-react";
+import { Plus, Trash2, TrendingDown, ClipboardList, Lock } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
 import { TableSkeleton } from "../components/Skeleton.tsx";
 
@@ -47,7 +47,7 @@ export default function Expenses() {
     try {
       const userStr = localStorage.getItem("qazanpos_user");
       return userStr ? JSON.parse(userStr) : null;
-    } catch (e) {
+    } catch {
       return null;
     }
   })();

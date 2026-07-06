@@ -2,8 +2,7 @@ import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { 
-  AlertTriangle, Clock, ArrowUpRight, HelpCircle, Check, Eye, X, Lock,
-  List, LayoutGrid, Phone, CheckCircle, ArrowRight
+  AlertTriangle, Clock, Check, Eye, X, Lock, LayoutGrid, List
 } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
 import { TableSkeleton } from "../components/Skeleton.tsx";
@@ -38,7 +37,7 @@ export default function Debts() {
     try {
       const userStr = localStorage.getItem("qazanpos_user");
       return userStr ? JSON.parse(userStr) : null;
-    } catch (e) {
+    } catch {
       return null;
     }
   })();

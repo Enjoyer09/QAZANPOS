@@ -6,9 +6,6 @@ import {
   Plus,
   Search,
   Truck,
-  Calendar,
-  DollarSign,
-  FileText,
   Check,
   Trash2,
   Eye,
@@ -32,7 +29,7 @@ export default function VendorReturns() {
   const [returnItems, setReturnItems] = useState<any[]>([]);
 
   // Search product inside new return
-  const [productSearch, setProductSearch] = useState("");
+  const [, setProductSearch] = useState("");
   const [selectedProductForReturn, setSelectedProductForReturn] = useState<any>(null);
   const [selectedEntryId, setSelectedEntryId] = useState("");
   const [returnQty, setReturnQty] = useState("");

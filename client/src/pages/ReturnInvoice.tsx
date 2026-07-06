@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { ArrowLeft, Printer, RotateCw, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Printer, AlertTriangle } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
 import { printReceipt } from "../components/ReceiptPrint.tsx";
 
@@ -70,7 +70,7 @@ export default function ReturnInvoice({ params }: ReturnInvoiceProps) {
           variant: "destructive",
         });
       }
-    } catch (err) {
+    } catch {
       toast({
         title: "Xəta!",
         description: "Çap zamanı gözlənilməz xəta baş verdi.",

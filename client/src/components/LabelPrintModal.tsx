@@ -25,7 +25,7 @@ export default function LabelPrintModal({
   const [format, setFormat] = useState<"a4" | "thermal">("a4");
   const [quantity, setQuantity] = useState(format === "a4" ? 24 : 1);
   const [customPrice, setCustomPrice] = useState("");
-  const [barcodeOverride, setBarcodeOverride] = useState(product.barcode || "2000000000000");
+  const [barcodeOverride] = useState(product.barcode || "2000000000000");
 
   const displayPrice = customPrice !== "" ? parseFloat(customPrice) : 0; // Fallback to 0 or we can fetch a real price if they enter it.
   // Wait! Let's get the active price. Since products table does not have price, the price is in stockEntries or we can support entering a price for label printing!

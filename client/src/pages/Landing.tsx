@@ -2,15 +2,11 @@ import React, { useState, useEffect } from "react";
 import { 
   Sparkles, 
   ArrowRight, 
-  Building, 
   ShieldCheck, 
   Zap, 
   Check, 
-  Lock, 
   Smartphone, 
   KeyRound, 
-  Monitor, 
-  Laptop, 
   TrendingDown, 
   Boxes, 
   AlertTriangle,
@@ -19,7 +15,7 @@ import {
 
 export default function Landing() {
   const [activeScreenshot, setActiveScreenshot] = useState<"dashboard" | "debts" | "expenses">("dashboard");
-  const [isAutoPlay, setIsAutoPlay] = useState(true);
+  const [isAutoPlay] = useState(true);
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
 
   const faqs = [

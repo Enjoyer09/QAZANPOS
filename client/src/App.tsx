@@ -102,7 +102,7 @@ window.fetch = async (input, init) => {
           (init.headers as Record<string, string>)["Authorization"] = `Bearer ${user.token}`;
         }
       }
-    } catch (e) {
+    } catch {
       // Ignore
     }
   }
@@ -136,7 +136,7 @@ window.fetch = async (input, init) => {
       if (body.limitReached) {
         window.dispatchEvent(new CustomEvent("birsaas_limit_reached", { detail: body }));
       }
-    } catch (e) {
+    } catch {
       // Ignore
     }
   }
@@ -161,7 +161,7 @@ function getIconAnimationClass(label: string) {
 }
 
 function AppLayout({ children, user, currentUser, onLogout }: { children: React.ReactNode; user: any; currentUser: any; onLogout: () => void }) {
-  const [location, setLocation] = useLocation();
+  const [location] = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [mobileOpenGroups, setMobileOpenGroups] = useState<Record<string, boolean>>({});
@@ -1040,7 +1040,7 @@ function AppContent() {
     if (userStr) {
       try {
         setUser(JSON.parse(userStr));
-      } catch (e) {
+      } catch {
         if (isSandboxScoped) {
           sessionStorage.removeItem("qazanpos_user");
         } else {

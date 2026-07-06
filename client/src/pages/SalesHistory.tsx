@@ -5,22 +5,16 @@ import { useToast } from "../components/Toast.tsx";
 import {
   History,
   Search,
-  FileText,
   ArrowRight,
   Eye,
   ShieldCheck,
   ShieldAlert,
   Barcode,
-  Calendar,
-  User,
-  Phone,
-  CheckCircle2,
   AlertCircle,
   ShoppingBag,
   Truck,
   Lock,
   RotateCcw,
-  Check,
   X,
   ChevronLeft,
   ChevronRight
@@ -276,7 +270,7 @@ export default function SalesHistory() {
     try {
       const userStr = localStorage.getItem("qazanpos_user");
       return userStr ? JSON.parse(userStr) : null;
-    } catch (e) {
+    } catch {
       return null;
     }
   })();

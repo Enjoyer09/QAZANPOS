@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { ArrowLeft, Printer, CreditCard, Check, CheckCircle2, RotateCw, Trash2, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Printer, Check, RotateCw, Trash2, AlertTriangle } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
 import { printReceipt } from "../components/ReceiptPrint.tsx";
 
@@ -30,7 +30,7 @@ export default function Invoice({ params }: InvoiceProps) {
     try {
       const userStr = localStorage.getItem("qazanpos_user");
       return userStr ? JSON.parse(userStr) : null;
-    } catch (e) {
+    } catch {
       return null;
     }
   })();
@@ -223,7 +223,7 @@ export default function Invoice({ params }: InvoiceProps) {
           variant: "destructive",
         });
       }
-    } catch (err) {
+    } catch {
       toast({
         title: "Xəta!",
         description: "Çap zamanı gözlənilməz xəta baş verdi.",

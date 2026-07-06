@@ -6,18 +6,14 @@ import {
   Search, 
   Phone, 
   Mail, 
-  MapPin, 
-  TrendingUp, 
   AlertCircle, 
   DollarSign, 
   FileText,
   Printer,
   Calendar,
   CreditCard,
-  Notebook,
   History,
   Trash2,
-  Edit2,
   Lock
 } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
@@ -36,14 +32,6 @@ interface Vendor {
   balance: number; // outstanding debt we owe
 }
 
-interface VendorPayment {
-  id: number;
-  amount: number;
-  paymentDate: string;
-  paymentType: string;
-  notes: string;
-}
-
 export default function Vendors() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -52,7 +40,7 @@ export default function Vendors() {
     try {
       const userStr = localStorage.getItem("qazanpos_user");
       return userStr ? JSON.parse(userStr) : null;
-    } catch (e) {
+    } catch {
       return null;
     }
   })();
@@ -118,17 +106,6 @@ export default function Vendors() {
       if (!res.ok) throw new Error("Tədarükçüləri yükləyərkən xəta baş verdi");
       return res.json();
     }
-  });
-
-  // Query payments for selected vendor
-  const { data: activePayments = [] } = useQuery<VendorPayment[]>({
-    queryKey: [`/api/vendors/${selectedVendor?.id}/payments`],
-    queryFn: async () => {
-      const res = await fetch(`/api/vendors/${selectedVendor?.id}/payments`);
-      if (!res.ok) throw new Error("Ödəniş tarixçəsini yükləyərkən xəta baş verdi");
-      return res.json();
-    },
-    enabled: !!selectedVendor,
   });
 
   // Query all vendor payments globally (wholesale payouts ledger)

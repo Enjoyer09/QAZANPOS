@@ -3,23 +3,18 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ShieldAlert,
   Plus,
-  Users,
   TrendingUp,
-  LayoutDashboard,
   CheckCircle,
   XCircle,
   Building,
   RotateCw,
   Lock,
   Layers,
-  Calendar,
   Eye,
   EyeOff,
   Trash2,
-  Activity,
   Settings as SettingsIcon,
   Database,
-  Download
 } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
 
@@ -49,7 +44,7 @@ export default function SuperDashboard() {
     try {
       const userStr = localStorage.getItem("qazanpos_user");
       return userStr ? JSON.parse(userStr).username : "superadmin";
-    } catch (e) {
+    } catch {
       return "superadmin";
     }
   });
@@ -84,7 +79,7 @@ export default function SuperDashboard() {
       const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data.otpauthURI)}`;
       setSuper2FAQRCode(qrUrl);
       setShowSuper2FASetupModal(true);
-    } catch (e) {
+    } catch {
       toast({
         title: "Xəta!",
         description: "2FA qurulumuna başlamaq mümkün olmadı.",
@@ -151,7 +146,7 @@ export default function SuperDashboard() {
       });
       
       refetchSuperUsers();
-    } catch (e) {
+    } catch {
       toast({
         title: "Xəta!",
         description: "2FA deaktiv edilərkən xəta baş verdi.",

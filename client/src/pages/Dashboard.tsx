@@ -7,15 +7,10 @@ import {
   TrendingDown,
   ShoppingBag,
   Boxes,
-  AlertTriangle,
   ArrowUpRight,
   RefreshCw,
-  Search,
   Sparkles,
-  Check,
   Activity,
-  Calendar,
-  PieChart,
   Wallet,
   Landmark,
   ArrowLeftRight,
@@ -23,7 +18,6 @@ import {
   Plus,
   Minus,
   Lock,
-  ShieldCheck,
 } from "lucide-react";
 import { CardSkeleton } from "../components/Skeleton.tsx";
 
@@ -520,7 +514,6 @@ export default function Dashboard() {
   const {
     data: summary,
     isLoading: isSummaryLoading,
-    refetch: refetchSummary,
   } = useQuery<SummaryData>({
     queryKey: ["/api/dashboard/summary", fromDate, toDate, filterActive],
     queryFn: async () => {
@@ -571,7 +564,7 @@ export default function Dashboard() {
             try {
               const u = localStorage.getItem("qazanpos_user");
               return u ? JSON.parse(u).username : "system";
-            } catch (e) { return "system"; }
+            } catch { return "system"; }
           })(),
         },
         body: JSON.stringify({
@@ -589,7 +582,7 @@ export default function Dashboard() {
       setTransferDesc("");
       refetchBalances();
       refetchTransfers();
-    } catch (err) {
+    } catch {
       toast({
         title: "Xəta baş verdi",
         description: "Köçürməni icra etmək mümkün olmadı.",
@@ -613,7 +606,7 @@ export default function Dashboard() {
             try {
               const u = localStorage.getItem("qazanpos_user");
               return u ? JSON.parse(u).username : "system";
-            } catch (e) { return "system"; }
+            } catch { return "system"; }
           })(),
         },
         body: JSON.stringify({
@@ -632,7 +625,7 @@ export default function Dashboard() {
       setSafeActionDesc("");
       refetchBalances();
       refetchTransfers();
-    } catch (err) {
+    } catch {
       toast({
         title: "Xəta baş verdi",
         description: "Əməliyyatı icra etmək mümkün olmadı.",

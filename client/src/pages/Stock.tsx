@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";import {
-  PlusCircle, Search, HelpCircle, Lock, ArrowLeftRight, FileText, Warehouse, ClipboardCheck, ShoppingCart, AlertTriangle, Printer, CheckCircle2, X
+  PlusCircle, Lock, ArrowLeftRight, Warehouse, ClipboardCheck, ShoppingCart, AlertTriangle, Printer, CheckCircle2
 } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
 import { TableSkeleton } from "../components/Skeleton.tsx";
@@ -37,14 +37,14 @@ export default function Stock() {
   const [transferToWarehouseId, setTransferToWarehouseId] = useState<number>(0);
   const [transferQuantity, setTransferQuantity] = useState<number>(0);
   const [transferNotes, setTransferNotes] = useState<string>("");
-  const [transferSerials, setTransferSerials] = useState<string>("");
+  const [, setTransferSerials] = useState<string>("");
   const [selectedTransferSerials, setSelectedTransferSerials] = useState<string[]>([]);
 
   // Stocktake state
   const [stocktakeCounts, setStocktakeCounts] = useState<Record<number, string>>({}); // productId -> counted qty
   const [stocktakeNotes, setStocktakeNotes] = useState<Record<number, string>>({}); // productId -> notes
   const [stocktakeSubmitted, setStocktakeSubmitted] = useState(false);
-  const [showPOPrint, setShowPOPrint] = useState(false);
+  const [, setShowPOPrint] = useState(false);
 
   const handleCopy = (text: string, index: number) => {
     navigator.clipboard.writeText(text);
@@ -56,7 +56,7 @@ export default function Stock() {
     try {
       const userStr = localStorage.getItem("qazanpos_user");
       return userStr ? JSON.parse(userStr) : null;
-    } catch (e) {
+    } catch {
       return null;
     }
   })();

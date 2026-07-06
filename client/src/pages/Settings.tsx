@@ -12,12 +12,10 @@ import {
   Printer,
   Sparkles,
   Gift,
-  Barcode,
   Users,
   Trash2,
   Lock,
   ShieldCheck,
-  User,
   Send,
   Bell,
   Globe,
@@ -147,7 +145,7 @@ export default function SettingsPage() {
     try {
       const userStr = localStorage.getItem("qazanpos_user");
       return userStr ? JSON.parse(userStr) : null;
-    } catch (e) {
+    } catch {
       return null;
     }
   })();
@@ -255,7 +253,7 @@ export default function SettingsPage() {
       const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data.otpauthURI)}`;
       setTwoFactorQRCode(qrUrl);
       setShow2FASetupModal(true);
-    } catch (e) {
+    } catch {
       toast({
         title: "Xəta!",
         description: "2FA qurulumuna başlamaq mümkün olmadı.",
@@ -322,7 +320,7 @@ export default function SettingsPage() {
       });
       
       refetchUsers();
-    } catch (e) {
+    } catch {
       toast({
         title: "Xəta!",
         description: "2FA deaktiv edilərkən xəta baş verdi.",
@@ -411,7 +409,7 @@ export default function SettingsPage() {
           ? JSON.parse(settingsData.marketplaceCommissions) 
           : {};
         setMarketplaceCommissions(comms);
-      } catch (e) {
+      } catch {
         setMarketplaceCommissions({});
       }
 
@@ -428,7 +426,7 @@ export default function SettingsPage() {
           setActiveBanks([]);
           setCustomBanks([]);
         }
-      } catch (e) {
+      } catch {
         setActiveBanks([]);
         setCustomBanks([]);
       }
@@ -484,7 +482,7 @@ export default function SettingsPage() {
         } else {
           setQzConnected("OFFLINE");
         }
-      } catch (err) {
+      } catch {
         setQzConnected("OFFLINE");
       }
     };
@@ -838,7 +836,7 @@ export default function SettingsPage() {
           variant: "destructive"
         });
       }
-    } catch (err) {
+    } catch {
       toast({
         title: "Texniki Xəta!",
         description: "Serverlə bağlantı kəsildi.",
@@ -976,7 +974,6 @@ export default function SettingsPage() {
       reader.onload = async (event) => {
         try {
           const text = event.target?.result as string;
-          const parsed = JSON.parse(text);
 
           const response = await fetch("/api/settings/backup/import", {
             method: "POST",
@@ -1002,7 +999,7 @@ export default function SettingsPage() {
               variant: "destructive",
             });
           }
-        } catch (parseErr) {
+        } catch {
           toast({
             title: "Format xətası!",
             description: "Seçilmiş fayl düzgün JSON formatında deyil.",
@@ -1014,7 +1011,7 @@ export default function SettingsPage() {
         }
       };
       reader.readAsText(file);
-    } catch (err) {
+    } catch {
       toast({
         title: "Xəta!",
         description: "Fayl oxunarkən xəta baş verdi.",
@@ -3081,7 +3078,7 @@ export default function SettingsPage() {
                         variant: "destructive",
                       });
                     }
-                  } catch (e) {
+                  } catch {
                     toast({
                       title: "Texniki xəta!",
                       description: "Sıfırlama sorğusunu icra edərkən xəta yarandı.",

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { ArrowLeft, PlusCircle, CheckCircle, Info, Lock, Edit2, X, Plus } from "lucide-react";
+import { ArrowLeft, CheckCircle, Lock, Edit2, X, Plus } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
 import { sanitizeQtyInput } from "../lib/utils.ts";
 import { generateValidEAN13 } from "../components/Barcode.tsx";
@@ -38,7 +38,7 @@ export default function StockIn() {
     try {
       const userStr = localStorage.getItem("qazanpos_user");
       return userStr ? JSON.parse(userStr) : null;
-    } catch (e) {
+    } catch {
       return null;
     }
   })();
