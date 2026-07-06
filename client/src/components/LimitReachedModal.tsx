@@ -1,5 +1,5 @@
 import React from "react";
-import { ShieldAlert, CreditCard, X, MessageSquare, PhoneCall } from "lucide-react";
+import { ShieldAlert, X, MessageSquare, PhoneCall } from "lucide-react";
 
 interface LimitReachedModalProps {
   limitType: "products" | "sales" | "users";

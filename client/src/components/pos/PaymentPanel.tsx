@@ -61,13 +61,13 @@ interface PaymentPanelProps {
 }
 
 export default function PaymentPanel({
-  basket, posMode, isAdmin, totalAmount, totalCost, profit, marketplaceFee, isCredit,
-  customerMode, selectedCustomerId, customerLoyaltyPoints,
-  paymentType, bankName, creditDueDate, notes, salesChannel, applyEdv, returnStatus,
-  cashReceivedInput, useLoyaltyPoints, loyaltyDiscountInput, activeBanksList, activeSettings,
-  isSellingAtLoss, heldSales, createSalePending, createReturnPending,
-  onPaymentType, onBankName, onCreditDueDate, onNotes, onSalesChannel, onApplyEdv,
-  onReturnStatus, onCashReceived, onUseLoyaltyPoints, onLoyaltyDiscountInput,
+  basket, posMode, isAdmin, totalAmount, totalCost, profit, marketplaceFee: _marketplaceFee, isCredit,
+  customerMode: _customerMode, selectedCustomerId: _selectedCustomerId, customerLoyaltyPoints: _customerLoyaltyPoints,
+  paymentType, bankName, creditDueDate, notes, salesChannel, applyEdv: _applyEdv, returnStatus,
+  cashReceivedInput, useLoyaltyPoints, loyaltyDiscountInput, activeBanksList, activeSettings: _activeSettings,
+  isSellingAtLoss: _isSellingAtLoss, heldSales, createSalePending, createReturnPending,
+  onPaymentType, onBankName, onCreditDueDate, onNotes, onSalesChannel, onApplyEdv: _onApplyEdv,
+  onReturnStatus, onCashReceived, onUseLoyaltyPoints: _onUseLoyaltyPoints, onLoyaltyDiscountInput: _onLoyaltyDiscountInput,
   onCheckout, onOpenHoldModal, onOpenHeldList, onPrintPickTicket,
 }: PaymentPanelProps) {
   return (

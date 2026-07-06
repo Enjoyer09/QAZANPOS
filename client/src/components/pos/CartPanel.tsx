@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { Trash2, ShoppingCart } from "lucide-react";
 import { cleanNumberInput } from "../../lib/utils.ts";
-import { useToast } from "../Toast.tsx";
 
 export interface BasketItem {
   productId: number;
@@ -20,18 +19,14 @@ interface CartPanelProps {
   posMode: "sale" | "return";
   isAdmin: boolean;
   onRemoveFromBasket: (id: number) => void;
-  onUpdateItem: (id: number, field: "quantity" | "salePrice", val: string) => void;
-  onRemoveSerial: (productId: number, serialNum: string) => void;
+  onUpdateItem: (id: number, field: "quantity" | "salePrice", val: string) => void;    onRemoveSerial: (productId: number, serialNum: string) => void;
   onOpenDiscountModal: (item: BasketItem) => void;
-  onPrintPickTicket: () => void;
 }
 
 export default function CartPanel({
   basket, posMode, isAdmin,
-  onRemoveFromBasket, onUpdateItem, onRemoveSerial, onOpenDiscountModal,
-  onPrintPickTicket
+  onRemoveFromBasket, onUpdateItem, onRemoveSerial, onOpenDiscountModal
 }: CartPanelProps) {
-  const { toast } = useToast();
   const [editingPrices, setEditingPrices] = useState<Record<number, string>>({});
   const [editingQuantities, setEditingQuantities] = useState<Record<number, string>>({});
 

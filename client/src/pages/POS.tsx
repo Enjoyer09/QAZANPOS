@@ -18,7 +18,6 @@ import {
   Bookmark,
   BookmarkCheck,
   Clock,
-  DollarSign,
 } from "lucide-react";
 import { 
   cacheProducts, 
@@ -71,7 +70,7 @@ export default function POS() {
     try {
       const userStr = localStorage.getItem("qazanpos_user");
       return userStr ? JSON.parse(userStr) : null;
-    } catch (e) {
+    } catch (_e) {
       return null;
     }
   })();
@@ -82,7 +81,7 @@ export default function POS() {
     try {
       const saved = localStorage.getItem("qazanpos_pos_basket");
       return saved ? JSON.parse(saved) : [];
-    } catch (e) {
+    } catch (_e) {
       return [];
     }
   });
@@ -1356,18 +1355,6 @@ export default function POS() {
             onOpenDiscountModal={(item: BasketItem) => {
               setDiscountModalItem(item);
               setDiscountVal("");
-            }}
-            onPrintPickTicket={async () => {
-              if (basket.length === 0) {
-                toast({ title: "Xəta!", description: "Səbət boşdur", variant: "destructive" });
-                return;
-              }
-              const ok = await printPickTicket(basket, holdLabel || "");
-              if (ok) {
-                toast({ title: "Yığım bileti göndərildi! 📋", variant: "success" });
-              } else {
-                toast({ title: "Xəta!", description: "Çap edilərkən səhv baş verdi", variant: "destructive" });
-              }
             }}
           />
         </div>

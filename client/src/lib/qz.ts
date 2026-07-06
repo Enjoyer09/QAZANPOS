@@ -58,7 +58,7 @@ export class QzTrayService {
       }
 
       await qz.websocket.connect();
-      console.log("QZ Tray: Connected successfully via qz-tray SDK");
+      console.info("QZ Tray: Connected successfully via qz-tray SDK");
       return true;
     } catch (e) {
       console.warn("QZ Tray: Connection failed or offline", e);

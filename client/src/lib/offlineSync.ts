@@ -230,7 +230,7 @@ export async function syncOfflineSalesToServer(onSuccessToast?: (count: number) 
     return false;
   }
 
-  console.log(`SyncEngine: Found ${queue.length} offline sale(s) to synchronize.`);
+  console.info(`SyncEngine: Found ${queue.length} offline sale(s) to synchronize.`);
 
   const successfulIds: string[] = [];
 
@@ -262,7 +262,7 @@ export async function syncOfflineSalesToServer(onSuccessToast?: (count: number) 
 
         if (res.ok) {
           successfulIds.push(sale.id);
-          console.log(`SyncEngine: Offline Sale ${sale.id} synced successfully.`);
+          console.info(`SyncEngine: Offline Sale ${sale.id} synced successfully.`);
         } else {
           console.warn(`SyncEngine: Server rejected offline sale ${sale.id}. Will retry later.`);
         }
@@ -300,7 +300,7 @@ export async function syncOfflineReturnsToServer(onSuccessToast?: (count: number
     return false;
   }
 
-  console.log(`SyncEngine: Found ${queue.length} offline return(s) to synchronize.`);
+  console.info(`SyncEngine: Found ${queue.length} offline return(s) to synchronize.`);
 
   const successfulIds: string[] = [];
 
@@ -327,7 +327,7 @@ export async function syncOfflineReturnsToServer(onSuccessToast?: (count: number
 
         if (res.ok) {
           successfulIds.push(ret.id);
-          console.log(`SyncEngine: Offline Return ${ret.id} synced successfully.`);
+          console.info(`SyncEngine: Offline Return ${ret.id} synced successfully.`);
         } else {
           console.warn(`SyncEngine: Server rejected offline return ${ret.id}.`);
         }

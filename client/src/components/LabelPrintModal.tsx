@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { X, Printer, Settings, Eye, Sliders, Edit3 } from "lucide-react";
+import { X, Printer, Eye } from "lucide-react";
 import Barcode from "./Barcode.tsx";
 
 interface Product {

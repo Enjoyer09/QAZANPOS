@@ -2,9 +2,9 @@ import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { 
   Plus, Edit2, Trash2, X, Users, Phone, MapPin, ClipboardList, 
-  Lock, Gift, Mail, Calendar, MessageSquare, DollarSign, 
-  ChevronRight, ChevronDown, Clock, Activity, ArrowRight, Save,
-  CheckCircle, User
+  Lock, Gift, Mail,
+  ChevronRight, ChevronDown, Clock, ArrowRight, Save,
+  User
 } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
 import { TableSkeleton } from "../components/Skeleton.tsx";
