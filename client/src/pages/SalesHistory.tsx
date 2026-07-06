@@ -25,6 +25,7 @@ import {
   ChevronLeft,
   ChevronRight
 } from "lucide-react";
+import { TableSkeleton } from "../components/Skeleton.tsx";
 
 interface Sale {
   id: number;
@@ -629,11 +630,7 @@ export default function SalesHistory() {
                 </thead>
                 <tbody>
                   {isLoading ? (
-                    <tr>
-                      <td colSpan={isAdmin ? 9 : 8} className="p-10 text-center text-xs text-gray-400">
-                        Yüklənir...
-                      </td>
-                    </tr>
+                    <TableSkeleton rows={8} colSpan={isAdmin ? 9 : 8} />
                   ) : filteredSales.length === 0 ? (
                     <tr>
                       <td colSpan={isAdmin ? 9 : 8} className="p-16 text-center text-xs text-gray-400">

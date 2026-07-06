@@ -1,8 +1,10 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link } from "wouter";
-import { PlusCircle, Search, HelpCircle, Lock, ArrowLeftRight, FileText, Warehouse, ClipboardCheck, ShoppingCart, AlertTriangle, Printer, CheckCircle2, X } from "lucide-react";
+import { Link } from "wouter";import {
+  PlusCircle, Search, HelpCircle, Lock, ArrowLeftRight, FileText, Warehouse, ClipboardCheck, ShoppingCart, AlertTriangle, Printer, CheckCircle2, X
+} from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
+import { TableSkeleton } from "../components/Skeleton.tsx";
 
 interface StockLevel {
   productId: number;
@@ -403,8 +405,8 @@ export default function Stock() {
                 <tbody>
                   {isLoading ? (
                     <tr>
-                      <td colSpan={7} className="p-10 text-center text-xs text-gray-400">
-                        Yüklənir...
+                      <td colSpan={7} className="p-0">
+                        <TableSkeleton rows={5} />
                       </td>
                     </tr>
                   ) : filteredList.length === 0 ? (

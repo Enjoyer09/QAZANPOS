@@ -163,8 +163,8 @@ export default function Labels() {
       prev.map((el) => {
         if (el.id !== draggedElementId) return el;
         
-        let newX = Math.max(0, Math.min(95, el.x + deltaX));
-        let newY = Math.max(0, Math.min(92, el.y + deltaY));
+        const newX = Math.max(0, Math.min(95, el.x + deltaX));
+        const newY = Math.max(0, Math.min(92, el.y + deltaY));
         
         return { ...el, x: Math.round(newX), y: Math.round(newY) };
       })

@@ -6,38 +6,116 @@ export const CACHE_KEYS = {
   SETTINGS: "qazan_pos_cached_settings",
   OFFLINE_SALES: "qazan_pos_offline_sales_queue",
   OFFLINE_RETURNS: "qazan_pos_offline_returns_queue",
-};
+} as const;
+
+interface CachedProduct {
+  productId: number;
+  productName: string;
+  unit: string;
+  currentQuantity: number;
+  lastSalePrice?: number;
+  lastPurchasePrice?: number;
+  barcode?: string;
+  category?: string;
+  [key: string]: unknown;
+}
+
+interface CachedCustomer {
+  id: number;
+  name: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  loyaltyPoints?: string | number;
+  [key: string]: unknown;
+}
+
+interface CachedSettings {
+  storeName?: string;
+  phone?: string;
+  address?: string;
+  taxStatus?: string;
+  activeBanks?: string;
+  marketplaceCommissions?: string;
+  loyaltyMinPointsRedeem?: string;
+  receiptFooter?: string;
+  [key: string]: unknown;
+}
+
+interface SalePayload {
+  customerId?: number | null;
+  paymentType: string;
+  creditDueDate?: string | null;
+  notes?: string | null;
+  totalAmount: number;
+  totalCost: number;
+  offlineId?: string;
+  items: Array<{
+    productId: number;
+    quantity: number;
+    salePrice: number;
+    purchasePrice: number;
+    [key: string]: unknown;
+  }>;
+  [key: string]: unknown;
+}
+
+interface OfflineEnrichedSale extends SalePayload {
+  id: string;
+  saleDate: string;
+  isOfflinePending: boolean;
+}
+
+interface ReturnPayload {
+  saleId?: number | null;
+  reason?: string;
+  items: Array<{
+    productId: number;
+    quantity: number;
+    salePrice: number;
+    purchasePrice: number;
+    status?: string;
+    [key: string]: unknown;
+  }>;
+  [key: string]: unknown;
+}
+
+interface OfflineEnrichedReturn extends ReturnPayload {
+  id: string;
+  returnDate: string;
+  isOfflinePending: boolean;
+}
 
 // 1. Caching Helpers
-export function cacheProducts(products: any[]) {
+export function cacheProducts(products: CachedProduct[]): void {
   localStorage.setItem(CACHE_KEYS.PRODUCTS, JSON.stringify(products));
 }
 
-export function cacheCustomers(customers: any[]) {
+export function cacheCustomers(customers: CachedCustomer[]): void {
   localStorage.setItem(CACHE_KEYS.CUSTOMERS, JSON.stringify(customers));
 }
 
-export function cacheSettings(settings: any) {
+export function cacheSettings(settings: CachedSettings): void {
   localStorage.setItem(CACHE_KEYS.SETTINGS, JSON.stringify(settings));
 }
 
-export function getCachedProducts(): any[] {
+export function getCachedProducts(): CachedProduct[] {
   const data = localStorage.getItem(CACHE_KEYS.PRODUCTS);
   return data ? JSON.parse(data) : [];
 }
 
-export function getCachedCustomers(): any[] {
+export function getCachedCustomers(): CachedCustomer[] {
   const data = localStorage.getItem(CACHE_KEYS.CUSTOMERS);
   return data ? JSON.parse(data) : [];
 }
 
-export function getCachedSettings(): any {
+export function getCachedSettings(): CachedSettings | null {
   const data = localStorage.getItem(CACHE_KEYS.SETTINGS);
   return data ? JSON.parse(data) : null;
 }
 
 // 2. Offline Sales Queue Logging & Local Stock Level Deduction
-export function saveOfflineSale(salePayload: any): any {
+export function saveOfflineSale(salePayload: SalePayload): OfflineEnrichedSale {
   // 1. Generate local unique ID and metadata
   const localId = `OFL-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
   const enrichedSale = {
@@ -55,10 +133,10 @@ export function saveOfflineSale(salePayload: any): any {
   // 3. Deduct stock quantities in local cache to prevent double-selling
   const cachedProducts = getCachedProducts();
   const updatedProducts = cachedProducts.map((prod) => {
-    const saleItem = salePayload.items.find((item: any) => item.productId === prod.productId);
+    const saleItem = salePayload.items.find((item) => item.productId === prod.productId);
     if (saleItem) {
-      const currentQty = parseFloat(prod.currentQuantity) || 0;
-      const soldQty = parseFloat(saleItem.quantity) || 0;
+      const currentQty = parseFloat(String(prod.currentQuantity)) || 0;
+      const soldQty = parseFloat(String(saleItem.quantity)) || 0;
       return {
         ...prod,
         currentQuantity: Math.max(0, currentQty - soldQty),
@@ -71,22 +149,22 @@ export function saveOfflineSale(salePayload: any): any {
   return enrichedSale;
 }
 
-export function getOfflineSalesQueue(): any[] {
+export function getOfflineSalesQueue(): OfflineEnrichedSale[] {
   const data = localStorage.getItem(CACHE_KEYS.OFFLINE_SALES);
   return data ? JSON.parse(data) : [];
 }
 
-export function clearOfflineSalesQueue() {
+export function clearOfflineSalesQueue(): void {
   localStorage.removeItem(CACHE_KEYS.OFFLINE_SALES);
 }
 
 // 2b. Offline Returns Queue Logging & Local Stock Level Restoration
-export function getOfflineReturnsQueue(): any[] {
+export function getOfflineReturnsQueue(): OfflineEnrichedReturn[] {
   const data = localStorage.getItem(CACHE_KEYS.OFFLINE_RETURNS);
   return data ? JSON.parse(data) : [];
 }
 
-export function saveOfflineReturn(returnPayload: any): any {
+export function saveOfflineReturn(returnPayload: ReturnPayload): OfflineEnrichedReturn {
   const localId = `OFL-RET-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
   const enrichedReturn = {
     ...returnPayload,
@@ -102,10 +180,10 @@ export function saveOfflineReturn(returnPayload: any): any {
   // Increase stock quantities in local cache if the return status is returned_to_stock
   const cachedProducts = getCachedProducts();
   const updatedProducts = cachedProducts.map((prod) => {
-    const retItem = returnPayload.items.find((item: any) => item.productId === prod.productId);
+    const retItem = returnPayload.items.find((item) => item.productId === prod.productId);
     if (retItem && retItem.status === "returned_to_stock") {
-      const currentQty = parseFloat(prod.currentQuantity) || 0;
-      const returnedQty = parseFloat(retItem.quantity) || 0;
+      const currentQty = parseFloat(String(prod.currentQuantity)) || 0;
+      const returnedQty = parseFloat(String(retItem.quantity)) || 0;
       return {
         ...prod,
         currentQuantity: currentQty + returnedQty,

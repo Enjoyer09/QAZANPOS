@@ -25,6 +25,7 @@ import {
   Lock,
   ShieldCheck,
 } from "lucide-react";
+import { CardSkeleton } from "../components/Skeleton.tsx";
 
 interface SummaryData {
   todayRevenue: number;
@@ -958,7 +959,7 @@ export default function Dashboard() {
 
               <div className="space-y-3.5">
                 {isRecentLoading ? (
-                  <p className="text-xs text-gray-400">Yüklənir...</p>
+                  <CardSkeleton />
                 ) : !recentSales || recentSales.length === 0 ? (
                   <p className="text-xs text-gray-400 py-6 text-center">Hələ heç bir satış qeydə alınmayıb.</p>
                 ) : (
@@ -999,7 +1000,7 @@ export default function Dashboard() {
 
               <div className="space-y-3.5 max-h-[300px] overflow-y-auto pr-2">
                 {isLowStockLoading ? (
-                  <p className="text-xs text-gray-400">Yüklənir...</p>
+                  <CardSkeleton />
                 ) : !lowStock || lowStock.length === 0 ? (
                   <p className="text-xs text-green-600 py-6 text-center font-medium">Bütün məhsulların anbar qalığı normaldır. 🎉</p>
                 ) : (

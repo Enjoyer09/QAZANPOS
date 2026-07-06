@@ -236,7 +236,7 @@ const getWarehouseQuantity = (productId: number, warehouseId?: number): number =
   const vendorReturns = getDb("vendor_returns");
   const transfers = getDb("stock_transfers").filter((t: any) => t.productId === productId);
 
-  let restocked = entries
+  const restocked = entries
     .filter((e: any) => !warehouseId || e.warehouseId === warehouseId)
     .reduce((sum: number, e: any) => sum + e.quantity, 0);
 
@@ -1054,15 +1054,10 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
     }
     if (method === "POST") {
       const body = getBody();
+      // Demo mühitində admin şifrəsi yoxlanışı sadələşdirilib (Təhlükəsizlik: Demo rejim olduğu üçün rol yoxlanışı kifayətdir)
+      // Real backend-də admin password server tərəfdə hashPassword ilə yoxlanılır (bax: routes.ts)
       if (userRole !== "Admin") {
-        if (!body.adminPassword) {
-          return jsonResponse({ message: "Bu əməliyyat üçün Admin şifrəsi tələb olunur." }, 401);
-        }
-        const users = getDb("users") || [];
-        const adminUser = users.find((u: any) => u.role === "Admin" && u.password === body.adminPassword.trim());
-        if (!adminUser) {
-          return jsonResponse({ message: "Daxil etdiyiniz Admin şifrəsi yanlışdır." }, 401);
-        }
+        return jsonResponse({ message: "Bu əməliyyat üçün Administrator səlahiyyəti tələb olunur." }, 401);
       }
       const returns = getDb("returns");
       const nextId = returns.length > 0 ? Math.max(...returns.map(r => r.id)) + 1 : 1;

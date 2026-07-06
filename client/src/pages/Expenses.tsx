@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, ArrowRight, TrendingDown, ClipboardList, Lock } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
+import { TableSkeleton } from "../components/Skeleton.tsx";
 
 interface Expense {
   id: number;
@@ -401,11 +402,7 @@ export default function Expenses() {
                 </thead>
                 <tbody>
                   {isLoading ? (
-                    <tr>
-                      <td colSpan={6} className="py-8 text-center text-xs text-gray-400">
-                        Yüklənir...
-                      </td>
-                    </tr>
+                    <TableSkeleton rows={6} colSpan={6} />
                   ) : filteredList.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="py-12 text-center text-xs text-gray-400">

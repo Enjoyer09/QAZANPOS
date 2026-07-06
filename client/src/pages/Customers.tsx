@@ -7,6 +7,7 @@ import {
   CheckCircle, User
 } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
+import { TableSkeleton } from "../components/Skeleton.tsx";
 
 interface Customer {
   id: number;
@@ -350,11 +351,7 @@ export default function Customers() {
             </thead>
             <tbody>
               {isLoading ? (
-                <tr>
-                  <td colSpan={7} className="p-10 text-center text-xs text-gray-400">
-                    Yüklənir...
-                  </td>
-                </tr>
+                <TableSkeleton rows={8} colSpan={7} />
               ) : filteredList.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="p-16 text-center text-xs text-gray-400">

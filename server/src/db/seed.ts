@@ -378,30 +378,36 @@ async function seed() {
   console.log("Inserted business settings for both tenants.");
 
   // 9. Insert Users associated with Tenant IDs
+  // Passwords from env vars or auto-generated if not set (avoids hardcoded credentials)
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD || `admin_${Date.now()}`;
+  const staffPassword = process.env.SEED_STAFF_PASSWORD || `staff_${Date.now()}`;
+  const superAdminPassword = process.env.SEED_SUPER_PASSWORD || `super_${Date.now()}`;
+
   await db.insert(schema.users).values([
     // Tenant 1 (demo) users
     {
       tenantId: 1,
       username: "admin",
-      password: "admin123",
+      password: adminPassword,
       role: "Admin",
     },
     {
       tenantId: 1,
       username: "satici",
-      password: "satici123",
+      password: staffPassword,
       role: "Staff",
     },
     // Tenant 2 (super admin portal) users
     {
       tenantId: 2,
       username: "superadmin",
-      password: "superadmin123",
+      password: superAdminPassword,
       role: "Admin",
     },
   ]);
 
-  console.log("Inserted default users (demo: admin/admin123, satici/satici123; super: superadmin/superadmin123).");
+  const seededPasswords = `demo: admin/${adminPassword}, satici/${staffPassword}; super: superadmin/${superAdminPassword}`;
+  console.log(`Inserted default users (${seededPasswords}).`);
   console.log("Database seeded successfully!");
 }
 

@@ -12,9 +12,10 @@ function base32Decode(base32Str: string): Buffer {
   const bytes: number[] = [];
 
   for (let i = 0; i < cleanStr.length; i++) {
-    const idx = alphabet.indexOf(cleanStr[i]);
+    const char = cleanStr[i]!;
+    const idx = alphabet.indexOf(char);
     if (idx === -1) {
-      throw new Error(`Invalid Base32 character: ${cleanStr[i]}`);
+      throw new Error(`Invalid Base32 character: ${char}`);
     }
     value = (value << 5) | idx;
     bits += 5;
@@ -38,12 +39,12 @@ export function generateHOTP(secret: string, counter: number): string {
   hmac.update(counterBuf);
   const hmacResult = hmac.digest();
 
-  const offset = hmacResult[hmacResult.length - 1] & 0xf;
+  const offset = hmacResult[hmacResult.length - 1]! & 0xf;
   const code =
-    ((hmacResult[offset] & 0x7f) << 24) |
-    ((hmacResult[offset + 1] & 0xff) << 16) |
-    ((hmacResult[offset + 2] & 0xff) << 8) |
-    (hmacResult[offset + 3] & 0xff);
+    ((hmacResult[offset]! & 0x7f) << 24) |
+    ((hmacResult[offset + 1]! & 0xff) << 16) |
+    ((hmacResult[offset + 2]! & 0xff) << 8) |
+    (hmacResult[offset + 3]! & 0xff);
 
   const otp = code % 1000000;
   return otp.toString().padStart(6, "0");
@@ -75,7 +76,10 @@ export function generateSecret(length: number = 16): string {
   const randomBytes = crypto.randomBytes(length);
   let secret = "";
   for (let i = 0; i < length; i++) {
-    secret += alphabet[randomBytes[i] % alphabet.length];
+    const byte = randomBytes[i];
+    if (byte !== undefined) {
+      secret += alphabet[byte % alphabet.length];
+    }
   }
   return secret;
 }

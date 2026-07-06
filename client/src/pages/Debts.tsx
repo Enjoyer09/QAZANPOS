@@ -6,6 +6,7 @@ import {
   List, LayoutGrid, Phone, CheckCircle, ArrowRight
 } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
+import { TableSkeleton } from "../components/Skeleton.tsx";
 
 const getAvatarGradient = (name: string) => {
   const hash = name.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
@@ -481,11 +482,7 @@ export default function Debts() {
                     </thead>
                     <tbody>
                       {isOverdueLoading ? (
-                        <tr>
-                          <td colSpan={5} className="py-8 text-center text-xs text-gray-400">
-                            Yüklənir...
-                          </td>
-                        </tr>
+                        <TableSkeleton rows={5} colSpan={5} />
                       ) : paginatedOverdue.length === 0 ? (
                         <tr>
                           <td colSpan={5} className="py-8 text-center text-xs text-green-600 font-medium">
@@ -580,11 +577,7 @@ export default function Debts() {
                     </thead>
                     <tbody>
                       {isPendingLoading ? (
-                        <tr>
-                          <td colSpan={5} className="py-8 text-center text-xs text-gray-400">
-                            Yüklənir...
-                          </td>
-                        </tr>
+                        <TableSkeleton rows={5} colSpan={5} />
                       ) : paginatedPending.length === 0 ? (
                         <tr>
                           <td colSpan={5} className="py-8 text-center text-xs text-gray-400">
@@ -821,11 +814,7 @@ export default function Debts() {
               </thead>
               <tbody>
                 {isMyDebtsLoading ? (
-                  <tr>
-                    <td colSpan={6} className="py-8 text-center text-xs text-gray-400">
-                      Yüklənir...
-                    </td>
-                  </tr>
+                  <TableSkeleton rows={5} colSpan={6} />
                 ) : paginatedMyDebts.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="py-12 text-center text-xs text-emerald-600 font-semibold">

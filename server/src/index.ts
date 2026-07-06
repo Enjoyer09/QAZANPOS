@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import router from "./routes.js";
+import router from "./routes/index.js";
 import path from "path";
 import { fileURLToPath } from "url";
 import { eq, desc, isNull, and } from "drizzle-orm";

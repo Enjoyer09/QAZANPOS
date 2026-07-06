@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Edit2, Trash2, X, Tag, Sliders, Info, Lock, Archive, RotateCcw, ChevronLeft, ChevronRight } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";import {
+  Plus, Edit2, Trash2, X, Tag, Sliders, Info, Lock, Archive, RotateCcw, ChevronLeft, ChevronRight
+} from "lucide-react";
+import { TableSkeleton } from "../components/Skeleton.tsx";
 import { useToast } from "../components/Toast.tsx";
 import { generateValidEAN13 } from "../components/Barcode.tsx";
 import LabelPrintModal from "../components/LabelPrintModal.tsx";
@@ -274,7 +276,7 @@ export default function Products() {
       serialNumber: "",
       warrantyMonths: product.warrantyMonths ? String(product.warrantyMonths) : "",
       vendorId: product.vendorId ? String(product.vendorId) : "",
-      minStockLimit: product.minStockLimit != null ? String(product.minStockLimit) : "",
+      minStockLimit: product.minStockLimit !== null ? String(product.minStockLimit) : "",
     });
     setIsOpen(true);
   };
@@ -481,8 +483,8 @@ export default function Products() {
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan={8} className="p-10 text-center text-xs text-gray-400">
-                      Yüklənir...
+                    <td colSpan={8} className="p-0">
+                      <TableSkeleton rows={4} />
                     </td>
                   </tr>
                 ) : filteredList.length === 0 ? (

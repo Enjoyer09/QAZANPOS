@@ -30,7 +30,10 @@ export function verifyToken(token: string): any | null {
   try {
     const parts = token.split(".");
     if (parts.length !== 3) return null;
-    const [header, data, signature] = parts;
+    const header = parts[0];
+    const data = parts[1];
+    const signature = parts[2];
+    if (!header || !data || !signature) return null;
     const expectedSignature = crypto
       .createHmac("sha256", JWT_SECRET)
       .update(`${header}.${data}`)

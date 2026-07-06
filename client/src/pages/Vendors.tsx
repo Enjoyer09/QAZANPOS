@@ -21,6 +21,7 @@ import {
   Lock
 } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
+import { TableSkeleton } from "../components/Skeleton.tsx";
 
 interface Vendor {
   id: number;
@@ -716,7 +717,7 @@ export default function Vendors() {
 
           {/* Vendors Directory Table */}
           {isLoading ? (
-            <div className="py-12 text-center text-xs font-bold text-gray-400 uppercase tracking-wider">Məlumatlar yüklənir...</div>
+            <TableSkeleton rows={6} />
           ) : filteredVendors.length === 0 ? (
             <div className="py-12 text-center text-xs font-bold text-gray-400 uppercase tracking-wider">Tədarükçü tapılmadı.</div>
           ) : (
@@ -924,7 +925,7 @@ export default function Vendors() {
 
           {/* Ledger Table */}
           {isLedgerLoading ? (
-            <div className="py-12 text-center text-xs font-bold text-gray-400 uppercase tracking-wider">Məlumatlar yüklənir...</div>
+            <TableSkeleton rows={5} />
           ) : paginatedGlobalPayments.length === 0 ? (
             <div className="py-12 text-center text-xs font-bold text-gray-400 uppercase tracking-wider">Heç bir ödəniş tapılmadı.</div>
           ) : (

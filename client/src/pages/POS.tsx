@@ -32,7 +32,10 @@ import {
 } from "../lib/offlineSync.ts";
 import { useToast } from "../components/Toast.tsx";
 import { printReceipt, printZReport, printPickTicket } from "../components/ReceiptPrint.tsx";
-import { sanitizeQtyInput } from "../lib/utils.ts";
+import { sanitizeQtyInput, cleanNumberInput } from "../lib/utils.ts";
+import CartPanel from "../components/pos/CartPanel.tsx";
+import ProductGrid from "../components/pos/ProductGrid.tsx";
+import PaymentPanel from "../components/pos/PaymentPanel.tsx";
 
 interface BasketItem {
   productId: number;
@@ -299,6 +302,7 @@ export default function POS() {
     },
     enabled: isOnline,
   });
+  const activeHeldSales: any[] = heldSales || [];
 
   const handleHoldCart = async () => {
     if (basket.length === 0) {
@@ -416,14 +420,6 @@ export default function POS() {
       .replace(/ğ/g, "g");
   };
   
-  const cleanNumberInput = (val: string): string => {
-    // Convert commas to dots first
-    const normalized = val.replace(/,/g, ".");
-    const onlyDigitsAndDot = normalized.replace(/[^0-9.]/g, "");
-    const parts = onlyDigitsAndDot.split(".");
-    const singleDot = parts[0] + (parts.length > 1 ? "." + parts.slice(1).join("") : "");
-    return sanitizeQtyInput(singleDot);
-  };
   // Filter products by manual search input
   const searchedProducts = sellableProducts.filter((p) => {
     const q = productSearchQuery.trim();
@@ -1323,379 +1319,57 @@ export default function POS() {
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
         {/* Left Side: Basket & Product Selection */}
         <div className="xl:col-span-2 space-y-6">
-          {/* Product selector card */}
-          <div className={`bg-white border p-6 rounded-2xl shadow-xs glass-card transition-all ${posMode === "return" ? "border-amber-300 ring-2 ring-amber-500/10" : "border-gray-100"}`}>
-            <h3 className="font-extrabold text-gray-900 text-sm mb-4">
-              {posMode === "return" ? "Geri Qaytarılacaq Məhsul Seçin" : "Səbətə Məhsul Əlavə Et"}
-            </h3>
+          {/* Product Grid */}
+          <ProductGrid
+            posMode={posMode}
+            stockLevels={activeStockLevels}
+            currentUser={currentUser}
+            isAdmin={isAdmin}
+            basket={basket}
+            scanInput={scanInput}
+            productSearchQuery={productSearchQuery}
+            selectedProductId={selectedProductId}
+            selectedQuantity={selectedQuantity}
+            onScanInput={setScanInput}
+            onProductSearchQuery={setProductSearchQuery}
+            onSelectedProductId={setSelectedProductId}
+            onSelectedQuantity={setSelectedQuantity}
+            onAddToBasket={addProductToBasket}
+            onOpenQuickCreate={(name) => {
+              setQuickCreateName(name);
+              setIsQuickCreateOpen(true);
+            }}
+            onOpenCustomItem={(name) => {
+              setCustomItemName(name);
+              setIsCustomItemOpen(true);
+            }}
+          />
 
-            {posMode === "return" && (
-              <div className="mb-4 p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-[11px] font-semibold flex items-start gap-2.5 animate-in slide-in-from-top-2">
-                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-extrabold block mb-0.5 text-amber-900">Nisyə (Kredit) Satışların Qaytarılması:</span>
-                  Nisyə satılmış malların geri qaytarılması üçün <strong className="text-amber-950 font-bold">"Satış Tarixçəsi"</strong> bölməsindən müvafiq qaiməni tapıb qaytarış edin. Sürətli qaytarış zamanı birbaşa nağd geri ödəniş hesablanır.
-                </div>
-              </div>
-            )}
-
-            {/* Quick Scan Input */}
-            <div className="mb-4 space-y-1.5 animate-in slide-in-from-top-1">
-              <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Sürətli Skan / Barkod və ya IMEI (Serial №)</label>
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Barkod və ya IMEI skan edin..."
-                  value={scanInput}
-                  onChange={(e) => handleScanInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      handleScanInput(scanInput);
-                    }
-                  }}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 font-mono text-xs font-bold"
-                />
-                <Barcode className="absolute left-3.5 top-3.5 w-4 h-4 text-gray-400" />
-              </div>
-            </div>
-
-            {/* Manual Product Search Bar */}
-            <div className="relative w-full mb-3">
-              <Search className="absolute left-3.5 top-3.5 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Satılacaq məhsul axtar (ad, barkod və ya kateqoriya)..."
-                value={productSearchQuery}
-                onChange={(e) => setProductSearchQuery(e.target.value)}
-                className={`w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none bg-gray-50/50 text-xs font-bold focus:ring-1 ${posMode === "return" ? "focus:ring-amber-500" : "focus:ring-primary"}`}
-              />
-            </div>
-
-            {/* Premium Autocomplete Search Results Grid */}
-            {productSearchQuery.trim() && (
-              <div className="bg-white border border-gray-100 rounded-2xl p-3 shadow-lg max-h-60 overflow-y-auto space-y-2 mb-4 animate-in fade-in duration-200">
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
-                  Axtarış Nəticələri ({searchedProducts.length})
-                </span>
-                {searchedProducts.length === 0 ? (
-                  <div className="p-4 bg-gray-50/50 border border-gray-100 rounded-xl space-y-3.5 text-center animate-in fade-in duration-200">
-                    <p className="text-xs text-gray-400 font-semibold">🔍 Axtarışa uyğun məhsul tapılmadı.</p>
-                    <div className="flex flex-col sm:flex-row gap-2 justify-center items-center">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setQuickCreateName(productSearchQuery.trim());
-                          const query = productSearchQuery.trim();
-                          if (/^[0-9]{8,15}$/.test(query)) {
-                            setQuickCreateBarcode(query);
-                            setQuickCreateName("");
-                          } else {
-                            setQuickCreateBarcode("");
-                          }
-                          setQuickCreatePrice("");
-                          setQuickCreateCategory("Ümumi");
-                          setQuickCreateUnit("ədəd");
-                          setIsQuickCreateOpen(true);
-                        }}
-                        className="w-full sm:w-auto px-3.5 py-2 bg-primary text-white text-[10px] font-black uppercase tracking-wider rounded-lg hover:bg-primary/95 cursor-pointer transition-all flex items-center justify-center gap-1.5 hover-elevate shadow-xs"
-                      >
-                        ➕ Kataloqda Yeni Məhsul Yarat
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCustomItemName(productSearchQuery.trim());
-                          setCustomItemPrice("");
-                          setIsCustomItemOpen(true);
-                        }}
-                        className="w-full sm:w-auto px-3.5 py-2 bg-purple-600 text-white text-[10px] font-black uppercase tracking-wider rounded-lg hover:bg-purple-700 cursor-pointer transition-all flex items-center justify-center gap-1.5 hover-elevate shadow-xs"
-                      >
-                        ⚡ Müvəqqəti Sərbəst Satış Et
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  searchedProducts.map((p) => {
-                    const price = p.lastSalePrice || p.lastPurchasePrice || 0;
-                    return (
-                      <div
-                        key={p.productId}
-                        onClick={() => {
-                          if (p.trackingType === "serialized") {
-                            toast({
-                              title: "Diqqət!",
-                              description: "Serial nömrəli (IMEI) məhsulları lütfən yuxarıdakı 'Sürətli Skan' bölməsindən birbaşa skan edərək əlavə edin.",
-                              variant: "destructive"
-                            });
-                          } else {
-                            addProductToBasket(p);
-                            setProductSearchQuery(""); // Reset search bar
-                            toast({
-                              title: "Əlavə edildi!",
-                              description: `"${p.productName}" səbətə əlavə olundu.`,
-                              variant: "success"
-                            });
-                          }
-                        }}
-                        className="flex items-center justify-between p-2.5 hover:bg-primary/5 rounded-xl cursor-pointer transition-colors border border-gray-50 hover:border-primary/10 text-xs font-semibold text-left"
-                      >
-                        <div className="text-left">
-                          <span className="block font-bold text-gray-900">{p.productName}</span>
-                          <span className="block text-[10px] text-gray-400 mt-0.5">
-                            {(isAdmin || currentUser?.staffCanViewStockBalances !== 0) ? `Qalıq: ${p.currentQuantity} ${p.unit} | ` : ""}Barkod: {p.barcode || "Yoxdur"}
-                          </span>
-                        </div>
-                        <div className="text-right flex items-center gap-3">
-                          <span className="font-mono font-bold text-gray-900">{price.toFixed(2)} ₼</span>
-                          <span className="px-2 py-1 bg-primary/10 text-primary rounded-lg text-[10px] font-black uppercase tracking-wider">
-                            + Əlavə Et
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            )}
-
-            <div className="flex flex-col sm:flex-row gap-3 text-xs font-semibold">
-              <div className="flex-1 w-full">
-                <select
-                  value={selectedProductId}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setSelectedProductId(val);
-                    if (val) {
-                      const prod = sellableProducts.find((p) => p.productId === parseInt(val));
-                      if (prod) {
-                        if (prod.trackingType === "serialized") {
-                          toast({
-                            title: "Diqqət!",
-                            description: "Serial nömrəli (IMEI) məhsulları lütfən yuxarıdakı 'Sürətli Skan' bölməsindən birbaşa skan edərək əlavə edin.",
-                            variant: "destructive"
-                          });
-                        } else {
-                          addProductToBasket(prod);
-                          setSelectedProductId(""); // Reset select so it can be selected again
-                          toast({
-                            title: "Əlavə edildi!",
-                            description: `"${prod.productName}" səbətə əlavə olundu.`,
-                            variant: "success"
-                          });
-                        }
-                      }
-                    }
-                  }}
-                  className={`w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none bg-gray-50/50 cursor-pointer focus:ring-1 ${posMode === "return" ? "focus:ring-amber-500" : "focus:ring-primary"}`}
-                >
-                  <option value="">
-                    {searchedProducts.length === 0 ? "Axtarışa uyğun məhsul tapılmadı..." : "Məhsul seçin..."}
-                  </option>
-                  {searchedProducts.map((p) => {
-                    const priceLabel = posMode === "sale"
-                      ? (p.lastSalePrice 
-                        ? `(Satış: ${p.lastSalePrice.toFixed(2)} ₼, Alış: ${p.lastPurchasePrice.toFixed(2)} ₼)`
-                        : `(Alış: ${p.lastPurchasePrice.toFixed(2)} ₼)`)
-                      : `(Geri Ödəniş: ${(p.lastSalePrice || p.lastPurchasePrice || 0).toFixed(2)} ₼)`;
-                    return (
-                      <option key={p.productId} value={p.productId}>
-                        {p.productName} {(isAdmin || currentUser?.staffCanViewStockBalances !== 0) ? `— Qalıq: ${p.currentQuantity} ${p.unit} ` : ""}{priceLabel}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-              <div className="w-full sm:w-24">
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  placeholder="Miqdar"
-                  value={selectedQuantity}
-                  onChange={(e) => {
-                    const sanitized = sanitizeQtyInput(e.target.value);
-                    setSelectedQuantity(sanitized);
-                  }}
-                  className={`w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none bg-gray-50/50 focus:ring-1 ${posMode === "return" ? "focus:ring-amber-500" : "focus:ring-primary"}`}
-                />
-              </div>
-              <button
-                onClick={handleAddToBasket}
-                className={`w-full sm:w-auto px-5 py-3 text-white font-bold rounded-xl cursor-pointer flex items-center justify-center gap-2 shadow-md transition-all ${
-                  posMode === "return"
-                    ? "bg-amber-600 hover:bg-amber-700 shadow-amber-600/10"
-                    : "bg-primary hover:bg-primary/90 shadow-primary/10"
-                }`}
-              >
-                <Plus className="w-4 h-4" /> {posMode === "return" ? "Qaytarışa əlavə et" : "Əlavə et"}
-              </button>
-            </div>
-          </div>
-
-          {/* Selected Basket Items Table */}
-          <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-xs glass-card">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-extrabold text-gray-900 text-sm">Seçilmiş Məhsullar</h3>
-              <div className="flex items-center gap-1.5 text-xs text-gray-400">
-                <ShoppingCart className="w-4 h-4" />
-                <span>{basket.length} növ məhsul</span>
-              </div>
-            </div>
-
-            {basket.length === 0 ? (
-              <div className="py-16 text-center text-xs text-gray-400">
-                Səbət boşdur. Kataloqdan məhsul seçib əlavə edin.
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm border-collapse min-w-[650px]">
-                  <thead>
-                    <tr className="border-b border-gray-100 text-xs font-bold text-gray-400 uppercase tracking-wider">
-                      <th className="py-3 px-2">Məhsul</th>
-                      <th className="py-3 px-2 text-right w-24">Miqdar</th>
-                      <th className="py-3 px-2 text-right w-24">Maya (₼)</th>
-                      <th className="py-3 px-2 text-right w-28">
-                        {posMode === "return" ? "Qaytarış Qiyməti (₼)" : "Satış Qiyməti (₼)"}
-                      </th>
-                      <th className="py-3 px-2 text-right w-28">Toplam</th>
-                      {posMode === "sale" && isAdmin && <th className="py-3 px-2 text-right w-20 text-green-600">Gəlir</th>}
-                      <th className="py-3 px-2 w-12 text-center"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {basket.map((item) => {
-                      const isLoss = posMode === "sale" && item.salePrice < item.minPrice;
-                      const itemProfit = (item.salePrice - item.minPrice) * item.quantity;
-                      return (
-                        <tr key={item.productId} className="border-b border-gray-50 hover:bg-gray-50/30 transition-all text-xs">
-                          <td className="py-4 px-2">
-                            <span className="font-bold block text-gray-900">{item.productName}</span>
-                            <span className="text-[10px] text-gray-400 block mt-0.5">
-                              Ölçü vahidi: {item.unit}
-                            </span>
-                            {item.serialNumbers && item.serialNumbers.length > 0 && (
-                              <div className="flex flex-wrap gap-1 mt-1.5 max-w-xs">
-                                {item.serialNumbers.map((s: string) => (
-                                  <span key={s} className="bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold flex items-center gap-1">
-                                    {s}
-                                    <button
-                                      type="button"
-                                      onClick={() => handleRemoveSerialFromBasket(item.productId, s)}
-                                      className="text-red-500 hover:text-red-700 font-bold font-sans cursor-pointer text-[10px]"
-                                      title="Serialı sil"
-                                    >
-                                      ✕
-                                    </button>
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </td>
-                          <td className="py-4 px-2 text-right">
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              value={editingQuantities[item.productId] !== undefined ? editingQuantities[item.productId] : item.quantity.toString()}
-                              onChange={(e) => {
-                                const sanitized = cleanNumberInput(e.target.value);
-                                setEditingQuantities((prev) => ({ ...prev, [item.productId]: sanitized }));
-                                if (!sanitized.endsWith(".")) {
-                                  handleUpdateBasketItem(item.productId, "quantity", sanitized);
-                                }
-                              }}
-                              onBlur={() => {
-                                setEditingQuantities((prev) => {
-                                  const copy = { ...prev };
-                                  delete copy[item.productId];
-                                  return copy;
-                                });
-                              }}
-                              className={`w-16 px-2 py-1 border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-1 ${posMode === "return" ? "focus:ring-amber-500" : "focus:ring-primary"} ${item.serialNumbers && item.serialNumbers.length > 0 ? "bg-gray-100 cursor-not-allowed opacity-80" : ""}`}
-                              readOnly={item.serialNumbers && item.serialNumbers.length > 0}
-                              title={item.serialNumbers && item.serialNumbers.length > 0 ? "Serial nömrəli məhsulun miqdarı skan edilmiş IMEIlərin sayı ilə təyin edilir" : ""}
-                            />
-                          </td>
-                          <td className="py-4 px-2 text-right font-bold text-gray-500 font-mono">
-                            {item.minPrice.toFixed(2)} ₼
-                          </td>
-                          <td className="py-4 px-2 text-right">
-                            <div className="flex flex-col items-end">
-                              <div className="flex items-center gap-1.5 justify-end">
-                                {posMode === "sale" && item.originalPrice && item.salePrice < item.originalPrice && (
-                                  <span className="text-[10px] text-gray-400 line-through font-mono">
-                                    {item.originalPrice.toFixed(2)} ₼
-                                  </span>
-                                )}
-                                <input
-                                  type="text"
-                                  inputMode="decimal"
-                                  value={editingPrices[item.productId] !== undefined ? editingPrices[item.productId] : item.salePrice.toString()}
-                                  onChange={(e) => {
-                                    const sanitized = cleanNumberInput(e.target.value);
-                                    setEditingPrices((prev) => ({ ...prev, [item.productId]: sanitized }));
-                                    if (!sanitized.endsWith(".")) {
-                                      handleUpdateBasketItem(item.productId, "salePrice", sanitized);
-                                    }
-                                  }}
-                                  onBlur={() => {
-                                    setEditingPrices((prev) => {
-                                      const copy = { ...prev };
-                                      delete copy[item.productId];
-                                      return copy;
-                                    });
-                                  }}
-                                  className={`w-18 px-2 py-1 border rounded-lg text-right focus:outline-none focus:ring-1 ${
-                                    isLoss
-                                      ? "border-red-400 focus:ring-red-500 bg-red-50/50"
-                                      : (posMode === "return" ? "border-gray-200 focus:ring-amber-500" : "border-gray-200 focus:ring-primary")
-                                  }`}
-                                />
-                                {posMode === "sale" && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setDiscountModalItem(item);
-                                      setDiscountVal("");
-                                    }}
-                                    className="p-1 rounded-lg border border-amber-100 hover:bg-amber-50 text-amber-600 transition cursor-pointer"
-                                    title="Fərdi Endirim Tətbiq Et"
-                                  >
-                                    🏷️
-                                  </button>
-                                )}
-                              </div>
-                              {isLoss && (
-                                <span className="text-[9px] font-bold text-red-500 mt-1">
-                                  Min: {item.minPrice.toFixed(2)} ₼
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="py-4 px-2 text-right font-bold text-gray-900 font-mono">
-                            {(item.quantity * item.salePrice).toFixed(2)} ₼
-                          </td>
-                          {posMode === "sale" && isAdmin && (
-                            <td className={`py-4 px-2 text-right font-bold font-mono ${itemProfit >= 0 ? "text-green-600" : "text-red-500"}`}>
-                              {itemProfit >= 0 ? "+" : ""}
-                              {itemProfit.toFixed(2)}
-                            </td>
-                          )}
-                          <td className="py-4 px-2 text-center">
-                            <button
-                              onClick={() => handleRemoveFromBasket(item.productId)}
-                              className="text-gray-400 hover:text-red-500 cursor-pointer transition-all"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+          {/* Cart Panel */}
+          <CartPanel
+            basket={basket}
+            posMode={posMode}
+            isAdmin={isAdmin}
+            onRemoveFromBasket={handleRemoveFromBasket}
+            onUpdateItem={handleUpdateBasketItem}
+            onRemoveSerial={handleRemoveSerialFromBasket}
+            onOpenDiscountModal={(item: BasketItem) => {
+              setDiscountModalItem(item);
+              setDiscountVal("");
+            }}
+            onPrintPickTicket={async () => {
+              if (basket.length === 0) {
+                toast({ title: "Xəta!", description: "Səbət boşdur", variant: "destructive" });
+                return;
+              }
+              const ok = await printPickTicket(basket, holdLabel || "");
+              if (ok) {
+                toast({ title: "Yığım bileti göndərildi! 📋", variant: "success" });
+              } else {
+                toast({ title: "Xəta!", description: "Çap edilərkən səhv baş verdi", variant: "destructive" });
+              }
+            }}
+          />
         </div>
 
         {/* Right Side: Customer & Checkout Actions */}
@@ -1854,7 +1528,6 @@ export default function POS() {
                   />
                 </div>
 
-                {/* Save Customer Button */}
                 <button
                   type="button"
                   onClick={handleSaveNewCustomer}
@@ -1867,269 +1540,59 @@ export default function POS() {
             )}
           </div>
 
-          {/* Checkout & Totals Card */}
-          <div className={`bg-white border p-6 rounded-2xl shadow-xs glass-card transition-all ${posMode === "return" ? "border-amber-300 ring-2 ring-amber-500/10" : "border-gray-100"}`}>
-            <h3 className="font-extrabold text-gray-900 text-sm mb-4">
-              {posMode === "return" ? "Geri Qaytarış və Yekun" : "Ödəniş və Yekun"}
-            </h3>
-
-            {/* Totals panel */}
-            <div className="space-y-2 border-b border-gray-100 pb-4 mb-4 text-xs font-medium text-gray-500 font-semibold">
-              <div className="flex justify-between">
-                <span>{posMode === "return" ? "Geri Ödəniləcək Cəmi" : "Cəmi məbləğ"}</span>
-                <span className={`font-bold font-mono text-sm ${posMode === "return" ? "text-amber-600" : "text-gray-900"}`}>
-                  {totalAmount.toFixed(2)} ₼
-                </span>
-              </div>
-              {posMode === "sale" && useLoyaltyPoints && parseFloat(loyaltyDiscountInput) > 0 && (
-                <div className="flex justify-between text-emerald-600 font-bold animate-in fade-in">
-                  <span>Bonus Güzəşti (Çıxılan)</span>
-                  <span className="font-mono">-{parseFloat(loyaltyDiscountInput).toFixed(2)} ₼</span>
-                </div>
-              )}
-              {posMode === "sale" && useLoyaltyPoints && parseFloat(loyaltyDiscountInput) > 0 && (
-                <div className="flex justify-between text-gray-900 font-bold border-t border-dashed border-gray-100 pt-1.5 animate-in fade-in">
-                  <span>Ödəniləcək Yekun</span>
-                  <span className="font-mono text-sm">{Math.max(0, totalAmount - (parseFloat(loyaltyDiscountInput) || 0)).toFixed(2)} ₼</span>
-                </div>
-              )}
-              {posMode === "sale" && salesChannel === "birmarket.az" && (
-                <>
-                  <div className="flex justify-between text-purple-600 font-bold animate-in fade-in">
-                    <span>birmarket.az Komissiyası</span>
-                    <span className="font-mono">-{marketplaceFee.toFixed(2)} ₼</span>
-                  </div>
-                  <div className="flex justify-between text-gray-900 font-bold border-t border-dashed border-gray-100 pt-1.5 animate-in fade-in">
-                    <span>Bizə Qalan Xalis</span>
-                    <span className="font-mono">{(totalAmount - marketplaceFee).toFixed(2)} ₼</span>
-                  </div>
-                </>
-              )}
-              {posMode === "sale" && isAdmin && (
-                <>
-                  <div className="flex justify-between">
-                    <span>Məhsul mayası</span>
-                    <span className="font-mono">{totalCost.toFixed(2)} ₼</span>
-                  </div>
-                  {profit >= 0 ? (
-                    <div className="flex justify-between items-center text-green-600 bg-green-50/50 p-2.5 rounded-xl border border-green-100/50 glass animate-in fade-in">
-                      <span className="font-semibold">Təxmini Mənfəət</span>
-                      <span className="font-black font-mono text-sm">+{profit.toFixed(2)} ₼</span>
-                    </div>
-                  ) : (
-                    <div className="flex justify-between items-center text-red-600 bg-red-50/55 p-2.5 rounded-xl border border-red-100/50 glass animate-in fade-in font-bold">
-                      <span className="font-semibold">Təxmini Zərər (İtki) ⚠️</span>
-                      <span className="font-black font-mono text-sm">-{Math.abs(profit).toFixed(2)} ₼</span>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-
-            {/* Sales Channel Selector */}
-            {posMode === "sale" && (
-              <div className="space-y-1.5 text-xs font-semibold">
-                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Satış Kanalı 🌐</label>
-                <select
-                  value={salesChannel}
-                  onChange={(e) => setSalesChannel(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none bg-gray-50/50 cursor-pointer focus:ring-1 focus:ring-primary"
-                >
-                  <option value="Mağaza">🏠 Mağaza (Pərakəndə)</option>
-                  <option value="birmarket.az">🌐 birmarket.az (Marketplace)</option>
-                </select>
-              </div>
-            )}
-
-            {/* Payment Type */}
-            <div className="space-y-4 text-xs font-semibold">
-              <div className="space-y-1.5">
-                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">
-                  {posMode === "return" ? "Geri Ödəniş Üsulu" : "Ödəniş Üsulu"}
-                </label>
-                <select
-                  value={paymentType}
-                  onChange={(e) => {
-                    setPaymentType(e.target.value);
-                    if (e.target.value !== "Kart") setBankName("");
-                  }}
-                  className={`w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none bg-gray-50/50 cursor-pointer focus:ring-1 ${posMode === "return" ? "focus:ring-amber-500" : "focus:ring-primary"}`}
-                >
-                  <option value="Nəğd">Nəğd</option>
-                  <option value="Kart">Kart</option>
-                  <option value="Kart2Kart">Kart2Kart</option>
-                  <option value="Köçürmə">Köçürmə</option>
-                  {posMode === "sale" && <option value="Nisyə">Nisyə (Borc)</option>}
-                </select>
-              </div>
-
-              {/* Bank Selection (Only if payment type is Kart and sale mode) */}
-              {posMode === "sale" && paymentType === "Kart" && (
-                <div className="space-y-1.5 animate-in slide-in-from-top-1.5">
-                  <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Bank Hesabı *</label>
-                  <select
-                    value={bankName}
-                    onChange={(e) => setBankName(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 cursor-pointer text-xs font-bold"
-                    required
-                  >
-                    <option value="">Bank Seçin...</option>
-                    {(activeBanksList.length > 0 ? activeBanksList : ["Digər"]).map((bank) => (
-                      <option key={bank} value={bank}>
-                        {bank}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* Return Status if in Return Mode */}
-              {posMode === "return" && (
-                <div className="space-y-1.5 animate-in slide-in-from-top-1.5">
-                  <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Qaytarış Tipi (Status)</label>
-                  <select
-                    value={returnStatus}
-                    onChange={(e) => setReturnStatus(e.target.value as any)}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 bg-gray-50/50 cursor-pointer text-xs font-semibold"
-                  >
-                    <option value="returned_to_stock">🟢 Anbara Geri Qayıtsın (Yararlı)</option>
-                    <option value="defective">🔴 Deffekt / Zədəli (Zərərə silinsin)</option>
-                  </select>
-                </div>
-              )}
-
-              {/* Due date if credit sale */}
-              {posMode === "sale" && isCredit && (
-                <div className="space-y-1.5 border border-amber-100 bg-amber-50/10 p-3.5 rounded-xl animate-in slide-in-from-top-1.5">
-                  <label className="text-amber-700 uppercase tracking-wider block text-[10px]">
-                    Borcun Ödənilmə Tarixi *
-                  </label>
-                  <input
-                    type="date"
-                    value={creditDueDate}
-                    onChange={(e) => setCreditDueDate(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 bg-white cursor-pointer"
-                  />
-                  <p className="text-[10px] text-amber-600/80 leading-normal font-medium mt-1">
-                    Satış nisyəyə verilir. Müştərinin cari borcuna əlavə olunacaq.
-                  </p>
-                </div>
-              )}
-
-              {/* Notes */}
-              <div className="space-y-1.5">
-                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">
-                  {posMode === "return" ? "Qaytarılma Səbəbi" : "Satış qeydi"}
-                </label>
-                <input
-                  type="text"
-                  placeholder={posMode === "return" ? "Qaytarılma səbəbini qeyd edin..." : "Əlavə məlumat (ixtiyari)"}
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  className={`w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none bg-gray-50/50 focus:ring-1 ${posMode === "return" ? "focus:ring-amber-500" : "focus:ring-primary"}`}
-                />
-              </div>
-
-              {/* VAT (ƏDV) Toggle */}
-              {posMode === "sale" && activeSettings?.taxStatus === "edv" && (
-                <div className="flex items-center gap-2 py-1 select-none animate-in fade-in duration-200">
-                  <input
-                    type="checkbox"
-                    id="applyEdv"
-                    checked={applyEdv}
-                    onChange={(e) => setApplyEdv(e.target.checked)}
-                    className="rounded border-gray-300 text-primary focus:ring-primary h-4.5 w-4.5 cursor-pointer"
-                  />
-                  <label htmlFor="applyEdv" className="text-xs font-bold text-gray-700 cursor-pointer flex items-center gap-1">
-                    18% ƏDV Tətbiq Edilsin <span className="text-[10px] text-gray-400 font-normal">(Qiymətə ƏDV daxildir)</span>
-                  </label>
-                </div>
-              )}
-
-              {/* Cash Received Calculator (OpenTHC-inspired) */}
-              {posMode === "sale" && paymentType === "Nəğd" && (
-                <div className="space-y-1.5 border border-emerald-100 bg-emerald-50/20 p-3.5 rounded-xl animate-in slide-in-from-top-1.5">
-                  <label className="text-emerald-700 uppercase tracking-wider block text-[10px] font-bold flex items-center gap-1">
-                    <DollarSign className="w-3 h-3" /> Nəğd Qəbul Edildi
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="0.00"
-                    value={cashReceivedInput}
-                    onChange={(e) => setCashReceivedInput(e.target.value)}
-                    className="w-full px-4 py-3 border border-emerald-200 rounded-xl focus:outline-none bg-white focus:ring-1 focus:ring-emerald-400 font-mono font-bold text-sm"
-                  />
-                  {parseFloat(cashReceivedInput) > 0 && (
-                    <div className={`flex justify-between items-center font-bold text-sm px-1 pt-1 ${
-                      parseFloat(cashReceivedInput) >= totalAmount ? "text-emerald-700" : "text-red-600"
-                    }`}>
-                      <span>{parseFloat(cashReceivedInput) >= totalAmount ? "Qaytarılacaq:" : "Çatmayan:"}</span>
-                      <span className="font-mono">
-                        {Math.abs(parseFloat(cashReceivedInput) - totalAmount).toFixed(2)} ₼
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Checkout Button */}
-              <button
-                onClick={handleCheckout}
-                disabled={basket.length === 0 || createSaleMutation.isPending || createReturnMutation.isPending}
-                className={`w-full py-3 text-white font-bold rounded-xl cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 text-sm shadow-md transition-all ${
-                  posMode === "return"
-                    ? "bg-amber-600 hover:bg-amber-700 shadow-amber-500/10 shadow-lg shadow-amber-600/20 animate-pulse"
-                    : (isCredit ? "bg-amber-600 hover:bg-amber-700 shadow-amber-500/10" : "bg-primary hover:bg-primary/90 shadow-primary/10")
-                }`}
-              >
-                <CheckCircle className="w-4 h-4" />{" "}
-                {posMode === "return" ? "Geri Qaytarlışı Tamamla" : (isCredit ? "Nisye Satış Qeyd Et" : "Satışı Tamamla (Qaimə)")}
-              </button>
-
-              {/* Hold & Resume Buttons */}
-              {posMode === "sale" && (
-                <div className="grid grid-cols-3 gap-1.5">
-                  <button
-                    onClick={() => setIsHoldModalOpen(true)}
-                    disabled={basket.length === 0}
-                    className="w-full py-2.5 border border-amber-200 bg-amber-50/40 text-amber-700 font-bold rounded-xl cursor-pointer disabled:opacity-40 flex items-center justify-center gap-1 text-[10px] hover:bg-amber-50 transition-all"
-                  >
-                    <Bookmark className="w-3 h-3" /> Saxla
-                  </button>
-                  <button
-                    onClick={() => { setIsHeldListOpen(true); refetchHeldSales(); }}
-                    className="relative w-full py-2.5 border border-blue-200 bg-blue-50/40 text-blue-700 font-bold rounded-xl cursor-pointer flex items-center justify-center gap-1 text-[10px] hover:bg-blue-50 transition-all"
-                  >
-                    <BookmarkCheck className="w-3 h-3" /> Saxlanmış
-                    {heldSales && heldSales.length > 0 && (
-                      <span className="absolute -top-1.5 -right-1.5 bg-blue-600 text-white text-[9px] font-black rounded-full w-4 h-4 flex items-center justify-center">
-                        {heldSales.length}
-                      </span>
-                    )}
-                  </button>
-                  <button
-                    onClick={async () => {
-                      if (basket.length === 0) {
-                        toast({ title: "Xəta!", description: "Səbət boşdur", variant: "destructive" });
-                        return;
-                      }
-                      const ok = await printPickTicket(basket, holdLabel || "");
-                      if (ok) {
-                        toast({ title: "Yığım bileti göndərildi! 📋", variant: "success" });
-                      } else {
-                        toast({ title: "Xəta!", description: "Çap edilərkən səhv baş verdi", variant: "destructive" });
-                      }
-                    }}
-                    className="w-full py-2.5 border border-purple-200 bg-purple-50/40 text-purple-700 font-bold rounded-xl cursor-pointer flex items-center justify-center gap-1 text-[10px] hover:bg-purple-50 transition-all"
-                  >
-                    📋 Yığım Bileti
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
+          {/* Payment Panel */}
+          <PaymentPanel
+            basket={basket}
+            posMode={posMode}
+            isAdmin={isAdmin}
+            isOnline={isOnline}
+            totalAmount={totalAmount}
+            totalCost={totalCost}
+            profit={profit}
+            marketplaceFee={marketplaceFee}
+            isCredit={isCredit}
+            customerMode={customerMode}
+            selectedCustomerId={selectedCustomerId}
+            customerLoyaltyPoints={customerLoyaltyPoints}
+            paymentType={paymentType}
+            bankName={bankName}
+            creditDueDate={creditDueDate}
+            notes={notes}
+            salesChannel={salesChannel}
+            applyEdv={applyEdv}
+            returnStatus={returnStatus}
+            cashReceivedInput={cashReceivedInput}
+            useLoyaltyPoints={useLoyaltyPoints}
+            loyaltyDiscountInput={loyaltyDiscountInput}
+            activeBanksList={activeBanksList}
+            activeSettings={activeSettings}
+            isSellingAtLoss={isSellingAtLoss}
+            heldSales={activeHeldSales}
+            createSalePending={createSaleMutation.isPending}
+            createReturnPending={createReturnMutation.isPending}
+            onPaymentType={setPaymentType}
+            onBankName={setBankName}
+            onCreditDueDate={setCreditDueDate}
+            onNotes={setNotes}
+            onSalesChannel={setSalesChannel}
+            onApplyEdv={setApplyEdv}
+            onReturnStatus={setReturnStatus}
+            onCashReceived={setCashReceivedInput}
+            onUseLoyaltyPoints={setUseLoyaltyPoints}
+            onLoyaltyDiscountInput={setLoyaltyDiscountInput}
+            onCheckout={handleCheckout}
+            onOpenHoldModal={() => setIsHoldModalOpen(true)}
+            onOpenHeldList={() => { setIsHeldListOpen(true); refetchHeldSales(); }}
+            onPrintPickTicket={async () => {
+              if (basket.length === 0) {
+                toast({ title: "Xəta!", description: "Səbət boşdur", variant: "destructive" });
+                return;
+              }
+              const ok = await printPickTicket(basket, holdLabel || "");
+              if (ok) toast({ title: "Yığım bileti gönderildi! 📋", variant: "success" });
+              else toast({ title: "Xəta!", description: "Çap edilerken səhv baş verdi", variant: "destructive" });
+            }}
+          />
         </div>
       </div>
 

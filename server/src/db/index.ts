@@ -17,9 +17,11 @@ if (!process.env.DATABASE_URL) {
         for (const line of content.split("\n")) {
           const trimmed = line.trim();
           if (trimmed && !trimmed.startsWith("#") && trimmed.includes("=")) {
-            const [key, ...valueParts] = trimmed.split("=");
-            const value = valueParts.join("=").trim().replace(/^['"]|['"]$/g, "");
-            process.env[key.trim()] = value;
+            const splitIdx = trimmed.indexOf("=");
+            if (splitIdx === -1) continue;
+            const key = trimmed.substring(0, splitIdx).trim();
+            const value = trimmed.substring(splitIdx + 1).trim().replace(/^['"]|['"]$/g, "");
+            if (key) process.env[key] = value;
           }
         }
         break;

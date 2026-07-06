@@ -15,3 +15,12 @@ export function sanitizeQtyInput(val: string): string {
   }
   return cleaned;
 }
+
+export function cleanNumberInput(val: string): string {
+  // Convert commas to dots first (European-style decimal separator)
+  const normalized = val.replace(/,/g, ".");
+  const onlyDigitsAndDot = normalized.replace(/[^0-9.]/g, "");
+  const parts = onlyDigitsAndDot.split(".");
+  const singleDot = parts[0] + (parts.length > 1 ? "." + parts.slice(1).join("") : "");
+  return sanitizeQtyInput(singleDot);
+}

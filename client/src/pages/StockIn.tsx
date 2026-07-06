@@ -5,6 +5,7 @@ import { ArrowLeft, PlusCircle, CheckCircle, Info, Lock, Edit2, X, Plus } from "
 import { useToast } from "../components/Toast.tsx";
 import { sanitizeQtyInput } from "../lib/utils.ts";
 import { generateValidEAN13 } from "../components/Barcode.tsx";
+import { TableSkeleton } from "../components/Skeleton.tsx";
 
 const emptyEntry = {
   productId: "",
@@ -757,11 +758,7 @@ export default function StockIn() {
               </thead>
               <tbody>
                 {isEntriesLoading ? (
-                  <tr>
-                    <td colSpan={6} className="py-8 text-center text-xs text-gray-400">
-                      Yüklənir...
-                    </td>
-                  </tr>
+                  <TableSkeleton rows={6} colSpan={6} />
                 ) : filteredEntries.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="py-12 text-center text-xs text-gray-400">

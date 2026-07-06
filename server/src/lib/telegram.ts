@@ -14,14 +14,17 @@ export async function sendTelegramNotification(tenantId: number, message: string
 
     if (tenantSettings.length === 0) return;
     const s = tenantSettings[0];
+    if (!s) return;
 
     // 2. Check if notifications are enabled
-    if (s.telegramNotificationsEnabled !== 1 || !s.telegramBotToken || !s.telegramChatId) {
+    const botToken = s.telegramBotToken;
+    const chatIdRaw = s.telegramChatId;
+    if (s.telegramNotificationsEnabled !== 1 || !botToken || !chatIdRaw) {
       return;
     }
 
-    const token = s.telegramBotToken.trim();
-    const chatId = s.telegramChatId.trim();
+    const token = botToken.trim();
+    const chatId = chatIdRaw.trim();
 
     // 3. Make Telegram HTTPS call
     const url = `https://api.telegram.org/bot${token}/sendMessage`;
