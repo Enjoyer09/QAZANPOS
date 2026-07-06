@@ -486,6 +486,12 @@ export default function Dashboard() {
   const [filterActive, setFilterActive] = useState(false);
   const [activeTab, setActiveTab] = useState<"summary" | "analytics" | "finance">("summary");
 
+  // Cash Register Adjust state
+  const [isCashAdjustOpen, setIsCashAdjustOpen] = useState(false);
+  const [cashAdjustBalance, setCashAdjustBalance] = useState("");
+  const [cashAdjustNotes, setCashAdjustNotes] = useState("");
+  const [isSubmittingCashAdjust, setIsSubmittingCashAdjust] = useState(false);
+
   const { data: balances, isLoading: isBalancesLoading, refetch: refetchBalances } = useQuery<any>({
     queryKey: ["/api/dashboard/balances"],
     queryFn: async () => {
@@ -1195,6 +1201,36 @@ export default function Dashboard() {
                     <span className="text-[9px] text-gray-400 block mt-1">Bizim investorlara borcumuz</span>
                   </div>
                 </div>
+
+                {/* Cash Register Balance Card */}
+                <div className="bg-white border border-gray-100 p-5 rounded-2xl shadow-xs glass-card relative overflow-hidden">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Kassa Qalığı (Sayılan)</span>
+                    <div className="size-7 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center animate-pulse-subtle">
+                      <Coins className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <span className={`text-lg font-black font-mono ${balances?.cashRegisterBalance !== null ? "text-amber-700" : "text-gray-300"}`}>
+                      {balances?.cashRegisterBalance !== null ? `${Number(balances.cashRegisterBalance).toFixed(2)} ₼` : "Sayılmayıb"}
+                    </span>
+                    <span className="text-[9px] text-gray-400 block mt-1">
+                      {balances?.cashRegisterUpdatedAt
+                        ? `Son yenilənmə: ${new Date(balances.cashRegisterUpdatedAt).toLocaleDateString("az-AZ", { hour: "2-digit", minute: "2-digit" })}`
+                        : "Hələ sayılmayıb"}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setCashAdjustBalance(balances?.cashRegisterBalance !== null ? String(balances.cashRegisterBalance) : "0");
+                      setCashAdjustNotes("");
+                      setIsCashAdjustOpen(true);
+                    }}
+                    className="mt-3 w-full py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 font-bold text-[10px] rounded-xl border border-amber-200/50 transition-all cursor-pointer"
+                  >
+                    🪙 Kassanı Say
+                  </button>
+                </div>
               </div>
 
               {/* Action Forms / Transfer Section */}
@@ -1373,6 +1409,54 @@ export default function Dashboard() {
                   </div>
                 </div>
               </div>
+
+              {/* Cash Register Adjust Modal */}
+              {isCashAdjustOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setIsCashAdjustOpen(false)}>
+                  <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md mx-4 border border-gray-100 glass" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-extrabold text-gray-900">Kassanı Say</h3>
+                      <button onClick={() => setIsCashAdjustOpen(false)} className="text-gray-400 hover:text-gray-900 cursor-pointer">✕</button>
+                    </div>
+                    <form onSubmit={async (e) => {
+                      e.preventDefault();
+                      if (!cashAdjustBalance) return;
+                      setIsSubmittingCashAdjust(true);
+                      try {
+                        const res = await fetch("/api/cash/adjust", {
+                          method: "POST",
+                          headers: {
+                            "Content-Type": "application/json",
+                            "X-User-Username": (() => {
+                              try { const u = localStorage.getItem("qazanpos_user"); return u ? JSON.parse(u).username : "system"; }
+                              catch { return "system"; }
+                            })()
+                          },
+                          body: JSON.stringify({ balance: parseFloat(cashAdjustBalance), notes: cashAdjustNotes }),
+                        });
+                        if (!res.ok) throw new Error();
+                        toast({ title: "Kassa qalığı yeniləndi", description: `${parseFloat(cashAdjustBalance).toFixed(2)} ₼ olaraq qeyd edildi.` });
+                        setIsCashAdjustOpen(false);
+                        refetchBalances();
+                      } catch {
+                        toast({ title: "Xəta", description: "Kassa qalığı yenilənə bilmədi.", variant: "destructive" });
+                      } finally { setIsSubmittingCashAdjust(false); }
+                    }}>
+                      <div className="space-y-1 mb-4">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase">Kassadakı Real Nağd Pul (₼)</label>
+                        <input type="number" step="0.01" placeholder="0.00" value={cashAdjustBalance} onChange={e => setCashAdjustBalance(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-amber-500 bg-gray-50/30" required autoFocus />
+                      </div>
+                      <div className="space-y-1 mb-5">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase">Qeyd (İstəyə bağlı)</label>
+                        <input type="text" placeholder="Məs. Gün sonu sayım" value={cashAdjustNotes} onChange={e => setCashAdjustNotes(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-amber-500 bg-gray-50/30" />
+                      </div>
+                      <button type="submit" disabled={isSubmittingCashAdjust} className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl disabled:opacity-50 cursor-pointer transition-colors shadow-sm">
+                        {isSubmittingCashAdjust ? "Yenilənir..." : "Kassa Qalığını Təsdiq Et"}
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>

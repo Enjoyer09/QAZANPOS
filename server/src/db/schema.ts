@@ -837,6 +837,27 @@ export const safeTransfersRelations = relations(safeTransfers, ({ one }) => ({
   }),
 }));
 
+// 23. Cash Register (manual real cash balance tracking)
+export const cashRegister = pgTable("cash_register", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" })
+    .default(1)
+    .unique(),
+  balance: doublePrecision("balance").notNull().default(0.0),
+  lastUpdated: text("last_updated").notNull(),
+  updatedBy: text("updated_by").notNull(),
+  notes: text("notes"),
+});
+
+export const cashRegisterRelations = relations(cashRegister, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [cashRegister.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
 export const shiftsRelations = relations(shifts, ({ one, many }) => ({
   tenant: one(tenants, {
     fields: [shifts.tenantId],

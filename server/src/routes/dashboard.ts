@@ -92,6 +92,10 @@ export default function dashboardRoutes(): Router {
       const expenses = await db.select().from(schema.expenses).where(eq(schema.expenses.tenantId, req.tenantId));
       const safeTransfers = await db.select().from(schema.safeTransfers).where(eq(schema.safeTransfers.tenantId, req.tenantId));
 
+      // Include salary payments, vendor payments for complete financial picture
+      const salaryPaymentsList = await db.select().from(schema.salaryPayments).where(eq(schema.salaryPayments.tenantId, req.tenantId));
+      const vendorPaymentsList = await db.select().from(schema.vendorPayments).where(eq(schema.vendorPayments.tenantId, req.tenantId));
+
       let kassa = 0, safe = 0, bank = 0, debt = 0;
 
       for (const sale of sales) {
@@ -109,9 +113,79 @@ export default function dashboardRoutes(): Router {
         else if (st.type === "safe_withdrawal") safe -= st.amount;
       }
 
-      res.json({ kassa: Math.max(0, kassa), safe: Math.max(0, safe), bank: Math.max(0, bank), debt: Math.max(0, debt), investorDebt: 0 });
+      // Deduct salary payments and vendor payments from cash
+      for (const sp of salaryPaymentsList) {
+        if (sp.paymentType === "Nəğd") kassa -= sp.amount;
+        else if (["Kart", "Kart2Kart", "Köçürmə"].includes(sp.paymentType)) bank -= sp.amount;
+      }
+      for (const vp of vendorPaymentsList) {
+        if (vp.paymentType === "Nəğd") kassa -= vp.amount;
+        else if (["Kart", "Kart2Kart", "Köçürmə"].includes(vp.paymentType)) bank -= vp.amount;
+      }
+
+      // Fetch the manually counted cash register balance (if any)
+      const cashReg = await db.query.cashRegister.findFirst({
+        where: eq(schema.cashRegister.tenantId, req.tenantId)
+      });
+
+      res.json({
+        kassa: Math.max(0, kassa),
+        safe: Math.max(0, safe),
+        bank: Math.max(0, bank),
+        debt: Math.max(0, debt),
+        investorDebt: 0,
+        cashRegisterBalance: cashReg?.balance || null,
+        cashRegisterUpdatedAt: cashReg?.lastUpdated || null,
+      });
     } catch (error) {
       res.status(500).json({ message: "Balans hesablanarkən xəta baş verdi" });
+    }
+  });
+
+  // ─── Cash Register ──────────────────────────────────────────────────────
+
+  router.get("/cash/register", async (req: AuthenticatedRequest, res) => {
+    try {
+      const reg = await db.query.cashRegister.findFirst({
+        where: eq(schema.cashRegister.tenantId, req.tenantId)
+      });
+      res.json(reg || { balance: 0, lastUpdated: null, updatedBy: null });
+    } catch (error) {
+      res.status(500).json({ message: "Kassa qalığı gətirilərkən xəta" });
+    }
+  });
+
+  router.post("/cash/adjust", async (req: AuthenticatedRequest, res) => {
+    try {
+      const { newBalance, notes } = req.body;
+      if (newBalance === undefined || newBalance === null) {
+        return res.status(400).json({ message: "Yeni balans daxil edilməlidir" });
+      }
+      const username = req.headers["x-user-username"] as string || "Sistem";
+      const balance = parseFloat(newBalance);
+
+      const existing = await db.query.cashRegister.findFirst({
+        where: eq(schema.cashRegister.tenantId, req.tenantId)
+      });
+
+      if (existing) {
+        await db.update(schema.cashRegister)
+          .set({ balance, lastUpdated: new Date().toISOString(), updatedBy: username, notes: notes || null })
+          .where(eq(schema.cashRegister.tenantId, req.tenantId));
+      } else {
+        await db.insert(schema.cashRegister).values({
+          tenantId: req.tenantId, balance, lastUpdated: new Date().toISOString(),
+          updatedBy: username, notes: notes || null,
+        });
+      }
+
+      await logActivity(req, "CASH_REGISTER_ADJUST",
+        `Kassa qalığı düzəliş edildi: ${balance.toFixed(2)} ₼${notes ? ` (Qeyd: ${notes})` : ""}`
+      );
+
+      res.json({ success: true, balance, message: "Kassa qalığı yeniləndi" });
+    } catch (error) {
+      res.status(500).json({ message: "Kassa qalığı yenilənərkən xəta" });
     }
   });
 

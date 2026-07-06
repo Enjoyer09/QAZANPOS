@@ -115,15 +115,10 @@ export default function salesRoutes(): Router {
           warehouseId: targetWarehouseId, shiftId: shiftIdToLink,
           loyaltyDiscountPaid: discountPaid, loyaltyPointsEarned: pointsEarned,
         }).returning();
-        const saleId = newSale[0].id;
-
-        if (customerId) {
-          const customerRecord = await tx.query.customers.findFirst({ where: and(eq(schema.customers.id, customerId), eq(schema.customers.tenantId, req.tenantId)) });
-          if (customerRecord) {
-            const currentPoints = Number(customerRecord.loyaltyPoints) || 0;
-            const newPoints = Math.max(0, currentPoints - discountPaid + pointsEarned);
-            await tx.update(schema.customers).set({ loyaltyPoints: newPoints }).where(eq(schema.customers.id, customerId));
-          }
+        const saleId = newSale[0].id;      if (customerId) {
+          await tx.execute(
+            sql`UPDATE customers SET loyalty_points = GREATEST(0, COALESCE(loyalty_points, 0) - ${discountPaid} + ${pointsEarned}) WHERE id = ${customerId} AND tenant_id = ${req.tenantId}`
+          );
         }
 
         for (const item of processedItems) {

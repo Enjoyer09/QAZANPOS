@@ -2418,18 +2418,10 @@ router.post("/sales", async (req, res) => {
 
       // Update customer loyalty balance
       if (customerId) {
-        const customerRecord = await tx.query.customers.findFirst({
-          where: and(eq(schema.customers.id, customerId), eq(schema.customers.tenantId, req.tenantId))
-        });
-        if (customerRecord) {
-          const currentPoints = Number(customerRecord.loyaltyPoints) || 0;
-          const newPoints = Math.max(0, currentPoints - discountPaid + pointsEarned);
-          await tx
-            .update(schema.customers)
-            .set({ loyaltyPoints: newPoints })
-            .where(eq(schema.customers.id, customerId));
+          await tx.execute(
+            sql`UPDATE customers SET loyalty_points = GREATEST(0, COALESCE(loyalty_points, 0) - ${discountPaid} + ${pointsEarned}) WHERE id = ${customerId} AND tenant_id = ${req.tenantId}`
+          );
         }
-      }
 
       // Insert items
       for (const item of processedItems) {

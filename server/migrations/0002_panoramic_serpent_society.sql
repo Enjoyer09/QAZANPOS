@@ -1,0 +1,1 @@
+ALTER TABLE "cash_register" ADD CONSTRAINT "cash_register_tenant_id_unique" UNIQUE("tenant_id");

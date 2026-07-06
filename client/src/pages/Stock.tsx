@@ -44,7 +44,6 @@ export default function Stock() {
   const [stocktakeCounts, setStocktakeCounts] = useState<Record<number, string>>({}); // productId -> counted qty
   const [stocktakeNotes, setStocktakeNotes] = useState<Record<number, string>>({}); // productId -> notes
   const [stocktakeSubmitted, setStocktakeSubmitted] = useState(false);
-  const [, setShowPOPrint] = useState(false);
 
   const handleCopy = (text: string, index: number) => {
     navigator.clipboard.writeText(text);

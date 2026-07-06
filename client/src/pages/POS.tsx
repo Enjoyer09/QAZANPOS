@@ -24,8 +24,8 @@ import {
   saveOfflineReturn
 } from "../lib/offlineSync.ts";
 import { useToast } from "../components/Toast.tsx";
-import { printReceipt, printZReport, printPickTicket } from "../components/ReceiptPrint.tsx";
-import { sanitizeQtyInput, cleanNumberInput } from "../lib/utils.ts";
+import { printReceipt, printPickTicket } from "../components/ReceiptPrint.tsx";
+import { cleanNumberInput } from "../lib/utils.ts";
 import CartPanel from "../components/pos/CartPanel.tsx";
 import ProductGrid from "../components/pos/ProductGrid.tsx";
 import PaymentPanel from "../components/pos/PaymentPanel.tsx";
@@ -64,7 +64,7 @@ export default function POS() {
     try {
       const userStr = localStorage.getItem("qazanpos_user");
       return userStr ? JSON.parse(userStr) : null;
-    } catch (_e) {
+    } catch {
       return null;
     }
   })();
@@ -75,7 +75,7 @@ export default function POS() {
     try {
       const saved = localStorage.getItem("qazanpos_pos_basket");
       return saved ? JSON.parse(saved) : [];
-    } catch (_e) {
+    } catch {
       return [];
     }
   });
@@ -87,8 +87,8 @@ export default function POS() {
       console.error("Persisting basket failed:", e);
     }
   }, [basket]);
-  const [editingPrices, setEditingPrices] = useState<Record<number, string>>({});
-  const [editingQuantities, setEditingQuantities] = useState<Record<number, string>>({});
+  const [, setEditingPrices] = useState<Record<number, string>>({});
+  const [, setEditingQuantities] = useState<Record<number, string>>({});
   const [selectedProductId, setSelectedProductId] = useState("");
   const [selectedQuantity, setSelectedQuantity] = useState("1");
   const [productSearchQuery, setProductSearchQuery] = useState("");
@@ -153,7 +153,7 @@ export default function POS() {
   });
 
   // Shifts State & Queries
-  const { data: activeShiftData, isLoading: isActiveShiftLoading } = useQuery<any>({
+  const { data: activeShiftData } = useQuery<any>({
     queryKey: ["/api/shifts/active"],
     queryFn: async () => {
       const res = await fetch("/api/shifts/active");
@@ -164,56 +164,12 @@ export default function POS() {
   });
   const activeShift = activeShiftData?.activeShift;
 
-  const [openingCashInput, setOpeningCashInput] = useState("0");
-  const [actualCashInput, setActualCashInput] = useState("");
-  const [isCloseShiftModalOpen, setIsCloseShiftModalOpen] = useState(false);
-  const [closeShiftStats, setCloseShiftStats] = useState<any>(null);
 
-  const openShiftMutation = useMutation({
-    mutationFn: async (openingCash: number) => {
-      const res = await fetch("/api/shifts/open", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ openingCash }),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "Növbə açıla bilmədi");
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/shifts/active"] });
-      toast({ title: "Növbə Açıldı!", description: "Kassa növbəniz uğurla aktivləşdirildi.", variant: "success" });
-    },
-    onError: (err: any) => {
-      toast({ title: "Xəta!", description: err.message, variant: "destructive" });
-    }
-  });
-
-  const closeShiftMutation = useMutation({
-    mutationFn: async (actualCash: number) => {
-      const res = await fetch("/api/shifts/close", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ actualCash }),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "Növbə bağlana bilmədi");
-      }
-      return res.json();
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/shifts/active"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
-      setCloseShiftStats(data);
-      toast({ title: "Növbə Bağlandı!", description: "Z-Hesabatı uğurla hazırlandı.", variant: "success" });
-    },
-    onError: (err: any) => {
-      toast({ title: "Xəta!", description: err.message, variant: "destructive" });
-    }
-  });
+  // Shift Open/Close State
+  const [shiftModalType, setShiftModalType] = useState<"open" | "close" | null>(null);
+  const [shiftOpeningCash, setShiftOpeningCash] = useState("0");
+  const [shiftActualCash, setShiftActualCash] = useState("");
+  const [, setCloseShiftStats] = useState<any>(null); // kept for future Z-report rendering
 
   // Loyalty Points State
   const [useLoyaltyPoints, setUseLoyaltyPoints] = useState(false);
@@ -256,13 +212,13 @@ export default function POS() {
     setReturnStatus("returned_to_stock");
     setUseLoyaltyPoints(false);
     setLoyaltyDiscountInput("0");
-    setActualCashInput("");
+    setShiftActualCash("");
     setCashReceivedInput("");
-    setCloseShiftStats(null);
+    // closeShiftStats reset handled by setState usage above
   };
 
   // Queries
-  const { data: stockLevels, isLoading: isStockLoading } = useQuery<any[]>({
+  const { data: stockLevels } = useQuery<any[]>({
     queryKey: ["/api/stock/levels", currentUser?.warehouseId],
     queryFn: async () => {
       const url = currentUser?.warehouseId 
@@ -394,39 +350,7 @@ export default function POS() {
     }
   }, [activeSettings?.activeBanks]);
 
-  // Filter products that have positive stock levels (in sale mode) or all products (in return mode)
-  const sellableProducts = posMode === "sale"
-    ? (activeStockLevels?.filter((p) => parseFloat(p.currentQuantity) > 0) || [])
-    : (activeStockLevels || []);
 
-  const normalizeSearchText = (text: any): string => {
-    if (text === null || text === undefined) return "";
-    const str = String(text);
-    return str
-      .toLocaleLowerCase("az-AZ")
-      .replace(/ı/g, "i")
-      .replace(/ə/g, "e")
-      .replace(/ö/g, "o")
-      .replace(/ü/g, "u")
-      .replace(/ş/g, "s")
-      .replace(/ç/g, "c")
-      .replace(/ğ/g, "g");
-  };
-  
-  // Filter products by manual search input
-  const searchedProducts = sellableProducts.filter((p) => {
-    const q = productSearchQuery.trim();
-    if (!q) return true;
-    const words = normalizeSearchText(q).split(/\s+/).filter(Boolean);
-    if (words.length === 0) return true;
-    return words.every((word) => {
-      return (
-        normalizeSearchText(p.productName).includes(word) ||
-        (p.barcode && normalizeSearchText(p.barcode).includes(word)) ||
-        (p.description && normalizeSearchText(p.description).includes(word))
-      );
-    });
-  });  // Scanning State & Helpers
   const [scanInput, setScanInput] = useState("");
 
   const addProductToBasket = (prod: any, serialNum?: string | null, bypassStockCheck = false, customSalePrice?: number) => {
@@ -632,39 +556,6 @@ export default function POS() {
     }
   };
 
-  const handleScanInput = (val: string) => {
-    setScanInput(val);
-    const cleaned = val.trim().toUpperCase();
-    if (!cleaned) return;
-
-    // 1. Check if the scanned value matches an active serial number (IMEI)
-    let foundProduct = null;
-    let foundSerial = null;
-
-    for (const p of sellableProducts) {
-      if (p.activeSerials && p.activeSerials.map((s: string) => s.toUpperCase()).includes(cleaned)) {
-        foundProduct = p;
-        foundSerial = cleaned;
-        break;
-      }
-    }
-
-    // 2. If not found as a serial number, check if it matches a standard barcode
-    if (!foundProduct) {
-      foundProduct = sellableProducts.find((p) => p.barcode === val.trim());
-    }
-
-    if (foundProduct) {
-      addProductToBasket(foundProduct, foundSerial);
-      setScanInput(""); // Clear scan input!
-      toast({
-        title: "Skan edildi!",
-        description: `Məhsul səbətə əlavə olundu: ${foundProduct.productName}${foundSerial ? ` (IMEI: ${foundSerial})` : ""}`,
-        variant: "success"
-      });
-    }
-  };
-
   const handleRemoveSerialFromBasket = (productId: number, serialNum: string) => {
     setBasket((prev) =>
       prev
@@ -742,89 +633,6 @@ export default function POS() {
     } finally {
       setSavingCustomer(false);
     }
-  };
-
-  // Add item to basket
-  const handleAddToBasket = () => {
-    if (!selectedProductId) {
-      toast({ title: "Xəta!", description: "Məhsul seçin", variant: "destructive" });
-      return;
-    }
-
-    const prod = sellableProducts.find((p) => p.productId === parseInt(selectedProductId));
-    if (!prod) return;
-
-    if (prod.trackingType === "serialized") {
-      toast({
-        title: "Serial Məhsul Daxiletməsi",
-        description: "Serial nömrəli məhsulları lütfən yuxarıdakı Sürətli Skaner bölməsindən birbaşa IMEI/Serial nömrəsini skan edərək əlavə edin.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    const qty = parseFloat(selectedQuantity) || 1;
-    if (qty <= 0) {
-      toast({ title: "Xəta!", description: "Düzgün miqdar daxil edin", variant: "destructive" });
-      return;
-    }
-
-    if (prod.unit.trim().toLowerCase() === "ədəd" && qty % 1 !== 0) {
-      toast({
-        title: "Xəta!",
-        description: `"${prod.productName}" məhsulunun ölçü vahidi "ədəd" olduğu üçün miqdarı yalnız tam ədəd daxil edilə bilər (məs. 1, 2, 5).`,
-        variant: "destructive"
-      });
-      return;
-    }
-
-    // Check if adding exceeds stock (only in sale mode)
-    const existingInBasket = basket.find((item) => item.productId === prod.productId);
-    const currentBasketQty = existingInBasket ? existingInBasket.quantity : 0;
-    if (posMode === "sale" && currentBasketQty + qty > prod.currentQuantity) {
-      toast({
-        title: "Xəta!",
-        description: (isAdmin || currentUser?.staffCanViewStockBalances !== 0)
-          ? `Anbarda kifayət qədər yoxdur. Maksimum: ${prod.currentQuantity} ${prod.unit}`
-          : "Anbarda bu miqdarda məhsul yoxdur.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (existingInBasket) {
-      setBasket((prev) =>
-        prev.map((item) => {
-          if (item.productId === prod.productId) {
-            return {
-              ...item,
-              quantity: item.quantity + qty,
-              originalPrice: item.originalPrice || item.salePrice
-            };
-          }
-          return item;
-        })
-      );
-    } else {
-      const defaultPrice = prod.lastSalePrice || prod.lastPurchasePrice || 0;
-      setBasket((prev) => [
-        ...prev,
-        {
-          productId: prod.productId,
-          productName: prod.productName,
-          unit: prod.unit,
-          quantity: qty,
-          salePrice: defaultPrice,
-          originalPrice: defaultPrice,
-          minPrice: prod.lastPurchasePrice,
-          category: prod.category,
-        },
-      ]);
-    }
-
-    setSelectedProductId("");
-    setSelectedQuantity("1");
-    setProductSearchQuery(""); // Clear manual search query after adding!
   };
 
   // Remove item from basket
@@ -931,6 +739,60 @@ export default function POS() {
   }, [salesChannel, basket, parsedCommissions]);
 
   const isCredit = paymentType === "Nisyə";
+
+  // Shift Mutations
+  const openShiftMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/shifts/open", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ openingCash: parseFloat(shiftOpeningCash) || 0 }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Növbə açılmadı");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/shifts/active"] });
+      toast({ title: "Növbə açıldı! ✅", description: `Açılış balansı: ${data.openingCash.toFixed(2)} ₼`, variant: "success" });
+      setShiftModalType(null);
+      setShiftOpeningCash("0");
+    },
+    onError: (err: Error) => {
+      toast({ title: "Xəta!", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const closeShiftMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/shifts/close", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ actualCash: parseFloat(shiftActualCash) || 0 }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Növbə bağlanmadı");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/shifts/active"] });
+      setCloseShiftStats(data.stats);
+      toast({
+        title: "Növbə bağlandı! 📊",
+        description: `Gözlənilən: ${data.stats.expectedCash.toFixed(2)} ₼ • Sayılan: ${data.stats.actualCash.toFixed(2)} ₼ • Fərq: ${data.stats.variance.toFixed(2)} ₼`,
+        variant: "success",
+      });
+      setShiftModalType(null);
+      setShiftActualCash("");
+    },
+    onError: (err: Error) => {
+      toast({ title: "Xəta!", description: err.message, variant: "destructive" });
+    },
+  });
 
   // Mutations
   const createSaleMutation = useMutation({
@@ -1309,6 +1171,56 @@ export default function POS() {
         </div>
       </div>
 
+      {/* Shift Status Bar */}
+      {isOnline && (
+        <div className={`rounded-2xl border p-4 flex items-center justify-between transition-all ${
+          activeShift
+            ? "bg-emerald-50/80 border-emerald-200/60"
+            : "bg-amber-50/80 border-amber-200/60"
+        }`}>
+          <div className="flex items-center gap-3">
+            <div className={`size-9 rounded-xl flex items-center justify-center ${
+              activeShift ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+            }`}>
+              {activeShift ? "🟢" : "🔴"}
+            </div>
+            <div>
+              {activeShift ? (
+                <>
+                  <p className="text-sm font-bold text-emerald-900">Növbə açıqdır</p>
+                  <p className="text-[11px] text-emerald-600/80 font-medium">
+                    Açılış: {activeShift.openingCash?.toFixed(2)} ₼ •
+                    Başlama: {new Date(activeShift.openedAt).toLocaleTimeString("az-AZ", { hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-bold text-amber-900">Növbə açıq deyil</p>
+                  <p className="text-[11px] text-amber-600/80 font-medium">Satış etmək üçün növbə açın</p>
+                </>
+              )}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            {activeShift ? (
+              <button
+                onClick={() => setShiftModalType("close")}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-all cursor-pointer shadow-sm"
+              >
+                Növbəni Bağla
+              </button>
+            ) : (
+              <button
+                onClick={() => setShiftModalType("open")}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl transition-all cursor-pointer shadow-sm"
+              >
+                Növbəni Aç
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
         {/* Left Side: Basket & Product Selection */}
         <div className="xl:col-span-2 space-y-6">
@@ -1576,6 +1488,106 @@ export default function POS() {
           />
         </div>
       </div>
+
+      {/* === SHIFT OPEN MODAL === */}
+      {shiftModalType === "open" && (
+        <div className="liquid-glass-overlay !z-100">
+          <div className="liquid-glass-card max-w-sm p-7 space-y-5">
+            <div className="flex items-center gap-3">
+              <div className="size-10 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-lg">
+                🟢
+              </div>
+              <div>
+                <h3 className="text-base font-black text-gray-900">Növbəni Aç</h3>
+                <p className="text-[11px] text-gray-400">Kassadakı ilkin nağd pul miqdarını daxil edin</p>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-gray-400 uppercase tracking-wider block text-[10px] font-bold">Açılış Nağd Balansı (₼)</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+                value={shiftOpeningCash}
+                onChange={(e) => setShiftOpeningCash(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && !openShiftMutation.isPending && openShiftMutation.mutate()}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none bg-gray-50 focus:ring-1 focus:ring-amber-400 text-sm font-mono font-bold"
+                autoFocus
+              />
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setShiftModalType(null); setShiftOpeningCash("0"); }}
+                className="flex-1 py-2.5 border border-gray-200 text-gray-600 font-bold rounded-xl text-sm hover:bg-gray-50 transition-all cursor-pointer"
+              >
+                Ləğv Et
+              </button>
+              <button
+                onClick={() => openShiftMutation.mutate()}
+                disabled={openShiftMutation.isPending}
+                className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-sm disabled:opacity-50 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {openShiftMutation.isPending ? "Açılır..." : "Növbəni Aç"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* === SHIFT CLOSE MODAL === */}
+      {shiftModalType === "close" && (
+        <div className="liquid-glass-overlay !z-100">
+          <div className="liquid-glass-card max-w-sm p-7 space-y-5">
+            <div className="flex items-center gap-3">
+              <div className="size-10 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-lg">
+                📊
+              </div>
+              <div>
+                <h3 className="text-base font-black text-gray-900">Növbəni Bağla</h3>
+                <p className="text-[11px] text-gray-400">Kassadakı real nağd pul miqdarını daxil edin</p>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-gray-400 uppercase tracking-wider block text-[10px] font-bold">Sayılan Nağd Balans (₼)</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+                value={shiftActualCash}
+                onChange={(e) => setShiftActualCash(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && !closeShiftMutation.isPending && closeShiftMutation.mutate()}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none bg-gray-50 focus:ring-1 focus:ring-emerald-400 text-sm font-mono font-bold"
+                autoFocus
+              />
+            </div>
+            {activeShift && (
+              <div className="bg-gray-50 rounded-xl p-3 space-y-1 text-[11px]">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Açılış balansı:</span>
+                  <span className="font-bold font-mono">{activeShift.openingCash?.toFixed(2)} ₼</span>
+                </div>
+              </div>
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setShiftModalType(null); setShiftActualCash(""); }}
+                className="flex-1 py-2.5 border border-gray-200 text-gray-600 font-bold rounded-xl text-sm hover:bg-gray-50 transition-all cursor-pointer"
+              >
+                Ləğv Et
+              </button>
+              <button
+                onClick={() => closeShiftMutation.mutate()}
+                disabled={closeShiftMutation.isPending}
+                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm disabled:opacity-50 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {closeShiftMutation.isPending ? "Bağlanır..." : "Növbəni Bağla"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* === HOLD CART MODAL === */}
       {isHoldModalOpen && (

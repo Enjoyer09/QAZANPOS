@@ -8,6 +8,20 @@
       "when": 1779873066779,
       "tag": "0000_dashing_sphinx",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1783352421733,
+      "tag": "0001_bored_pepper_potts",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1783352511071,
+      "tag": "0002_panoramic_serpent_society",
+      "breakpoints": true
     }
   ]
 }
