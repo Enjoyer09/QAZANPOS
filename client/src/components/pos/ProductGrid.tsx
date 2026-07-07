@@ -239,9 +239,23 @@ export default function ProductGrid({
               }}
                 className="flex items-center justify-between p-2.5 hover:bg-primary/5 rounded-xl cursor-pointer transition-colors border border-gray-50 hover:border-primary/10 text-xs font-semibold text-left">
                 <div className="text-left">
-                  <span className="block font-bold text-gray-900">{p.productName}</span>
+                  <span className="block font-bold text-gray-900 flex items-center gap-2">
+                    {p.productName}
+                    {p.currentQuantity <= 0 && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-red-50 text-red-600 border border-red-100">
+                        Bitib
+                      </span>
+                    )}
+                    {p.currentQuantity > 0 && p.currentQuantity < 5 && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-amber-50 text-amber-600 border border-amber-100">
+                        Az qalıb
+                      </span>
+                    )}
+                  </span>
                   <span className="block text-[10px] text-gray-400 mt-0.5">
-                    {(isAdmin || currentUser?.staffCanViewStockBalances !== 0) ? `Qalıq: ${p.currentQuantity} ${p.unit} | ` : ""}Barkod: {p.barcode || "Yoxdur"}
+                    {(isAdmin || currentUser?.staffCanViewStockBalances !== 0)
+                      ? `Qalıq: ${p.currentQuantity} ${p.unit}${p.currentQuantity <= 0 ? ` ⚠️ Mədaxil edilməyib` : ""} | `
+                      : ""}Barkod: {p.barcode || "Yoxdur"}
                   </span>
                 </div>
                 <div className="text-right flex items-center gap-3">
@@ -261,8 +275,9 @@ export default function ProductGrid({
             <option value="">{searchedProducts.length === 0 ? "Axtarışa uyğun məhsul tapılmadı..." : "Məhsul seçin..."}</option>
             {searchedProducts.map((p) => (
               <option key={p.productId} value={p.productId}>
-                {p.productName} {(isAdmin || currentUser?.staffCanViewStockBalances !== 0) ? `— Qalıq: ${p.currentQuantity} ${p.unit} ` : ""}
-                ({posMode === "sale" ? `Satış: ${(p.lastSalePrice || p.lastPurchasePrice || 0).toFixed(2)} ₼` : `Geri Ödəniş: ${(p.lastSalePrice || p.lastPurchasePrice || 0).toFixed(2)} ₼`})
+                {p.productName}{(isAdmin || currentUser?.staffCanViewStockBalances !== 0)
+                  ? ` — Qalıq: ${p.currentQuantity} ${p.unit}${p.currentQuantity <= 0 ? " ⚠️" : ""}`
+                  : ""} ({posMode === "sale" ? `Satış: ${(p.lastSalePrice || p.lastPurchasePrice || 0).toFixed(2)} ₼` : `Geri Ödəniş: ${(p.lastSalePrice || p.lastPurchasePrice || 0).toFixed(2)} ₼`})
               </option>
             ))}
           </select>

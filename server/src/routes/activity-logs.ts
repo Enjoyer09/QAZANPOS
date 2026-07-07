@@ -12,7 +12,10 @@ export default function activityLogRoutes(): Router {
     try {
       const archived = req.query.archived as string;
       const date = req.query.date as string;
+      const dateFrom = req.query.dateFrom as string;
+      const dateTo = req.query.dateTo as string;
       const actionFilter = req.query.action as string;
+      const search = req.query.search as string;
 
       let conditions = [eq(schema.activityLogs.tenantId, req.tenantId)];
 
@@ -28,9 +31,27 @@ export default function activityLogRoutes(): Router {
         conditions.push(sql`${schema.activityLogs.timestamp} LIKE ${date + "%"}`);
       }
 
+      // Filter by date range (dateFrom / dateTo)
+      if (dateFrom) {
+        conditions.push(sql`${schema.activityLogs.timestamp} >= ${dateFrom + "T00:00:00.000Z"}`);
+      }
+      if (dateTo) {
+        conditions.push(sql`${schema.activityLogs.timestamp} <= ${dateTo + "T23:59:59.999Z"}`);
+      }
+
       // Filter by action type
       if (actionFilter) {
         conditions.push(eq(schema.activityLogs.action, actionFilter));
+      }
+
+      // Free-text search across description, username, and action
+      if (search && search.trim()) {
+        const term = `%${search.trim()}%`;
+        conditions.push(sql`(
+          ${schema.activityLogs.description} ILIKE ${term} OR
+          ${schema.activityLogs.username} ILIKE ${term} OR
+          ${schema.activityLogs.action} ILIKE ${term}
+        )`);
       }
 
       const logs = await db.select().from(schema.activityLogs)

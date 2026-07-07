@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { ArrowLeft, Printer, Check, RotateCw, Trash2, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Printer, Check, RotateCw, Trash2, AlertTriangle, XCircle } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
 import { printReceipt } from "../components/ReceiptPrint.tsx";
 
@@ -44,6 +44,7 @@ export default function Invoice({ params }: InvoiceProps) {
   const [returnItemsState, setReturnItemsState] = useState<Record<number, { quantity: number; status: "returned_to_stock" | "defective" }>>({});
   const [returnReason, setReturnReason] = useState("");
   const [showFullPayConfirmModal, setShowFullPayConfirmModal] = useState(false);
+  const [showVoidConfirm, setShowVoidConfirm] = useState(false);
 
   // Query
   const { data: invoice, isLoading, error } = useQuery<any>({
@@ -162,6 +163,35 @@ export default function Invoice({ params }: InvoiceProps) {
     },
     onError: (err: any) => {
       toast({ title: "Xəta!", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const voidMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/sales/${saleId}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-role": activeUser?.role || "",
+          "x-user-username": activeUser?.username || "",
+        },
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Satışı ləğv etmək mümkün olmadı");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/sales", saleId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stock/levels"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/summary"] });
+      toast({ title: "✅ Satış Ləğv Edildi", description: data.message || "Stok uğurla bərpa olundu.", variant: "success" });
+      setShowVoidConfirm(false);
+    },
+    onError: (err: any) => {
+      toast({ title: "❌ Xəta!", description: err.message, variant: "destructive" });
     },
   });
 
@@ -313,6 +343,14 @@ export default function Invoice({ params }: InvoiceProps) {
           >
             <Printer className="w-4 h-4" /> Qaiməni Çap Et
           </button>
+          {isAdmin && (
+            <button
+              onClick={() => setShowVoidConfirm(true)}
+              className="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white font-semibold text-sm rounded-xl cursor-pointer flex items-center gap-2 shadow-md shadow-red-500/10 transition-all hover-elevate"
+            >
+              <XCircle className="w-4 h-4" /> Satışı Ləğv Et
+            </button>
+          )}
         </div>
       </div>
 
@@ -951,6 +989,57 @@ export default function Invoice({ params }: InvoiceProps) {
               </div>
             </form>
 
+          </div>
+        </div>
+      )}
+
+      {/* Satışı Ləğv Et — Void Təsdiq Modalı */}
+      {showVoidConfirm && (
+        <div className="liquid-glass-overlay">
+          <div className="liquid-glass-card max-w-sm p-6 text-center space-y-4">
+            <div className="mx-auto size-14 rounded-full bg-red-50 text-red-600 border border-red-100 flex items-center justify-center">
+              <AlertTriangle className="w-7 h-7" />
+            </div>
+
+            <div className="space-y-1">
+              <h3 className="text-base font-black text-gray-900 tracking-tight">Satışı Ləğv Et? 🗑️</h3>
+              <p className="text-xs text-gray-500 font-semibold leading-normal">
+                Bu əməliyyat <span className="text-red-600 font-black">qaiməni tamamilə siləcək</span> və 
+                bütün məhsulları anbara geri qaytaracaq. Serial nömrələri "Anbardadır" statusuna 
+                bərpa olunacaq.
+              </p>
+            </div>
+
+            <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl text-xs font-semibold text-amber-800 flex items-start gap-2 text-left">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
+              <span>
+                <strong>Diqqət!</strong> Bu satışda qaytarış (return) varsa, void edilə bilməz. 
+                Yalnız <strong>son 24 saat</strong> ərzində edilmiş satışları ləğv etmək tövsiyə olunur.
+              </span>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowVoidConfirm(false)}
+                className="flex-1 py-3 border border-gray-200 hover:bg-gray-50 text-gray-500 rounded-xl font-black text-[10px] uppercase tracking-wider transition-all cursor-pointer"
+                disabled={voidMutation.isPending}
+              >
+                İmtina
+              </button>
+              <button
+                type="button"
+                onClick={() => voidMutation.mutate()}
+                disabled={voidMutation.isPending}
+                className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white font-black rounded-xl text-[10px] uppercase tracking-wider transition-all cursor-pointer shadow-md shadow-red-500/10 disabled:opacity-50 flex items-center justify-center gap-1.5"
+              >
+                {voidMutation.isPending ? (
+                  <>Silinir...</>
+                ) : (
+                  <><XCircle className="w-3.5 h-3.5" /> Bəli, Ləğv Et</>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

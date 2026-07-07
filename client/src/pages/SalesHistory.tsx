@@ -11,11 +11,13 @@ import {
   ShieldAlert,
   Barcode,
   AlertCircle,
+  AlertTriangle,
   ShoppingBag,
   Truck,
   Lock,
   RotateCcw,
   X,
+  XCircle,
   ChevronLeft,
   ChevronRight
 } from "lucide-react";
@@ -64,6 +66,10 @@ export default function SalesHistory() {
   const [returnAdminPassword, setReturnAdminPassword] = useState("");
   const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
 
+  // Void Sale States
+  const [showVoidConfirm, setShowVoidConfirm] = useState(false);
+  const [selectedSaleForVoid, setSelectedSaleForVoid] = useState<Sale | null>(null);
+
   const getSaleReturnableQty = (sale: Sale) => {
     let totalSold = 0;
     if (sale.items) {
@@ -101,6 +107,33 @@ export default function SalesHistory() {
     setReturnStatuses(initialStatuses);
     setReturnSerials(initialSerials);
     setIsReturnModalOpen(true);
+  };
+
+  const handleVoidSale = async () => {
+    if (!selectedSaleForVoid) return;
+    try {
+      const res = await fetch(`/api/sales/${selectedSaleForVoid.id}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-role": user?.role || "",
+          "x-user-username": user?.username || "",
+        },
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Satışı ləğv etmək mümkün olmadı");
+      }
+      const data = await res.json();
+      toast({ title: "✅ Satış Ləğv Edildi", description: data.message || "Stok uğurla bərpa olundu.", variant: "success" });
+      setShowVoidConfirm(false);
+      setSelectedSaleForVoid(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stock/levels"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/summary"] });
+    } catch (err: any) {
+      toast({ title: "❌ Xəta!", description: err.message, variant: "destructive" });
+    }
   };
 
   const handleSubmitReturn = async (e: React.FormEvent) => {
@@ -733,6 +766,18 @@ export default function SalesHistory() {
                                   <RotateCcw className="w-3.5 h-3.5" />
                                 </button>
                               )}
+                              {isAdmin && (
+                                <button
+                                  onClick={() => {
+                                    setSelectedSaleForVoid(sale);
+                                    setShowVoidConfirm(true);
+                                  }}
+                                  className="p-2 border border-gray-100 hover:border-red-200 text-gray-400 hover:text-red-600 hover:bg-red-50/30 rounded-xl cursor-pointer bg-white transition-all"
+                                  title="Satışı Ləğv Et"
+                                >
+                                  <XCircle className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -1181,6 +1226,57 @@ export default function SalesHistory() {
           )}
         </div>
       )}
+      {/* Satışı Ləğv Et — Void Təsdiq Modalı */}
+      {showVoidConfirm && selectedSaleForVoid && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white border border-gray-100 rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden glass-card relative animate-in zoom-in-95 duration-200">
+            <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-red-500 to-rose-500"></div>
+            
+            <div className="p-6 text-center space-y-4">
+              <div className="mx-auto size-14 rounded-full bg-red-50 text-red-600 border border-red-100 flex items-center justify-center">
+                <AlertTriangle className="w-7 h-7" />
+              </div>
+
+              <div className="space-y-1">
+                <h3 className="text-base font-black text-gray-900 tracking-tight">Satışı Ləğv Et? 🗑️</h3>
+                <p className="text-xs text-gray-500 font-semibold leading-normal">
+                  Qaimə <span className="font-black text-gray-900">#{selectedSaleForVoid.id.toString().padStart(5, "0")}</span> 
+                  tamamilə silinəcək. Bütün məhsullar anbara geri qaytarılacaq.
+                </p>
+              </div>
+
+              <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl text-xs font-semibold text-amber-800 flex items-start gap-2 text-left">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
+                <span>
+                  <strong>Diqqət!</strong> Bu satışda qaytarış (return) varsa, ləğv edilə bilməz. 
+                  Serial nömrələri "Anbardadır" statusuna bərpa olunacaq.
+                </span>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowVoidConfirm(false);
+                    setSelectedSaleForVoid(null);
+                  }}
+                  className="flex-1 py-3 border border-gray-200 hover:bg-gray-50 text-gray-500 rounded-xl font-black text-[10px] uppercase tracking-wider transition-all cursor-pointer"
+                >
+                  İmtina
+                </button>
+                <button
+                  type="button"
+                  onClick={handleVoidSale}
+                  className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white font-black rounded-xl text-[10px] uppercase tracking-wider transition-all cursor-pointer shadow-md shadow-red-500/10 flex items-center justify-center gap-1.5"
+                >
+                  <XCircle className="w-3.5 h-3.5" /> Bəli, Ləğv Et
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Geri Qaytarış Modalı */}
       {isReturnModalOpen && selectedSaleForReturn && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-xs animate-in fade-in duration-200">

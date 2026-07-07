@@ -567,7 +567,7 @@ export async function fetchTenantStockMetrics(tenantId: number, warehouseId?: nu
     const totalTransferredIn = transferredInMap.get(productId) || 0;
     const localAdjustments = adjustmentsMap.get(productId) || 0;
 
-    const currentQuantity = totalRestocked - totalSold + totalReturned - totalVendorReturned - totalTransferredOut + totalTransferredIn + localAdjustments;
+    const currentQuantity = Math.max(0, totalRestocked - totalSold + totalReturned - totalVendorReturned - totalTransferredOut + totalTransferredIn + localAdjustments);
 
     const gRestocked = globalRestockedMap.get(productId) || 0;
     const gSold = globalSoldMap.get(productId) || 0;

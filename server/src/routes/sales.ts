@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db } from "../db/index.js";
 import * as schema from "../db/schema.js";
 import { eq, and, gte, lte, sql, desc } from "drizzle-orm";
-import { AuthenticatedRequest, requireAdmin, checkUserPermission, logActivity, verifyTenantLimit, computeFIFOSaleCost, computeRemainingDebt } from "./helpers.js";
+import { AuthenticatedRequest, requireAdmin, checkUserPermission, logActivity, verifyTenantLimit, computeFIFOSaleCost, computeRemainingDebt, fetchTenantStockMetrics } from "./helpers.js";
 import { sendTelegramNotification } from "../lib/telegram.js";
 
 export default function salesRoutes(): Router {
@@ -85,6 +85,31 @@ export default function salesRoutes(): Router {
         if (fifoCost <= 0) fifoCost = parseFloat(item.salePrice) || 0;
         calculatedTotalCost += qty * fifoCost;
         processedItems.push({ productId: item.productId, quantity: qty, salePrice: parseFloat(item.salePrice), purchasePrice: fifoCost, serialNumbers: item.serialNumbers });
+      }
+
+      // ── Stok yoxlaması (beynəlxalq standart) ──
+      const { allProducts: stockProducts, metrics: stockMetrics } = await fetchTenantStockMetrics(req.tenantId, targetWarehouseId || undefined);
+      const productNameLookup = new Map(stockProducts.map(p => [p.id, p.name]));
+      const stockWarnings: { productId: number; productName: string; requested: number; available: number }[] = [];
+
+      for (const item of items) {
+        const pid = parseInt(item.productId);
+        const qty = parseFloat(item.quantity);
+        const stock = stockMetrics.get(pid);
+        const available = stock?.currentQuantity ?? 0;
+
+        if (available < qty) {
+          const pName = productNameLookup.get(pid) || `ID: ${pid}`;
+          return res.status(400).json({
+            message: `❌ "${pName}" üçün anbarda kifayət qədər mal yoxdur! (Tələb: ${qty} ədəd, Mövcud: ${available} ədəd). Zəhmət olmasa əvvəlcə anbara mədaxil edin.`,
+            insufficientStock: true,
+            details: stockWarnings.map(w => `${w.productName}: tələb ${w.requested}, mövcud ${w.available}`),
+          });
+        }
+
+        if (available === 0) {
+          stockWarnings.push({ productId: pid, productName: productNameLookup.get(pid) || `ID: ${pid}`, requested: qty, available });
+        }
       }
 
       const activeShift = await db.query.shifts.findFirst({
@@ -271,6 +296,68 @@ export default function salesRoutes(): Router {
       res.json({ message: `${fixCount} nisyə satışın statusu uğurla 'Ödənilib' olaraq düzəldildi.`, fixedCount: fixCount });
     } catch (error) {
       res.status(500).json({ message: "Nisyə təmizləmə əməliyyatı zamanı xəta baş verdi" });
+    }
+  });
+
+  // ─── Satışı Ləğv Et (Void Sale) ──────────────────────────────────────
+  
+  router.delete("/sales/:id", requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Yanlış qaimə ID" });
+
+      // Satışı bütün əlaqəli məlumatlarla gətir
+      const sale = await db.query.sales.findFirst({
+        where: and(eq(schema.sales.id, id), eq(schema.sales.tenantId, req.tenantId)),
+        with: {
+          items: true,
+          payments: true,
+          returns: { with: { items: true } },
+          serials: true,
+        },
+      });
+
+      if (!sale) return res.status(404).json({ message: "Satış qaiməsi tapılmadı" });
+
+      // Əgər qaytarış varsa, void etməyi blokla
+      if (sale.returns && sale.returns.length > 0) {
+        return res.status(400).json({
+          message: "Bu satışa aid geri qaytarışlar mövcuddur. Əvvəlcə qaytarışları silin.",
+          hasReturns: true,
+          returnsCount: sale.returns.length,
+        });
+      }
+
+      await db.transaction(async (tx) => {
+        // 1. Serial nömrələri "in_stock" statusuna qaytar
+        if (sale.serials && sale.serials.length > 0) {
+          for (const serial of sale.serials) {
+            await tx.update(schema.productSerials)
+              .set({
+                status: "in_stock",
+                saleId: null,
+                soldAt: null,
+              })
+              .where(eq(schema.productSerials.id, serial.id));
+          }
+        }
+
+        // 2. Satışı sil (cascade: saleItems, creditPayments avtomatik silinir)
+        await tx.delete(schema.sales).where(eq(schema.sales.id, id));
+      });
+
+      await logActivity(req, "VOID_SALE",
+        `Satış ləğv edildi: Çek № ${sale.id.toString().padStart(5, "0")} (Məbləğ: ${sale.totalAmount.toFixed(2)} ₼, Müştəri: ${sale.customerName || "Anonim"}, Ödəniş: ${sale.paymentType})`
+      );
+
+      res.json({
+        success: true,
+        message: `Qaimə #${sale.id.toString().padStart(5, "0")} uğurla ləğv edildi. Stok bərpa olundu.`,
+        restoredSerials: sale.serials?.length || 0,
+      });
+    } catch (error) {
+      console.error("Void sale error:", error);
+      res.status(500).json({ message: "Satış ləğv edilərkən xəta baş verdi" });
     }
   });
 

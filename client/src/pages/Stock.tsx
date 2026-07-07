@@ -26,6 +26,7 @@ export default function Stock() {
   const { toast } = useToast();
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [showUnstocked, setShowUnstocked] = useState(false);
   const [selectedSerialProduct, setSelectedSerialProduct] = useState<StockLevel | null>(null);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
@@ -192,7 +193,13 @@ export default function Stock() {
       .replace(/ğ/g, "g");
   };
 
+  const isUnstocked = (item: StockLevel) =>
+    item.currentQuantity === 0 && item.lastPurchasePrice === 0 && !item.lastPurchaseDate;
+
   const filteredList = (list || []).filter((item) => {
+    // Əgər "Stoksuz" filteri aktivdirsə, yalnız heç vaxt anbara daxil edilməmiş məhsulları göstər
+    if (showUnstocked && !isUnstocked(item)) return false;
+
     const q = searchQuery.trim();
     if (!q) return true;
     const words = normalizeSearchText(q).split(/\s+/).filter(Boolean);
@@ -208,6 +215,8 @@ export default function Stock() {
       );
     });
   });
+
+  const unstockedCount = (list || []).filter(isUnstocked).length;
 
   const getStatusBadge = (qty: number) => {
     if (qty <= 0) {
@@ -373,18 +382,41 @@ export default function Stock() {
 
       {activeStockTab === "list" ? (
         <>
-          {/* Search Input bar */}
-          <div className="bg-white border border-gray-100 p-4 rounded-2xl shadow-xs glass-card text-xs font-semibold max-w-md">
-            <div className="space-y-1">
-              <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Məhsul / Kateqoriya Axtar</label>
-              <input
-                type="text"
-                placeholder="Məhsul adı və ya kateqoriya..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50"
-              />
+          {/* Search + Filter Bar */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <div className="bg-white border border-gray-100 p-4 rounded-2xl shadow-xs glass-card text-xs font-semibold flex-1 max-w-md">
+              <div className="space-y-1">
+                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Məhsul / Kateqoriya Axtar</label>
+                <input
+                  type="text"
+                  placeholder="Məhsul adı və ya kateqoriya..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50"
+                />
+              </div>
             </div>
+
+            {/* Stoksuz Məhsullar Filter */}
+            <button
+              onClick={() => { setShowUnstocked(!showUnstocked); setSearchQuery(""); }}
+              className={`flex items-center gap-2 px-4 py-3 border rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                showUnstocked
+                  ? "bg-amber-50 border-amber-200 text-amber-700 shadow-xs"
+                  : "bg-white border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700"
+              }`}
+              title="Yalnız heç vaxt anbara daxil edilməmiş məhsulları göstər"
+            >
+              <AlertTriangle className={`w-4 h-4 ${showUnstocked ? "text-amber-600" : "text-gray-400"}`} />
+              Stoksuz Məhsullar
+              {unstockedCount > 0 && (
+                <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[9px] font-black ${
+                  showUnstocked ? "bg-amber-200 text-amber-800" : "bg-gray-100 text-gray-500"
+                }`}>
+                  {unstockedCount}
+                </span>
+              )}
+            </button>
           </div>
 
           {/* Stock levels table */}
