@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/index.js";
 import * as schema from "../db/schema.js";
-import { eq, and, gte, lte, sql, desc } from "drizzle-orm";
+import { eq, and, ne, gte, lte, sql, desc } from "drizzle-orm";
 import { AuthenticatedRequest, requireAdmin, checkUserPermission, logActivity, verifyTenantLimit, computeFIFOSaleCost, computeRemainingDebt, fetchTenantStockMetrics } from "./helpers.js";
 import { sendTelegramNotification } from "../lib/telegram.js";
 
@@ -115,6 +115,64 @@ export default function salesRoutes(): Router {
         }
       }
 
+      // ── Auto-transfer (Admin üçün: çatışmayan stoku digər anbarlardan köçür) ──
+      const autoTransferItems: { productId: number; fromWarehouseId: number; quantity: number; serialNumbers: string[] }[] = [];
+      
+      if (isAdminSale && targetWarehouseId) {
+        const targetMetrics = await fetchTenantStockMetrics(req.tenantId, targetWarehouseId);
+        
+        for (const item of processedItems) {
+          const targetStock = targetMetrics.metrics.get(item.productId)?.currentQuantity || 0;
+          
+          if (item.quantity > targetStock) {
+            const shortfall = item.quantity - targetStock;
+            let remaining = shortfall;
+            
+            // Digər anbarları tap (ən çox stok olandan başlayaraq)
+            const otherWarehouses = await db.select().from(schema.warehouses)
+              .where(and(eq(schema.warehouses.tenantId, req.tenantId), ne(schema.warehouses.id, targetWarehouseId)));
+            
+            for (const wh of otherWarehouses) {
+              if (remaining <= 0) break;
+              
+              const whMetrics = await fetchTenantStockMetrics(req.tenantId, wh.id);
+              const whStock = whMetrics.metrics.get(item.productId)?.currentQuantity || 0;
+              
+              if (whStock > 0) {
+                const transferQty = Math.min(remaining, whStock);
+                
+                // Serial nömrələri tap (seriallı məhsuldursa)
+                let serialsToTransfer: string[] = [];
+                try {
+                  const product = stockProducts.find(p => p.id === item.productId);
+                  if (product?.trackingType === "serialized") {
+                    const serials = await db.select()
+                      .from(schema.productSerials)
+                      .where(and(
+                        eq(schema.productSerials.tenantId, req.tenantId),
+                        eq(schema.productSerials.productId, item.productId),
+                        eq(schema.productSerials.warehouseId, wh.id),
+                        eq(schema.productSerials.status, "in_stock"),
+                      ))
+                      .limit(transferQty);
+                    serialsToTransfer = serials.map(s => s.serialNumber);
+                  }
+                } catch {}
+                
+                autoTransferItems.push({
+                  productId: item.productId,
+                  fromWarehouseId: wh.id,
+                  quantity: transferQty,
+                  serialNumbers: serialsToTransfer,
+                });
+                
+                remaining -= transferQty;
+              }
+            }
+          }
+        }
+      }
+
       // Settings-ə əsasən növbə tələb olunub-olunmadığını yoxla
       const tenantSettings = await db.query.settings.findFirst({
         where: eq(schema.settings.tenantId, req.tenantId)
@@ -137,6 +195,31 @@ export default function salesRoutes(): Router {
       }
 
       const saleResult = await db.transaction(async (tx) => {
+        // Auto-transfer recordları yarat (stoku digər anbardan köçür)
+        for (const tr of autoTransferItems) {
+          await tx.insert(schema.stockTransfers).values({
+            tenantId: req.tenantId,
+            fromWarehouseId: tr.fromWarehouseId,
+            toWarehouseId: targetWarehouseId as number,
+            productId: tr.productId,
+            quantity: tr.quantity,
+            transferDate: new Date().toISOString(),
+            transferredBy: sellerName || "admin",
+            notes: `Avtomatik transfer (satış əməliyyatı üçün)`,
+            serialNumbers: tr.serialNumbers.length > 0 ? JSON.stringify(tr.serialNumbers) : null,
+          });
+          
+          // Serial nömrələrin warehouseId-sini yenilə
+          for (const sNum of tr.serialNumbers) {
+            await tx.update(schema.productSerials)
+              .set({ warehouseId: targetWarehouseId })
+              .where(and(
+                eq(schema.productSerials.serialNumber, sNum),
+                eq(schema.productSerials.tenantId, req.tenantId),
+              ));
+          }
+        }
+        
         const newSale = await tx.insert(schema.sales).values({
           tenantId: req.tenantId, customerId: customerId || null, customerName, customerPhone,
           paymentType, bankName: paymentType === "Kart" ? (bankName || null) : null,
