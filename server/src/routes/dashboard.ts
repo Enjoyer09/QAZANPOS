@@ -535,43 +535,133 @@ export default function dashboardRoutes(): Router {
 
   router.get("/dashboard/analytics", async (req: AuthenticatedRequest, res) => {
     try {
-      const monthlyTrend = [
-        { month: "Yan", revenue: 12000, expenses: 3000, profit: 9000 },
-        { month: "Fev", revenue: 15000, expenses: 4000, profit: 11000 },
-        { month: "Mar", revenue: 18000, expenses: 3500, profit: 14500 },
-        { month: "Apr", revenue: 22000, expenses: 5000, profit: 17000 },
-        { month: "May", revenue: 25000, expenses: 6000, profit: 19000 },
-        { month: "İyun", revenue: 30000, expenses: 5500, profit: 24500 },
-      ];
-      const totalRevenue = monthlyTrend.reduce((s, m) => s + m.revenue, 0);
-      const totalCost = 0;
-      const totalExpenses = monthlyTrend.reduce((s, m) => s + m.expenses, 0);
-      const grossProfit = monthlyTrend.reduce((s, m) => s + m.profit, 0);
+      const tenantId = req.tenantId;
+      const now = new Date();
+      const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+      const sixMonthsAgoStr = sixMonthsAgo.toISOString().split("T")[0];
+
+      // ── Monthly Trend (Son 6 ay) ──
+      const recentSales = await db.select().from(schema.sales)
+        .where(and(eq(schema.sales.tenantId, tenantId), sql`sale_date >= ${sixMonthsAgoStr}`))
+        .orderBy(asc(schema.sales.saleDate));
+
+      const recentExpenses = await db.select().from(schema.expenses)
+        .where(and(eq(schema.expenses.tenantId, tenantId), sql`date >= ${sixMonthsAgoStr}`));
+
+      // Group by month (YYYY-MM)
+      const monthMap = new Map<string, { revenue: number; expenses: number; cogs: number }>();
+      for (const sale of recentSales) {
+        const monthKey = (sale.saleDate || "").substring(0, 7);
+        if (!monthKey) continue;
+        const m = monthMap.get(monthKey) || { revenue: 0, expenses: 0, cogs: 0 };
+        m.revenue += sale.totalAmount;
+        m.cogs += sale.totalCost;
+        monthMap.set(monthKey, m);
+      }
+      for (const exp of recentExpenses) {
+        const monthKey = (exp.date || "").substring(0, 7);
+        if (!monthKey) continue;
+        const m = monthMap.get(monthKey) || { revenue: 0, expenses: 0, cogs: 0 };
+        m.expenses += exp.amount;
+        monthMap.set(monthKey, m);
+      }
+
+      const azMonths = ["Yan", "Fev", "Mar", "Apr", "May", "İyn", "İyl", "Avq", "Sen", "Okt", "Noy", "Dek"];
+      const monthlyTrend: { month: string; revenue: number; expenses: number; profit: number }[] = [];
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const key = d.toISOString().substring(0, 7);
+        const data = monthMap.get(key) || { revenue: 0, expenses: 0, cogs: 0 };
+        const monthIndex = parseInt(key.split("-")[1]) - 1;
+        monthlyTrend.push({
+          month: azMonths[monthIndex] || key,
+          revenue: data.revenue,
+          expenses: data.expenses,
+          profit: data.revenue - data.expenses,
+        });
+      }
+
+      // ── Weekly Distribution (Son 7 gün) ──
+      const weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 6);
+      weekAgo.setHours(0, 0, 0, 0);
+      const weekAgoStr = weekAgo.toISOString();
+
+      const weekSales = await db.select().from(schema.sales)
+        .where(and(eq(schema.sales.tenantId, tenantId), sql`sale_date >= ${weekAgoStr}`));
+
+      const dayNames = ["Bazar", "Bazar ertəsi", "Çərşənbə axşamı", "Çərşənbə", "Cümə axşamı", "Cümə", "Şənbə"];
+      const dayMap = new Map<string, { sales: number; revenue: number }>();
+
+      for (const sale of weekSales) {
+        const d = new Date(sale.saleDate || "");
+        if (isNaN(d.getTime())) continue;
+        const dayIndex = d.getDay(); // 0=Bazar, 1=Bazar ertəsi, ...
+        const dayName = dayNames[dayIndex];
+        const entry = dayMap.get(dayName) || { sales: 0, revenue: 0 };
+        entry.sales += 1;
+        entry.revenue += sale.totalAmount;
+        dayMap.set(dayName, entry);
+      }
+
+      // Ensure all 7 days are present (even if 0 sales)
+      const weeklyDistribution = dayNames.map((name) => {
+        const data = dayMap.get(name) || { sales: 0, revenue: 0 };
+        return { day: name, sales: data.sales, revenue: data.revenue };
+      });
+
+      // ── Top 5 Kateqoriya (məhsul kateqoriyasına görə satış) ──
+      // Use raw SQL join for efficient category aggregation
+      const topCatResult = await db.execute(sql`
+        SELECT p.category, SUM(si.quantity)::float as "salesCount", SUM(si.sale_price * si.quantity)::float as "revenue"
+        FROM sale_items si
+        INNER JOIN products p ON si.product_id = p.id
+        INNER JOIN sales s ON si.sale_id = s.id
+        WHERE s.tenant_id = ${tenantId} AND s.sale_date >= ${sixMonthsAgoStr}
+        GROUP BY p.category
+        ORDER BY revenue DESC
+        LIMIT 5
+      `);
+
+      // db.execute() returns { rows: [...] } in Drizzle with PostgreSQL
+      const topCatRows = Array.isArray(topCatResult)
+        ? topCatResult
+        : ((topCatResult as any)?.rows as any[]) || [];
+
+      const topCategories: { category: string; salesCount: number; revenue: number }[] = [];
+      for (const row of topCatRows) {
+        const r = row as any;
+        topCategories.push({
+          category: r.category || "Digər",
+          salesCount: parseFloat(r.salesCount) || 0,
+          revenue: parseFloat(r.revenue) || 0,
+        });
+      }
+
+      // ── COGS Audit ──
+      const totalRevenue = recentSales.reduce((s, sale) => s + sale.totalAmount, 0);
+      const totalCost = recentSales.reduce((s, sale) => s + sale.totalCost, 0);
+      const totalExpenses = recentExpenses.reduce((s, e) => s + e.amount, 0);
+      const grossProfit = totalRevenue - totalCost;
+      const netProfit = grossProfit - totalExpenses;
 
       res.json({
         monthlyTrend,
-        weeklyDistribution: [
-          { day: "Bazar ertəsi", sales: 15, revenue: 3500 },
-          { day: "Çərşənbə axşamı", sales: 12, revenue: 2800 },
-          { day: "Çərşənbə", sales: 18, revenue: 4200 },
-          { day: "Cümə axşamı", sales: 14, revenue: 3100 },
-          { day: "Cümə", sales: 25, revenue: 6500 },
-          { day: "Şənbə", sales: 30, revenue: 8000 },
-          { day: "Bazar", sales: 20, revenue: 5000 },
-        ],
-        topCategories: [
-          { category: "Telefonlar", salesCount: 45, revenue: 99000 },
-          { category: "Kompüterlər", salesCount: 22, revenue: 52800 },
-          { category: "Aksesuarlar", salesCount: 80, revenue: 32000 },
-        ],
+        weeklyDistribution,
+        topCategories,
         cogsAudit: {
-          totalRevenue, totalCost, totalExpenses, grossProfit, netProfit: grossProfit - totalExpenses,
+          totalRevenue,
+          totalCost,
+          totalExpenses,
+          grossProfit,
+          netProfit,
           grossMargin: totalRevenue > 0 ? Math.round((grossProfit / totalRevenue) * 100) : 0,
-          netMargin: totalRevenue > 0 ? Math.round(((grossProfit - totalExpenses) / totalRevenue) * 100) : 0,
+          netMargin: totalRevenue > 0 ? Math.round((netProfit / totalRevenue) * 100) : 0,
         },
       });
     } catch (error) {
-      res.status(500).json({ message: "Analitika məlumatları gətirilərkən xəta baş verdi" });
+      console.error("Analytics error:", error);
+      res.status(500).json({ message: "Analitika məlumatları götürülərkən xəta baş verdi" });
     }
   });
 
