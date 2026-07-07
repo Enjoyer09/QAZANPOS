@@ -18,6 +18,9 @@ import {
   Plus,
   Minus,
   Lock,
+  Printer,
+  BarChart3,
+  PieChart,
 } from "lucide-react";
 import { CardSkeleton } from "../components/Skeleton.tsx";
 
@@ -659,8 +662,75 @@ export default function Dashboard() {
     return `${fromStr} — ${toStr}`;
   };
 
+  const formatCurrency = (val: number) => `${(val || 0).toFixed(2)} ₼`;
+
+  const printReport = summary && (
+    <div className="print-dashboard-report">
+      <div className="print-dash-header">
+        <h1>İdarəetmə Paneli</h1>
+        <h2>Dashboard Report</h2>
+        <div className="print-dash-period">
+          <span>Dövr: {getPeriodLabel()}</span>
+          <span>Yaradılma tarixi: {new Date().toLocaleDateString("az-AZ")}</span>
+        </div>
+      </div>
+
+      <div className="print-dash-metrics">
+        <div className="print-dash-card">
+          <span className="print-dash-label">Günlük Gəlir</span>
+          <span className="print-dash-value">{formatCurrency(summary.todayRevenue)}</span>
+        </div>
+        <div className="print-dash-card">
+          <span className="print-dash-label">Günlük Mənfəət</span>
+          <span className="print-dash-value">{formatCurrency(summary.todayProfit)}</span>
+        </div>
+        <div className="print-dash-card">
+          <span className="print-dash-label">Günlük Xərc</span>
+          <span className="print-dash-value">{formatCurrency(summary.todayExpenses)}</span>
+        </div>
+        <div className="print-dash-card">
+          <span className="print-dash-label">Xalis Mənfəət</span>
+          <span className="print-dash-value">{formatCurrency(summary.todayNetProfit)}</span>
+        </div>
+        <div className="print-dash-card">
+          <span className="print-dash-label">Ay Gəliri</span>
+          <span className="print-dash-value">{formatCurrency(summary.monthRevenue)}</span>
+        </div>
+        <div className="print-dash-card">
+          <span className="print-dash-label">Ay Mənfəəti</span>
+          <span className="print-dash-value">{formatCurrency(summary.monthProfit)}</span>
+        </div>
+      </div>
+
+      <div className="print-dash-footer">
+        <p>QAZANPOS — Dashboard Hesabatı</p>
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-8 animate-in fade-in-0">
+      <style>{`
+        @media print {
+          body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          @page { margin: 12mm 10mm; size: A4 portrait; }
+          .no-print { display: none !important; }
+          .print-dashboard-report { display: block !important; font-family: -apple-system, sans-serif; color: #1e293b; }
+          .print-dash-header { border-bottom: 2px solid #e2e8f0; padding-bottom: 10pt; margin-bottom: 14pt; }
+          .print-dash-header h1 { font-size: 18pt; font-weight: 900; margin: 0; color: #0f172a; }
+          .print-dash-header h2 { font-size: 10pt; font-weight: 600; margin: 2pt 0 0 0; color: #64748b; }
+          .print-dash-period { display: flex; justify-content: space-between; font-size: 8pt; color: #94a3b8; margin-top: 6pt; }
+          .print-dash-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8pt; margin-bottom: 14pt; }
+          .print-dash-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6pt; padding: 8pt 10pt; text-align: center; }
+          .print-dash-label { display: block; font-size: 7pt; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5pt; margin-bottom: 2pt; }
+          .print-dash-value { display: block; font-size: 12pt; font-weight: 800; color: #0f172a; }
+          .print-dash-footer { border-top: 1px solid #e2e8f0; padding-top: 8pt; margin-top: 14pt; text-align: center; font-size: 7pt; color: #94a3b8; }
+          .glass-card, .glass, .glass-navbar, header, nav, footer, button:not(.print-keep), input, select, .hover-elevate { display: none !important; }
+        }
+        .print-dashboard-report { display: none; }
+      `}</style>
+      {printReport}
+      <div className="no-print">
       {/* Header & Date Filters */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
@@ -743,6 +813,10 @@ export default function Dashboard() {
               Sıfırla
             </button>
           )}
+          <button onClick={() => window.print()}
+            className="px-4 py-2 bg-white border border-gray-200 text-gray-600 font-bold text-xs rounded-xl hover:bg-gray-50 cursor-pointer transition-all shadow-xs flex items-center gap-1.5">
+            <Printer className="w-3.5 h-3.5" /> PDF Export
+          </button>
         </div>
       </div>
 
@@ -1461,6 +1535,7 @@ export default function Dashboard() {
           )}
         </div>
       )}
+    </div> {/* end no-print */}
     </div>
   );
 }

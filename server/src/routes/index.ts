@@ -8,6 +8,8 @@ import salesRoutes from "./sales.js";
 import vendorRoutes from "./vendors.js";
 import expenseRoutes from "./expenses.js";
 import dashboardRoutes from "./dashboard.js";
+import settingsRoutes from "./settings.js";
+import activityLogRoutes from "./activity-logs.js";
 
 const router = Router();
 
@@ -24,6 +26,7 @@ router.use(salesRoutes());
 router.use(vendorRoutes());
 router.use(expenseRoutes());
 router.use(dashboardRoutes());
+router.use(settingsRoutes());
+router.use(activityLogRoutes());
 
-// Re-export warehouse routes from stock module inline
 export default router;

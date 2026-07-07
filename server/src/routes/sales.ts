@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db } from "../db/index.js";
 import * as schema from "../db/schema.js";
 import { eq, and, gte, lte, sql, desc } from "drizzle-orm";
-import { AuthenticatedRequest, requireAdmin, checkUserPermission, logActivity, verifyTenantLimit, computeFIFOSaleCost } from "./helpers.js";
+import { AuthenticatedRequest, requireAdmin, checkUserPermission, logActivity, verifyTenantLimit, computeFIFOSaleCost, computeRemainingDebt } from "./helpers.js";
 import { sendTelegramNotification } from "../lib/telegram.js";
 
 export default function salesRoutes(): Router {
@@ -196,9 +196,7 @@ export default function salesRoutes(): Router {
         if (sale.sellerName !== (username ? username.trim().toLowerCase() : "")) return res.status(403).json({ message: "Bu satışın borcunu ödəmək üçün səlahiyyətiniz yoxdur" });
       }
 
-      const alreadyPaid = sale.payments.reduce((acc, p) => acc + p.amount, 0);
-      const returned = sale.returns ? sale.returns.reduce((acc, r) => acc + r.totalAmount, 0) : 0;
-      const remaining = Math.max(0, Math.round((sale.totalAmount - alreadyPaid - returned) * 100) / 100);
+      const remaining = computeRemainingDebt(sale, sale.payments, sale.returns || []);
 
       if (remaining > 0) {
         await db.insert(schema.creditPayments).values({ tenantId: req.tenantId, saleId: id, paymentDate: new Date().toISOString(), amount: remaining, paymentType: payType });
@@ -224,9 +222,8 @@ export default function salesRoutes(): Router {
       await db.insert(schema.creditPayments).values({ tenantId: req.tenantId, saleId: id, paymentDate: new Date().toISOString(), amount: paymentAmount, paymentType: paymentType || "Nəğd" });
 
       const updatedPayments = await db.query.creditPayments.findMany({ where: and(eq(schema.creditPayments.saleId, id), eq(schema.creditPayments.tenantId, req.tenantId)) });
-      const totalPaid = updatedPayments.reduce((acc, p) => acc + p.amount, 0);
-      const returned = sale.returns ? sale.returns.reduce((acc, r) => acc + r.totalAmount, 0) : 0;
-      if (Math.round(totalPaid * 100) >= Math.round((sale.totalAmount - returned) * 100)) {
+      const remainingDebt = computeRemainingDebt(sale, updatedPayments, sale.returns || []);
+      if (remainingDebt === 0) {
         await db.update(schema.sales).set({ paymentStatus: "paid" }).where(eq(schema.sales.id, id));
       }
 
@@ -246,9 +243,9 @@ export default function salesRoutes(): Router {
 
       const sale = await db.query.sales.findFirst({ where: and(eq(schema.sales.id, payment.saleId), eq(schema.sales.tenantId, req.tenantId)), with: { payments: true, returns: true } });
       if (sale) {
-        const totalPaid = sale.payments.reduce((acc, p) => acc + p.amount, 0);
-        const returned = sale.returns ? sale.returns.reduce((acc, r) => acc + r.totalAmount, 0) : 0;
-        if (Math.round(totalPaid * 100) < Math.round((sale.totalAmount - returned) * 100)) {
+      const saleForCheck = { totalAmount: sale.totalAmount, loyaltyDiscountPaid: sale.loyaltyDiscountPaid };
+      const remainingAfterDelete = computeRemainingDebt(saleForCheck, sale.payments, sale.returns || []);
+      if (remainingAfterDelete > 0) {
           await db.update(schema.sales).set({ paymentStatus: "credit" }).where(eq(schema.sales.id, payment.saleId));
         }
         await logActivity(req, "ROLLBACK_CUSTOMER_DEBT_PAYMENT", `Müştəri borc ödənişi ləğv edildi: ${payment.amount.toFixed(2)} ₼ (Çek № ${payment.saleId})`);
@@ -264,9 +261,8 @@ export default function salesRoutes(): Router {
       const creditSales = await db.query.sales.findMany({ where: and(eq(schema.sales.paymentStatus, "credit"), eq(schema.sales.tenantId, req.tenantId)), with: { payments: true, returns: true } });
       let fixCount = 0;
       for (const sale of creditSales) {
-        const totalPaid = sale.payments.reduce((sum, p) => sum + p.amount, 0);
-        const returned = sale.returns ? sale.returns.reduce((sum, r) => sum + r.totalAmount, 0) : 0;
-        if (Math.round(totalPaid * 100) >= Math.round((sale.totalAmount - returned) * 100)) {
+        const remaining = computeRemainingDebt(sale, sale.payments, sale.returns || []);
+        if (remaining === 0) {
           await db.update(schema.sales).set({ paymentStatus: "paid" }).where(eq(schema.sales.id, sale.id));
           fixCount++;
         }

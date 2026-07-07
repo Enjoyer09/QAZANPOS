@@ -368,6 +368,21 @@ export const settings = pgTable("settings", {
   smsTemplateSale: text("sms_template_sale"),
 });
 
+// 8b. Expense Limits per Category
+export const expenseLimits = pgTable("expense_limits", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" })
+    .default(1),
+  category: text("category").notNull(),
+  monthlyLimit: doublePrecision("monthly_limit").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => ({
+  expenseLimitsTenantCategoryIdx: uniqueIndex("expense_limits_tenant_category_idx").on(table.tenantId, table.category)
+}));
+
 // 9. Users Table for Authentication & Authorization
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),

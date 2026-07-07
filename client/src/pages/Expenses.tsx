@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2, TrendingDown, ClipboardList, Lock } from "lucide-react";
+import { Plus, Trash2, TrendingDown, ClipboardList, Lock, Target, X, AlertTriangle } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
 import { TableSkeleton } from "../components/Skeleton.tsx";
 
@@ -13,6 +13,15 @@ interface Expense {
   date: string;
 }
 
+interface ExpenseLimit {
+  id: number;
+  category: string;
+  monthlyLimit: number;
+  spent: number;
+  remaining: number;
+  usagePercent: number;
+}
+
 const expenseCategories = ["Maaş", "İcarə", "Kommunal", "Nəqliyyat", "Digər"];
 
 const categoryBadges: Record<string, string> = {
@@ -21,6 +30,14 @@ const categoryBadges: Record<string, string> = {
   Kommunal: "bg-amber-50 text-amber-700 border-amber-100",
   Nəqliyyat: "bg-orange-50 text-orange-700 border-orange-100",
   Digər: "bg-gray-50 text-gray-700 border-gray-100",
+};
+
+const categoryColors: Record<string, string> = {
+  Maaş: "bg-blue-500",
+  İcarə: "bg-purple-500",
+  Kommunal: "bg-amber-500",
+  Nəqliyyat: "bg-orange-500",
+  Digər: "bg-gray-500",
 };
 
 const paymentTypeLabels: Record<string, string> = {
@@ -72,6 +89,13 @@ export default function Expenses() {
   const [description, setDescription] = useState("");
   const [paymentType, setPaymentType] = useState("cash");
 
+  // Limit modal state
+  const [limitModalOpen, setLimitModalOpen] = useState(false);
+  const [editLimitCategory, setEditLimitCategory] = useState("Maaş");
+  const [editLimitAmount, setEditLimitAmount] = useState("");
+
+  const isAdmin = user?.role === "Admin";
+
   // Queries & Mutations
   const params = filterActive ? `?from=${fromDate}&to=${toDate}` : "";
 
@@ -82,6 +106,16 @@ export default function Expenses() {
       if (!res.ok) throw new Error();
       return res.json();
     },
+  });
+
+  const { data: limits } = useQuery<ExpenseLimit[]>({
+    queryKey: ["/api/expense-limits/usage"],
+    queryFn: async () => {
+      const res = await fetch("/api/expense-limits/usage");
+      if (!res.ok) throw new Error();
+      return res.json();
+    },
+    enabled: isAdmin,
   });
 
   const filteredList = (list || []).filter((item) => {
@@ -102,20 +136,33 @@ export default function Expenses() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
-      if (!res.ok) throw new Error();
-      return res.json();
+      const json = await res.json();
+      if (!res.ok) {
+        // Propagate the full error object so we can show limit exceeded details
+        throw json;
+      }
+      return json;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/summary"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/expense-limits/usage"] });
       toast({ title: "Xərc qeydə alındı!", description: "Xərc uğurla bazaya əlavə olundu.", variant: "success" });
       setAmount("");
       setDescription("");
       setCategory("Digər");
       setPaymentType("cash");
     },
-    onError: () => {
-      toast({ title: "Xəta!", description: "Xərc əlavə edilərkən xəta baş verdi.", variant: "destructive" });
+    onError: (error: any) => {
+      if (error?.limitExceeded) {
+        toast({
+          title: "⚠️ Limit Keçildi!",
+          description: error.message || `"${error.category}" limiti aşıldı!`,
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Xəta!", description: "Xərc əlavə edilərkən xəta baş verdi.", variant: "destructive" });
+      }
     },
   });
 
@@ -130,10 +177,47 @@ export default function Expenses() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/summary"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/expense-limits/usage"] });
       toast({ title: "Silindi!", description: "Xərc qeydi silindi.", variant: "success" });
     },
     onError: () => {
       toast({ title: "Xəta!", description: "Silinmə zamanı xəta baş verdi.", variant: "destructive" });
+    },
+  });
+
+  const saveLimitMutation = useMutation({
+    mutationFn: async (data: { category: string; monthlyLimit: number }) => {
+      const res = await fetch("/api/expense-limits", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error();
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/expense-limits/usage"] });
+      toast({ title: "Limit təyin edildi!", variant: "success" });
+      setLimitModalOpen(false);
+      setEditLimitAmount("");
+    },
+    onError: () => {
+      toast({ title: "Xəta!", description: "Limit təyin edilərkən xəta baş verdi.", variant: "destructive" });
+    },
+  });
+
+  const deleteLimitMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/expense-limits/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/expense-limits/usage"] });
+      toast({ title: "Limit silindi!", variant: "success" });
+    },
+    onError: () => {
+      toast({ title: "Xəta!", description: "Limit silinərkən xəta baş verdi.", variant: "destructive" });
     },
   });
 
@@ -162,6 +246,33 @@ export default function Expenses() {
       description: description.trim() || null,
       paymentType,
     });
+  };
+
+  const openLimitModal = (cat?: string) => {
+    if (cat) {
+      setEditLimitCategory(cat);
+      const existing = limits?.find((l) => l.category === cat);
+      setEditLimitAmount(existing ? String(existing.monthlyLimit) : "");
+    } else {
+      setEditLimitCategory(expenseCategories[0]);
+      setEditLimitAmount("");
+    }
+    setLimitModalOpen(true);
+  };
+
+  const handleSaveLimit = () => {
+    const val = parseFloat(editLimitAmount);
+    if (isNaN(val) || val <= 0) {
+      toast({ title: "Xəta!", description: "Düzgün limit daxil edin.", variant: "destructive" });
+      return;
+    }
+    saveLimitMutation.mutate({ category: editLimitCategory, monthlyLimit: val });
+  };
+
+  const handleRemoveLimit = (limit: ExpenseLimit) => {
+    if (confirm(`"${limit.category}" limitini silmək istədiyinizə əminsiniz?`)) {
+      deleteLimitMutation.mutate(limit.id);
+    }
   };
 
   const totalExpenses = filteredList ? filteredList.reduce((sum, e) => sum + e.amount, 0) : 0;
@@ -248,6 +359,71 @@ export default function Expenses() {
         </div>
       </div>
 
+      {/* Expense Limits Panel (Admin only) */}
+      {isAdmin && limits && limits.length > 0 && (
+        <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-xs glass-card space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Target className="w-4 h-4 text-indigo-500" />
+              <h3 className="font-extrabold text-gray-900 text-sm">Aylıq Xərc Limitləri</h3>
+            </div>
+            <button
+              onClick={() => openLimitModal()}
+              className="text-xs font-bold text-indigo-600 hover:text-indigo-700 cursor-pointer"
+            >
+              + Yeni Limit
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {limits.map((limit) => {
+              const barColor = limit.usagePercent >= 90 ? "bg-red-500" : limit.usagePercent >= 75 ? "bg-amber-500" : categoryColors[limit.category] || "bg-indigo-500";
+              return (
+                <div key={limit.id} className="border border-gray-100 rounded-xl p-3 space-y-2 hover:shadow-sm transition-all">
+                  <div className="flex items-center justify-between">
+                    <span className={`px-2 py-0.5 border rounded-full text-[9px] font-bold uppercase tracking-wider ${categoryBadges[limit.category] || "bg-gray-50 text-gray-500"}`}>
+                      {limit.category}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      {limit.usagePercent >= 90 && (
+                        <AlertTriangle className="w-3.5 h-3.5 text-red-500" />
+                      )}
+                      <button
+                        onClick={() => openLimitModal(limit.category)}
+                        className="text-[10px] text-indigo-500 hover:text-indigo-700 font-bold cursor-pointer"
+                      >
+                        Redaktə
+                      </button>
+                      <button
+                        onClick={() => handleRemoveLimit(limit)}
+                        className="text-[10px] text-gray-400 hover:text-red-500 cursor-pointer"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-500 font-semibold">{limit.spent.toFixed(0)} ₼</span>
+                    <span className="text-gray-400 font-medium">/ {limit.monthlyLimit.toFixed(0)} ₼</span>
+                  </div>
+                  <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+                      style={{ width: `${Math.min(100, limit.usagePercent)}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[10px]">
+                    <span className={limit.usagePercent >= 90 ? "text-red-600 font-bold" : limit.usagePercent >= 75 ? "text-amber-600 font-bold" : "text-gray-400"}>
+                      {limit.usagePercent.toFixed(0)}% istifadə
+                    </span>
+                    <span className="text-gray-400">{limit.remaining.toFixed(0)} ₼ qalıb</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         {/* Add Expense Form Card */}
         <div className="lg:col-span-1 bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card">
@@ -282,6 +458,17 @@ export default function Expenses() {
                   </option>
                 ))}
               </select>
+              {/* Show limit info for selected category */}
+              {(() => {
+                const selectedLimit = limits?.find((l) => l.category === category);
+                if (!selectedLimit) return null;
+                const warnClass = selectedLimit.usagePercent >= 90 ? "text-red-500" : selectedLimit.usagePercent >= 75 ? "text-amber-500" : "text-gray-400";
+                return (
+                  <p className={`text-[10px] mt-1 ${warnClass}`}>
+                    Limit: {selectedLimit.spent.toFixed(0)} ₼ / {selectedLimit.monthlyLimit.toFixed(0)} ₼ ({selectedLimit.usagePercent.toFixed(0)}%)
+                  </p>
+                );
+              })()}
             </div>
 
             {/* Payment Source */}
@@ -455,6 +642,71 @@ export default function Expenses() {
           </div>
         </div>
       </div>
+
+      {/* ═══ Limit Setting Modal ═══ */}
+      {limitModalOpen && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setLimitModalOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 space-y-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Target className="w-5 h-5 text-indigo-500" />
+                <h3 className="font-extrabold text-gray-900 text-base">Kateqoriya Limiti</h3>
+              </div>
+              <button onClick={() => setLimitModalOpen(false)} className="text-gray-400 hover:text-gray-600 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Kateqoriya</label>
+                <select
+                  value={editLimitCategory}
+                  onChange={(e) => {
+                    setEditLimitCategory(e.target.value);
+                    const existing = limits?.find((l) => l.category === e.target.value);
+                    setEditLimitAmount(existing ? String(existing.monthlyLimit) : "");
+                  }}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 cursor-pointer"
+                >
+                  {expenseCategories.map((cat) => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Aylıq Limit (₼)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00 ₼"
+                  value={editLimitAmount}
+                  onChange={(e) => setEditLimitAmount(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setLimitModalOpen(false)}
+                className="flex-1 py-2.5 border border-gray-200 text-gray-500 font-bold text-xs rounded-xl hover:bg-gray-50 cursor-pointer"
+              >
+                Ləğv Et
+              </button>
+              <button
+                onClick={handleSaveLimit}
+                disabled={saveLimitMutation.isPending}
+                className="flex-1 py-2.5 bg-indigo-600 text-white font-bold text-xs rounded-xl hover:bg-indigo-700 cursor-pointer disabled:opacity-50"
+              >
+                {saveLimitMutation.isPending ? "Saxlanılır..." : "Yadda Saxla"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

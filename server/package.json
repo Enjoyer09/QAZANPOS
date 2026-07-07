@@ -18,7 +18,8 @@
     "cors": "^2.8.5",
     "drizzle-orm": "^0.30.10",
     "express": "^4.19.2",
-    "postgres": "^3.4.9"
+    "postgres": "^3.4.9",
+    "resend": "^6.17.1"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

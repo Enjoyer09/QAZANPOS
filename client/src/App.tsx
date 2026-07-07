@@ -8,6 +8,7 @@ import {
   PlusCircle,
   FolderKanban,
   History,
+  TrendingUp,
   TrendingDown,
   AlertTriangle,
   LogOut,
@@ -50,6 +51,7 @@ import Labels from "./pages/Labels.tsx";
 import Vendors from "./pages/Vendors.tsx";
 import VendorReturns from "./pages/VendorReturns.tsx";
 import Payroll from "./pages/Payroll.tsx";
+import PnL from "./pages/PnL.tsx";
 import LimitReachedModal from "./components/LimitReachedModal.tsx";
 
 // Global fetch interceptor to automatically attach x-user-role, x-user-username, and x-tenant-host headers
@@ -318,6 +320,7 @@ function AppLayout({ children, user, currentUser, onLogout }: { children: React.
             ...(isAdmin ? [
               { href: "/tedarukculer", label: "Tədarükçülər", icon: Truck },
               { href: "/xercler", label: "Xərclər Modulu", icon: TrendingDown },
+              { href: "/pnl", label: "Mənfəət/Zərər (P&L)", icon: TrendingUp },
               { href: "/hr", label: "HR & Əməkhaqqı", icon: UserCheck }
             ] : []),
             ...((isAdmin || currentUser?.staffCanViewCustomers !== 0) ? [
@@ -958,9 +961,9 @@ function MainRoutes({ user, onLogout }: { user: any; onLogout: () => void }) {
             {isAdmin && <Route path="/etiketler" component={Labels} />}
             <Route path="/satislar" component={SalesHistory} />
             <Route path="/satislar/:id" component={Invoice} />
-            <Route path="/qaytarislar/:id" component={ReturnInvoice} />
-            {isAdmin && <Route path="/xercler" component={Expenses} />}
-            {isAdmin && <Route path="/loqlar" component={Logs} />}
+            <Route path="/qaytarislar/:id" component={ReturnInvoice} />             {isAdmin && <Route path="/xercler" component={Expenses} />}
+             {isAdmin && <Route path="/pnl" component={PnL} />}
+             {isAdmin && <Route path="/loqlar" component={Logs} />}
             <Route path="/ayarlar" component={SettingsPage} />
             <Route path="/yardim" component={Help} />
             <Route>

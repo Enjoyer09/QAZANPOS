@@ -566,5 +566,84 @@ export default function stockRoutes(): Router {
     }
   });
 
+  // ─── Warehouses CRUD ─────────────────────────────────────────────────────
+
+  router.get("/warehouses", async (req: AuthenticatedRequest, res) => {
+    try {
+      const list = await db.select().from(schema.warehouses)
+        .where(eq(schema.warehouses.tenantId, req.tenantId))
+        .orderBy(schema.warehouses.id);
+      res.json(list);
+    } catch (error: any) {
+      res.status(500).json({ message: "Anbarları çəkərkən xəta baş verdi: " + error.message });
+    }
+  });
+
+  router.post("/warehouses", requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { name, location, isDefault } = req.body;
+      if (!name) return res.status(400).json({ message: "Anbar adı mütləqdir" });
+
+      if (isDefault === 1 || isDefault === true) {
+        await db.update(schema.warehouses)
+          .set({ isDefault: 0 })
+          .where(eq(schema.warehouses.tenantId, req.tenantId));
+      }
+
+      const [newWarehouse] = await db.insert(schema.warehouses).values({
+        tenantId: req.tenantId, name, location: location || null,
+        isDefault: isDefault ? 1 : 0, createdAt: new Date().toISOString(),
+      }).returning();
+
+      await logActivity(req, "CREATE_WAREHOUSE", `Yeni anbar yaratdı: '${name}'`);
+      res.json(newWarehouse);
+    } catch (error: any) {
+      res.status(500).json({ message: "Anbar yaradılarkən xəta baş verdi: " + error.message });
+    }
+  });
+
+  router.put("/warehouses/:id", requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { name, location, isDefault } = req.body;
+
+      const existing = await db.query.warehouses.findFirst({
+        where: (w: any, { eq, and }: any) => and(eq(w.tenantId, req.tenantId), eq(w.id, id))
+      });
+      if (!existing) return res.status(404).json({ message: "Anbar tapılmadı" });
+
+      if (isDefault === 1 || isDefault === true) {
+        await db.update(schema.warehouses).set({ isDefault: 0 }).where(eq(schema.warehouses.tenantId, req.tenantId));
+      }
+
+      const [updated] = await db.update(schema.warehouses).set({
+        name: name !== undefined ? name : existing.name,
+        location: location !== undefined ? location : existing.location,
+        isDefault: isDefault !== undefined ? (isDefault ? 1 : 0) : existing.isDefault,
+      }).where(and(eq(schema.warehouses.id, id), eq(schema.warehouses.tenantId, req.tenantId))).returning();
+
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ message: "Anbar yenilənərkən xəta baş verdi: " + error.message });
+    }
+  });
+
+  router.delete("/warehouses/:id", requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const warehouse = await db.query.warehouses.findFirst({
+        where: (w: any, { eq, and }: any) => and(eq(w.tenantId, req.tenantId), eq(w.id, id))
+      });
+      if (!warehouse) return res.status(404).json({ message: "Anbar tapılmadı" });
+      if (warehouse.isDefault === 1) return res.status(400).json({ message: "Default anbar silinə bilməz. Əvvəlcə başqa anbarı default edin." });
+
+      await db.delete(schema.warehouses).where(and(eq(schema.warehouses.id, id), eq(schema.warehouses.tenantId, req.tenantId)));
+      await logActivity(req, "DELETE_WAREHOUSE", `'${warehouse.name}' (ID: ${id}) anbarını sildi`);
+      res.json({ success: true, message: "Anbar uğurla silindi" });
+    } catch (error: any) {
+      res.status(500).json({ message: "Anbar silinərkən xəta baş verdi: " + error.message });
+    }
+  });
+
   return router;
 }

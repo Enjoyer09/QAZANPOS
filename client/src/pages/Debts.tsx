@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { 
-  AlertTriangle, Clock, Check, Eye, X, Lock, LayoutGrid, List
+  AlertTriangle, Clock, Check, Eye, X, Lock, LayoutGrid, List, Smartphone
 } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
 import { TableSkeleton } from "../components/Skeleton.tsx";
@@ -32,6 +32,10 @@ export default function Debts() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [isFixing, setIsFixing] = useState(false);
+  const [smsSending, setSmsSending] = useState(false);
+  const [smsResult, setSmsResult] = useState<{ sent: number; failed: number; message: string } | null>(null);
+  const [smsConfirmOpen, setSmsConfirmOpen] = useState(false);
+  const [smsTargetIds, setSmsTargetIds] = useState<number[] | null>(null);
 
   const user = (() => {
     try {
@@ -192,6 +196,51 @@ export default function Debts() {
     }
   };
 
+  const sendSingleSMS = async (item: any) => {
+    setSmsSending(true);
+    try {
+      const res = await fetch("/api/credits/send-sms-reminder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ saleIds: [item.id] }),
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      toast({
+        title: data.sent > 0 ? "SMS göndərildi!" : "SMS göndərilmədi",
+        description: data.message,
+        variant: data.failed > 0 ? "destructive" : "success",
+      });
+    } catch {
+      toast({ title: "Xəta!", description: "SMS göndərilərkən xəta baş verdi.", variant: "destructive" });
+    } finally {
+      setSmsSending(false);
+    }
+  };
+
+  const sendBulkSMS = async () => {
+    setSmsSending(true);
+    setSmsConfirmOpen(false);
+    try {
+      const res = await fetch("/api/credits/send-sms-reminder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(smsTargetIds ? { saleIds: smsTargetIds } : {}),
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setSmsResult(data);
+      if (data.failed > 0) {
+        toast({ title: "Bəzi SMS-lər göndərilmədi", description: data.message, variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Xəta!", description: "SMS-lər göndərilərkən xəta baş verdi.", variant: "destructive" });
+    } finally {
+      setSmsSending(false);
+      setSmsTargetIds(null);
+    }
+  };
+
   const totalCustomerDebt =
     (overdueList?.reduce((sum, item) => sum + (Number(item.remainingDebt) || 0), 0) || 0) +
     (pendingList?.reduce((sum, item) => sum + (Number(item.remainingDebt) || 0), 0) || 0);
@@ -323,16 +372,27 @@ export default function Debts() {
           <p className="text-xs text-gray-400 mt-1">
             Müştərilərin bizə olan nisyə borcları və bizim tədarükçülərə olan anbar borclarımız
           </p>
-        </div>
-        {isAdmin && (
-          <button
-            onClick={handleFixCredits}
-            disabled={isFixing}
-            className="px-4.5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-50 select-none"
-          >
-            {isFixing ? "Düzəldilir..." : "Köhnə Nisyə Statuslarını Düzəlt"}
-          </button>
-        )}
+        </div>          {isAdmin && (
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setSmsTargetIds(null);
+                  setSmsConfirmOpen(true);
+                }}
+                disabled={smsSending}
+                className="px-4.5 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-extrabold text-xs rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-50 select-none flex items-center gap-2"
+              >
+                <Smartphone className="w-4 h-4" /> Toplu SMS Xatırlat
+              </button>
+              <button
+                onClick={handleFixCredits}
+                disabled={isFixing}
+                className="px-4.5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-50 select-none"
+              >
+                {isFixing ? "Düzəldilir..." : "Köhnə Nisyə Statuslarını Düzəlt"}
+              </button>
+            </div>
+          )}
       </div>
 
       {/* Search and Filters panel */}
@@ -506,17 +566,27 @@ export default function Debts() {
                             </td>
                             <td className="py-4 px-2 text-right pr-4">
                               <div className="flex justify-end gap-2">
-                                <button
-                                  onClick={() => setSelectedCustDebt(item)}
-                                  className="px-2.5 py-1.5 bg-green-600 hover:bg-green-700 text-white font-bold text-[10px] uppercase rounded-lg cursor-pointer"
-                                >
-                                  Ödə
-                                </button>
-                                <Link href={`/satislar/${item.id}`}>
-                                  <button className="p-2 border border-gray-100 hover:border-gray-200 text-gray-500 hover:text-primary rounded-xl cursor-pointer bg-white transition-all">
-                                    <Eye className="w-3.5 h-3.5" />
-                                  </button>
-                                </Link>
+                    <button
+                      onClick={() => setSelectedCustDebt(item)}
+                      className="px-2.5 py-1.5 bg-green-600 hover:bg-green-700 text-white font-bold text-[10px] uppercase rounded-lg cursor-pointer"
+                    >
+                      Ödə
+                    </button>
+                    {item.customerPhone && (
+                      <button
+                        onClick={() => sendSingleSMS(item)}
+                        disabled={smsSending}
+                        className="px-2 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 font-bold text-[10px] uppercase rounded-lg cursor-pointer flex items-center gap-1 border border-blue-100 disabled:opacity-50"
+                        title="SMS Xatırlatma Göndər"
+                      >
+                        <Smartphone className="w-3 h-3" /> SMS
+                      </button>
+                    )}
+                    <Link href={`/satislar/${item.id}`}>
+                      <button className="p-2 border border-gray-100 hover:border-gray-200 text-gray-500 hover:text-primary rounded-xl cursor-pointer bg-white transition-all">
+                        <Eye className="w-3.5 h-3.5" />
+                      </button>
+                    </Link>
                               </div>
                             </td>
                           </tr>
@@ -601,17 +671,27 @@ export default function Debts() {
                             </td>
                             <td className="py-4 px-2 text-right pr-4">
                               <div className="flex justify-end gap-2">
-                                <button
-                                  onClick={() => setSelectedCustDebt(item)}
-                                  className="px-2.5 py-1.5 bg-green-600 hover:bg-green-700 text-white font-bold text-[10px] uppercase rounded-lg cursor-pointer"
-                                >
-                                  Ödə
-                                </button>
-                                <Link href={`/satislar/${item.id}`}>
-                                  <button className="p-2 border border-gray-100 hover:border-gray-200 text-gray-500 hover:text-primary rounded-xl cursor-pointer bg-white transition-all">
-                                    <Eye className="w-3.5 h-3.5" />
-                                  </button>
-                                </Link>
+                    <button
+                      onClick={() => setSelectedCustDebt(item)}
+                      className="px-2.5 py-1.5 bg-green-600 hover:bg-green-700 text-white font-bold text-[10px] uppercase rounded-lg cursor-pointer"
+                    >
+                      Ödə
+                    </button>
+                    {item.customerPhone && (
+                      <button
+                        onClick={() => sendSingleSMS(item)}
+                        disabled={smsSending}
+                        className="px-2 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 font-bold text-[10px] uppercase rounded-lg cursor-pointer flex items-center gap-1 border border-blue-100 disabled:opacity-50"
+                        title="SMS Xatırlatma Göndər"
+                      >
+                        <Smartphone className="w-3 h-3" /> SMS
+                      </button>
+                    )}
+                    <Link href={`/satislar/${item.id}`}>
+                      <button className="p-2 border border-gray-100 hover:border-gray-200 text-gray-500 hover:text-primary rounded-xl cursor-pointer bg-white transition-all">
+                        <Eye className="w-3.5 h-3.5" />
+                      </button>
+                    </Link>
                               </div>
                             </td>
                           </tr>
@@ -727,6 +807,16 @@ export default function Debts() {
                                 >
                                   Borcu Ödə
                                 </button>
+                                {item.customerPhone && (
+                                  <button
+                                    onClick={() => sendSingleSMS(item)}
+                                    disabled={smsSending}
+                                    className="px-2 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 font-extrabold text-[10px] rounded-lg cursor-pointer transition-all border border-blue-100/50 disabled:opacity-50 flex items-center gap-1"
+                                    title="SMS Xatırlatma Göndər"
+                                  >
+                                    <Smartphone className="w-3 h-3" />
+                                  </button>
+                                )}
                                 
                                 <select
                                   value={col.id}
@@ -1121,6 +1211,100 @@ export default function Debts() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 5. SMS SEND CONFIRMATION MODAL */}
+      {smsConfirmOpen && (
+        <div className="liquid-glass-overlay !z-100">
+          <div className="liquid-glass-card max-w-md p-6 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-4 border-b border-gray-50 mb-4">
+              <h3 className="font-extrabold text-gray-900 text-lg leading-tight">
+                <Smartphone className="w-5 h-5 inline mr-2 text-blue-500" />
+                SMS Xatırlatma Göndər
+              </h3>
+              <button onClick={() => { setSmsConfirmOpen(false); setSmsTargetIds(null); }} className="text-gray-400 hover:text-gray-600 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="mb-6 space-y-3 text-xs">
+              <div className="p-3.5 bg-blue-50 border border-blue-100 rounded-xl">
+                <p className="font-semibold text-blue-800">
+                  {smsTargetIds
+                    ? `Seçilmiş ${smsTargetIds.length} müştəriyə SMS xatırlatma göndərilsin?`
+                    : `Bütün gecikmiş borclu müştərilərə SMS xatırlatma göndərilsin?`}
+                </p>
+              </div>
+              <p className="text-gray-500 font-medium">
+                SMS-lər Ayarlar səhifəsində qeyd olunmuş SMS şablonu əsasında və qeyd olunmuş API açarı ilə göndəriləcək.
+                Hər bir müştəriyə borc məbləği və son ödəniş tarixi qeyd olunan fərdiləşdirilmiş mesaj göndərilir.
+              </p>
+            </div>
+
+            <div className="flex gap-3 justify-end pt-3 border-t border-gray-50">
+              <button
+                type="button"
+                onClick={() => { setSmsConfirmOpen(false); setSmsTargetIds(null); }}
+                className="px-4 py-2 border border-gray-200 text-gray-500 font-bold rounded-xl hover:bg-gray-50 cursor-pointer"
+                disabled={smsSending}
+              >
+                Ləğv et
+              </button>
+              <button
+                type="button"
+                onClick={sendBulkSMS}
+                disabled={smsSending}
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl cursor-pointer disabled:opacity-50 flex items-center gap-2"
+              >
+                <Smartphone className="w-4 h-4" />
+                {smsSending ? "Göndərilir..." : "Təsdiqlə və Göndər"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6. SMS RESULT MODAL */}
+      {smsResult && (
+        <div className="liquid-glass-overlay !z-100">
+          <div className="liquid-glass-card max-w-md p-6 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-4 border-b border-gray-50 mb-4">
+              <h3 className="font-extrabold text-gray-900 text-lg leading-tight">
+                SMS Göndərilmə Nəticəsi
+              </h3>
+              <button onClick={() => setSmsResult(null)} className="text-gray-400 hover:text-gray-600 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className={`p-3.5 rounded-xl border ${smsResult.failed > 0 ? "bg-amber-50 border-amber-100" : "bg-emerald-50 border-emerald-100"}`}>
+                <p className={`font-bold ${smsResult.failed > 0 ? "text-amber-800" : "text-emerald-800"}`}>
+                  {smsResult.message}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-gray-50 rounded-xl p-3 text-center">
+                  <span className="text-lg font-black text-emerald-600 block">{smsResult.sent}</span>
+                  <span className="text-[10px] font-bold text-gray-400 uppercase">Göndərildi</span>
+                </div>
+                <div className="bg-gray-50 rounded-xl p-3 text-center">
+                  <span className="text-lg font-black text-red-500 block">{smsResult.failed}</span>
+                  <span className="text-[10px] font-bold text-gray-400 uppercase">Uğursuz</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-4 mt-4 border-t border-gray-50">
+              <button
+                onClick={() => setSmsResult(null)}
+                className="px-5 py-2 bg-gray-900 hover:bg-gray-800 text-white font-bold rounded-xl cursor-pointer"
+              >
+                Bağla
+              </button>
+            </div>
           </div>
         </div>
       )}

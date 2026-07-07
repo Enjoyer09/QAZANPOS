@@ -13,6 +13,7 @@ interface StockLevel {
   unit: string;
   currentQuantity: number;
   lastPurchasePrice: number;
+  lastSalePrice: number;
   totalValue: number;
   lastPurchaseDate?: string | null;
   barcode?: string | null;
@@ -398,6 +399,8 @@ export default function Stock() {
                     <th className="p-4 text-right">Cari Miqdar</th>
                     <th className="p-4 text-right">Son Alış Qiyməti</th>
                     <th className="p-4 text-right">Ümumi Dəyər</th>
+                    <th className="p-4 text-right">Son Satış Qiyməti</th>
+                    <th className="p-4 text-right">Mənfəət Marjası</th>
                     <th className="p-4 pl-8">Əməliyyat</th>
                   </tr>
                 </thead>
@@ -478,6 +481,33 @@ export default function Stock() {
                           </td>
                           <td className="p-4 text-right font-bold text-gray-955 font-mono">
                             {item.totalValue > 0 ? `${item.totalValue.toFixed(2)} ₼` : "0.00 ₼"}
+                          </td>
+                          <td className="p-4 text-right font-semibold text-gray-600 font-mono">
+                            {item.lastSalePrice > 0 ? `${item.lastSalePrice.toFixed(2)} ₼` : "—"}
+                          </td>
+                          <td className="p-4 text-right">
+                            {(() => {
+                              const cost = item.lastPurchasePrice;
+                              const price = item.lastSalePrice;
+                              if (cost > 0 && price > 0) {
+                                const profit = price - cost;
+                                const margin = (profit / cost) * 100;
+                                const isPositive = profit >= 0;
+                                return (
+                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black ${
+                                    isPositive 
+                                      ? "bg-green-50 text-green-700 border border-green-100" 
+                                      : "bg-red-50 text-red-600 border border-red-100"
+                                  }`}>
+                                    {isPositive ? "+" : ""}{margin.toFixed(1)}%
+                                    <span className={`text-[9px] ${isPositive ? "text-green-500" : "text-red-400"}`}>
+                                      ({isPositive ? "+" : ""}{profit.toFixed(2)} ₼)
+                                    </span>
+                                  </span>
+                                );
+                              }
+                              return <span className="text-gray-300">—</span>;
+                            })()}
                           </td>
                           <td className="p-4">
                             {item.currentQuantity > 0 ? (

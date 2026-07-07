@@ -167,6 +167,23 @@ export async function logActivity(req: AuthenticatedRequest, action: string, des
   }
 }
 
+// ─── Remaining Debt Helper ────────────────────────────────────────────────
+
+/**
+ * Compute the remaining debt for a credit sale.
+ * Formula: max(0, totalAmount - totalPayments - totalReturns - loyaltyDiscount)
+ */
+export function computeRemainingDebt(
+  sale: { totalAmount: number; loyaltyDiscountPaid?: number | null },
+  payments: { amount: number }[],
+  returns: { totalAmount: number }[] = []
+): number {
+  const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+  const totalReturned = returns.reduce((sum, r) => sum + r.totalAmount, 0);
+  const loyaltyDiscount = Number(sale.loyaltyDiscountPaid) || 0;
+  return Math.max(0, Math.round((sale.totalAmount - totalPaid - totalReturned - loyaltyDiscount) * 100) / 100);
+}
+
 // ─── Date Helpers ──────────────────────────────────────────────────────────
 
 export function getMonthBoundaries() {
