@@ -112,10 +112,16 @@ export default function salesRoutes(): Router {
         }
       }
 
+      // Settings-ə əsasən növbə tələb olunub-olunmadığını yoxla
+      const tenantSettings = await db.query.settings.findFirst({
+        where: eq(schema.settings.tenantId, req.tenantId)
+      });
+      const requireShift = tenantSettings?.requireShift ?? 1;
+
       const activeShift = await db.query.shifts.findFirst({
         where: and(eq(schema.shifts.tenantId, req.tenantId), eq(schema.shifts.cashierName, sellerName), eq(schema.shifts.status, "open"))
       });
-      if (!activeShift && !offlineId) return res.status(400).json({ message: "Satış etmək üçün əvvəlcə kassa növbəsini açmalısınız!" });
+      if (requireShift && !activeShift && !offlineId) return res.status(400).json({ message: "Satış etmək üçün əvvəlcə kassa növbəsini açmalısınız!" });
       const shiftIdToLink = activeShift ? activeShift.id : null;
 
       let pointsEarned = 0;

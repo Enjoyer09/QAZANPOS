@@ -77,6 +77,7 @@ export default function SettingsPage() {
   const [invoiceFooter, setInvoiceFooter] = useState("");
   const [lowStockAlertCount, setLowStockAlertCount] = useState("5");
   const [defaultCreditDays, setDefaultCreditDays] = useState("30");
+  const [requireShift, setRequireShift] = useState(1);
 
   // Azerbaijan Tax State
   const [voen, setVoen] = useState("");
@@ -367,6 +368,7 @@ export default function SettingsPage() {
       setInvoiceFooter(settingsData.invoiceFooter || "");
       setLowStockAlertCount("" + (settingsData.lowStockAlertCount || 5));
       setDefaultCreditDays("" + (settingsData.defaultCreditDays || 30));
+      setRequireShift(settingsData.requireShift ?? 1);
       
       setReceiptWidth(settingsData.receiptWidth || "80mm");
       setShowBarcode(settingsData.showBarcode ?? 1);
@@ -905,6 +907,7 @@ export default function SettingsPage() {
       telegramNotificationsEnabled,
       backupTime,
       telegramBackupEnabled,
+      requireShift,
 
       // Azerbaijan Tax fields
       voen: voen.trim() || null,
@@ -1396,9 +1399,7 @@ export default function SettingsPage() {
                     placeholder="Məs. Sədərək TM, Sıra 5"
                   />
                 </div>
-              </div>
-
-              <div className="space-y-1 md:col-span-2">
+              </div>                <div className="space-y-1 md:col-span-2">
                 <label className="text-gray-400 uppercase tracking-wider block text-[10px]">
                   Rəsmi Qaimə Sonu Bildiriş (Invoice Footer)
                 </label>
@@ -1411,6 +1412,27 @@ export default function SettingsPage() {
                     className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 resize-none"
                     placeholder="Qaimənin sonunda çap ediləcək qeyd..."
                   />
+                </div>
+              </div>
+
+              {/* Kassa Növbəsi Tələbi */}
+              <div className="md:col-span-2 border-t border-gray-100/70 pt-4 mt-4">
+                <div className="space-y-3 font-semibold text-xs text-gray-700">
+                  <h4 className="font-extrabold text-gray-900 text-xs uppercase tracking-wider">Kassa Növbəsi Ayarları</h4>
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={requireShift === 1}
+                      onChange={(e) => setRequireShift(e.target.checked ? 1 : 0)}
+                      className="rounded border-gray-300 text-primary focus:ring-primary size-4"
+                    />
+                    <span>
+                      Kassa növbəsi tələb olunsun
+                      <span className="block text-[10px] text-gray-400 font-normal leading-tight mt-0.5">
+                        Aktiv olduqda POS satış etmək üçün növbə açmaq məcburidir. Söndürüldükdə satıcılar növbə açmadan birbaşa satış edə bilər.
+                      </span>
+                    </span>
+                  </label>
                 </div>
               </div>
             </div>

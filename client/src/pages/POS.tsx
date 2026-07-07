@@ -1171,8 +1171,8 @@ export default function POS() {
         </div>
       </div>
 
-      {/* Shift Status Bar */}
-      {isOnline && (
+      {/* Shift Status Bar — yalnız requireShift = 1 olduqda göstər */}
+      {isOnline && settings?.requireShift !== 0 && (
         <div className={`rounded-2xl border p-4 flex items-center justify-between transition-all ${
           activeShift
             ? "bg-emerald-50/80 border-emerald-200/60"

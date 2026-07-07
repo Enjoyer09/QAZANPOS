@@ -366,6 +366,7 @@ export const settings = pgTable("settings", {
   smsSenderName: text("sms_sender_name"),
   smsTemplateDebt: text("sms_template_debt"),
   smsTemplateSale: text("sms_template_sale"),
+  requireShift: integer("require_shift").notNull().default(1), // 1 = shift required, 0 = no shift
 });
 
 // 8b. Expense Limits per Category
