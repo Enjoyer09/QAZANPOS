@@ -87,8 +87,11 @@ export default function salesRoutes(): Router {
         processedItems.push({ productId: item.productId, quantity: qty, salePrice: parseFloat(item.salePrice), purchasePrice: fifoCost, serialNumbers: item.serialNumbers });
       }
 
-      // ── Stok yoxlaması (beynəlxalq standart) ──
-      const { allProducts: stockProducts, metrics: stockMetrics } = await fetchTenantStockMetrics(req.tenantId, targetWarehouseId || undefined);
+      // ── Stok yoxlaması (Admin → bütün anbarlar, Staff → öz anbarı) ──
+      const userRole = req.headers["x-user-role"] as string;
+      const isAdminSale = userRole === "Admin";
+      const stockCheckWarehouseId = isAdminSale ? undefined : (targetWarehouseId || undefined);
+      const { allProducts: stockProducts, metrics: stockMetrics } = await fetchTenantStockMetrics(req.tenantId, stockCheckWarehouseId);
       const productNameLookup = new Map(stockProducts.map(p => [p.id, p.name]));
       const stockWarnings: { productId: number; productName: string; requested: number; available: number }[] = [];
 
@@ -158,7 +161,7 @@ export default function salesRoutes(): Router {
             for (const sNum of item.serialNumbers) {
               const cleaned = sNum.trim().toUpperCase();
               const serialConditions = [eq(schema.productSerials.serialNumber, cleaned), eq(schema.productSerials.tenantId, req.tenantId), eq(schema.productSerials.status, "in_stock")];
-              if (targetWarehouseId) serialConditions.push(eq(schema.productSerials.warehouseId, targetWarehouseId));
+              if (!isAdminSale && targetWarehouseId) serialConditions.push(eq(schema.productSerials.warehouseId, targetWarehouseId));
               await tx.update(schema.productSerials).set({ status: "sold", saleId, soldAt: new Date().toISOString() }).where(and(...serialConditions));
             }
           }

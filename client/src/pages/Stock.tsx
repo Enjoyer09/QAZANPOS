@@ -33,6 +33,7 @@ export default function Stock() {
   // Multi-warehouse and transfer states
   const [activeStockTab, setActiveStockTab] = useState("list"); // "list" | "transfers" | "stocktake" | "po"
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("");
+  const [initialWarehouseSet, setInitialWarehouseSet] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [transferProductId, setTransferProductId] = useState<number>(0);
   const [transferFromWarehouseId, setTransferFromWarehouseId] = useState<number>(0);
@@ -83,6 +84,14 @@ export default function Stock() {
       return res.json();
     },
   });
+
+  // Current user yüklənəndə default anbarı təyin et
+  React.useEffect(() => {
+    if (currentUser?.warehouseId && !initialWarehouseSet) {
+      setSelectedWarehouseId(String(currentUser.warehouseId));
+      setInitialWarehouseSet(true);
+    }
+  }, [currentUser, initialWarehouseSet]);
 
   // Fetch warehouses
   const { data: warehousesList = [] } = useQuery<any[]>({

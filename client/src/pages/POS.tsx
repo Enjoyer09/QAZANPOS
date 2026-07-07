@@ -219,16 +219,13 @@ export default function POS() {
 
   // Queries
   const { data: stockLevels } = useQuery<any[]>({
-    queryKey: ["/api/stock/levels", currentUser?.warehouseId],
+    queryKey: ["/api/stock/levels"],
     queryFn: async () => {
-      const url = currentUser?.warehouseId 
-        ? `/api/stock/levels?warehouseId=${currentUser.warehouseId}` 
-        : "/api/stock/levels";
-      const res = await fetch(url);
+      const res = await fetch("/api/stock/levels");
       if (!res.ok) throw new Error();
       return res.json();
     },
-    enabled: isOnline && currentUser !== undefined,
+    enabled: isOnline,
   });
 
   const { data: customers } = useQuery<any[]>({
