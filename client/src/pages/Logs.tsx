@@ -12,6 +12,7 @@ import {
   Settings,
   HelpCircle,
   Archive,
+  Search,
 } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
 
@@ -60,13 +61,32 @@ const actionBadges: Record<string, string> = {
 
 export default function Logs() {
   const { toast } = useToast();
-  const todayStr = new Date().toISOString().split("T")[0];
-  const [selectedDate, setSelectedDate] = useState(todayStr);
+  const getToday = () => new Date().toISOString().split("T")[0];
+  const [dateFrom, setDateFrom] = useState(getToday());
+  const [dateTo, setDateTo] = useState(getToday());
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  // Debounce search input (300ms)
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const buildQueryString = () => {
+    const params = new URLSearchParams();
+    params.set("dateFrom", dateFrom);
+    params.set("dateTo", dateTo);
+    if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
+    return params.toString();
+  };
 
   const { data: logs, isLoading, refetch, isFetching } = useQuery<ActivityLog[]>({
-    queryKey: ["/api/activity-logs", selectedDate],
+    queryKey: ["/api/activity-logs", dateFrom, dateTo, debouncedSearch],
     queryFn: async () => {
-      const res = await fetch(`/api/activity-logs?date=${selectedDate}`);
+      const res = await fetch(`/api/activity-logs?${buildQueryString()}`);
       if (!res.ok) throw new Error("Loqları gətirmək mümkün olmadı");
       return res.json();
     },
@@ -76,7 +96,7 @@ export default function Logs() {
     refetch();
     toast({
       title: "Yeniləndi",
-      description: `${selectedDate} tarixinə aid fəaliyyət loqları yeniləndi.`,
+      description: `${dateFrom} – ${dateTo} tarix aralığında loqlar yeniləndi.`,
       variant: "success",
     });
   };
@@ -88,7 +108,8 @@ export default function Logs() {
   const paymentCount = logs?.filter((l) => l.action.includes("PAY") || l.action.includes("PAYMENT")).length || 0;
   const expenseCount = logs?.filter((l) => l.action.includes("EXPENSE")).length || 0;
 
-  const isToday = selectedDate === todayStr;
+  const todayStr = getToday();
+  const isToday = dateFrom === todayStr && dateTo === todayStr;
 
   return (
     <div className="space-y-6 animate-in fade-in-0 duration-300">
@@ -101,21 +122,42 @@ export default function Logs() {
           </p>
         </div>
 
-        {/* Date Selector & Refresh */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2 bg-white p-2 rounded-xl border border-gray-100 shadow-xs glass">
-            <CalendarIcon className="w-4 h-4 text-gray-400" />
+        {/* Date Range & Search & Refresh */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          {/* Search Box */}
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="w-4 h-4 absolute left-3 top-3 text-gray-400" />
             <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="text-xs font-bold focus:outline-none bg-transparent cursor-pointer text-gray-700"
+              type="text"
+              placeholder="Axtar: məhsul, satış, istifadəçi..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-1 focus:ring-primary bg-white"
             />
           </div>
+
+          {/* Date Range Picker */}
+          <div className="flex items-center gap-1.5 bg-white p-2 rounded-xl border border-gray-100 shadow-xs glass">
+            <CalendarIcon className="w-4 h-4 text-gray-400 shrink-0" />
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="text-xs font-bold focus:outline-none bg-transparent cursor-pointer text-gray-700 w-[130px]"
+            />
+            <span className="text-[10px] text-gray-400 font-bold">—</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="text-xs font-bold focus:outline-none bg-transparent cursor-pointer text-gray-700 w-[130px]"
+            />
+          </div>
+
           <button
             onClick={handleRefresh}
             disabled={isLoading || isFetching}
-            className="p-2.5 bg-white border border-gray-200 hover:border-gray-300 text-gray-500 rounded-xl cursor-pointer shadow-xs transition-all flex items-center justify-center disabled:opacity-50"
+            className="p-2.5 bg-white border border-gray-200 hover:border-gray-300 text-gray-500 rounded-xl cursor-pointer shadow-xs transition-all flex items-center justify-center disabled:opacity-50 shrink-0"
             title="Loqları Yenilə"
           >
             <RefreshCw className={`w-4 h-4 ${isFetching ? "animate-spin text-primary" : ""}`} />
@@ -161,7 +203,7 @@ export default function Logs() {
       <div className="bg-white border border-gray-100 rounded-3xl p-6 shadow-xs glass-card space-y-6">
         <div className="flex items-center justify-between border-b border-gray-50 pb-4">
           <h3 className="font-extrabold text-gray-900 text-sm">
-            {isToday ? "Bugünkü Əməliyyat Loqları" : `${selectedDate} tarixinə aid loqlar`}
+            {isToday ? "Bugünkü Əməliyyat Loqları" : `${dateFrom} – ${dateTo} tarix aralığına aid loqlar`}
           </h3>
           <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 bg-gray-50 border border-gray-100 text-gray-500 rounded-lg">
             {isToday ? (
@@ -185,10 +227,21 @@ export default function Logs() {
           </div>
         ) : !logs || logs.length === 0 ? (
           <div className="py-20 text-center text-xs text-gray-400 font-bold space-y-2">
-            <p>Bu tarixdə heç bir fəaliyyət qeydə alınmayıb.</p>
-            <p className="text-[10px] font-medium text-gray-300">
-              Sistemdə hər hansı bir məhsul, mədaxil, satış və ya xərc əməliyyatı etdikdə loqlar burada görünəcək.
-            </p>
+            {debouncedSearch.trim() ? (
+              <>
+                <p>"{debouncedSearch.trim()}" — uyğun fəaliyyət qeydi tapılmadı.</p>
+                <p className="text-[10px] font-medium text-gray-300">
+                  Axtarış meyarlarına uyğun loq mövcud deyil. Başqa açar sözlərlə və ya tarix aralığı ilə yenidən cəhd edin.
+                </p>
+              </>
+            ) : (
+              <>
+                <p>Bu tarix aralığında heç bir fəaliyyət qeydə alınmayıb.</p>
+                <p className="text-[10px] font-medium text-gray-300">
+                  Sistemdə hər hansı bir məhsul, mədaxil, satış və ya xərc əməliyyatı etdikdə loqlar burada görünəcək.
+                </p>
+              </>
+            )}
           </div>
         ) : (
           <div className="relative border-l border-gray-100 ml-4 md:ml-6 pl-6 space-y-6 py-2">
