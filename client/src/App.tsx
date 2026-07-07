@@ -1056,7 +1056,7 @@ function AppContent() {
 
   // Load and apply local UI scaling setting (Fluid REM Scaling)
   useEffect(() => {
-    const savedScale = localStorage.getItem("qazanpos_ui_scale") || "100%";
+    const savedScale = localStorage.getItem("qazanpos_ui_scale") || "120%";
     const scaleVal = savedScale.replace("%", "");
     const basePx = (parseFloat(scaleVal) / 100) * 16;
     document.documentElement.style.fontSize = `${basePx}px`;

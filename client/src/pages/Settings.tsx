@@ -64,7 +64,7 @@ export default function SettingsPage() {
   };
 
   const [settingsTab, setSettingsTab] = useState("general");
-  const [uiScale, setUiScale] = useState(() => localStorage.getItem("qazanpos_ui_scale") || "100%");
+  const [uiScale, setUiScale] = useState(() => localStorage.getItem("qazanpos_ui_scale") || "120%");
   const [showResetConfirmModal, setShowResetConfirmModal] = useState(false);
   const [marketplaceCommissions, setMarketplaceCommissions] = useState<Record<string, number>>({});
   const [resetPassword, setResetPassword] = useState("");
