@@ -2359,18 +2359,26 @@ router.post("/sales", async (req, res) => {
       });
     }
 
-    // Enforce active shift check
-    const activeShift = await db.query.shifts.findFirst({
-      where: and(
-        eq(schema.shifts.tenantId, req.tenantId),
-        eq(schema.shifts.cashierName, sellerName),
-        eq(schema.shifts.status, "open")
-      )
+    // Check if shift is required based on tenant settings
+    const tenantSettings = await db.query.settings.findFirst({
+      where: eq(schema.settings.tenantId, req.tenantId)
     });
-    if (!activeShift && !offlineId) {
-      return res.status(400).json({ message: "Satış etmək üçün əvvəlcə kassa növbəsini açmalısınız!" });
+    const isShiftRequired = tenantSettings?.requireShift !== 0; // Default: required (1)
+    
+    let shiftIdToLink: number | null = null;
+    if (isShiftRequired) {
+      const activeShift = await db.query.shifts.findFirst({
+        where: and(
+          eq(schema.shifts.tenantId, req.tenantId),
+          eq(schema.shifts.cashierName, sellerName),
+          eq(schema.shifts.status, "open")
+        )
+      });
+      if (!activeShift && !offlineId) {
+        return res.status(400).json({ message: "Satış etmək üçün əvvəlcə kassa növbəsini açmalısınız!" });
+      }
+      shiftIdToLink = activeShift ? activeShift.id : null;
     }
-    const shiftIdToLink = activeShift ? activeShift.id : null;
 
     // Compute loyalty points
     let pointsEarned = 0;
