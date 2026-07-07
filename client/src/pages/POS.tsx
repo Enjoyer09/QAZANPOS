@@ -848,6 +848,15 @@ export default function POS() {
         description: isCredit ? `Borc: ${totalAmount.toFixed(2)} ₼` : `Gəlir: ${totalAmount.toFixed(2)} ₼`,
         variant: "success",
       });
+
+      // Anbar xəbərdarlığı — target anbarda stok çatmazsa
+      if (data.warehouseWarning) {
+        toast({
+          title: "⚠️ Anbar xəbərdarlığı",
+          description: data.warehouseWarning.message,
+          variant: "default",
+        });
+      }
     },
     onError: (err: any) => {
       toast({

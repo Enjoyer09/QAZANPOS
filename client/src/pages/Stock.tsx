@@ -85,9 +85,15 @@ export default function Stock() {
     },
   });
 
-  // Current user yüklənəndə default anbarı təyin et
+  // Admin → default anbar, sonra dəyişə bilər | Staff → həmişə öz anbarına locked
   React.useEffect(() => {
-    if (currentUser?.warehouseId && !initialWarehouseSet) {
+    if (!currentUser?.warehouseId) return;
+    
+    if (user?.role !== "Admin") {
+      // Staff always locked to their warehouse
+      setSelectedWarehouseId(String(currentUser.warehouseId));
+    } else if (!initialWarehouseSet) {
+      // Admin gets default warehouse once (can change via dropdown)
       setSelectedWarehouseId(String(currentUser.warehouseId));
       setInitialWarehouseSet(true);
     }
@@ -357,7 +363,7 @@ export default function Stock() {
           </button>
         </div>
 
-        {activeStockTab === "list" && (
+        {activeStockTab === "list" && user?.role === "Admin" && (
           <div className="flex items-center gap-2 pb-2 sm:pb-0">
             <span className="text-[10px] text-gray-400 font-bold uppercase">Aktiv Anbar:</span>
             <select
@@ -372,7 +378,7 @@ export default function Stock() {
             </select>
           </div>
         )}
-        {activeStockTab === "stocktake" && (
+        {activeStockTab === "stocktake" && user?.role === "Admin" && (
           <div className="flex items-center gap-2 pb-2 sm:pb-0">
             <span className="text-[10px] text-gray-400 font-bold uppercase">Sayım Anbarı:</span>
             <select

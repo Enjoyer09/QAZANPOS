@@ -34,7 +34,7 @@ export default function settingsRoutes(): Router {
         "simplifiedRate", "showTaxOnReceipt", "showTaxOnInvoice",
         "marketplaceCommissions", "staffCanViewSalesHistory", "staffCanViewStock",
         "staffCanViewCustomers", "staffCanViewVendors", "staffCanViewExpenses",
-        "activeBanks", "loyaltyRuleRate", "loyaltyMinPointsRedeem",
+        "activeBanks", "requireShift", "loyaltyRuleRate", "loyaltyMinPointsRedeem",
         "smsApiKey", "smsSenderName", "smsTemplateDebt", "smsTemplateSale",
       ];
 
