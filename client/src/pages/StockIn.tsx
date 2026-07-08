@@ -18,6 +18,7 @@ const emptyEntry = {
   vendorId: "",
   bankName: "",
   applyEdv: true,
+  warehouseId: "",
 };
 
 const paymentTypes = ["Nəğd", "Kart", "Kart2Kart", "Köçürmə", "Nisyə"];
@@ -155,6 +156,15 @@ export default function StockIn() {
 
   const [forceSerialized, setForceSerialized] = useState(false);
 
+  const { data: warehouses = [] } = useQuery<any[]>({
+    queryKey: ["/api/warehouses"],
+    queryFn: async () => {
+      const res = await fetch("/api/warehouses");
+      if (!res.ok) throw new Error();
+      return res.json();
+    }
+  });
+
   const { data: entries, isLoading: isEntriesLoading } = useQuery<any[]>({
     queryKey: ["/api/stock/entries"],
     queryFn: async () => {
@@ -174,6 +184,12 @@ export default function StockIn() {
       setProductSearch("");
     }
   }, [formData.productId, products]);
+
+  useEffect(() => {
+    if (currentUser?.warehouseId && !formData.warehouseId) {
+      setFormData((prev) => ({ ...prev, warehouseId: String(currentUser.warehouseId) }));
+    }
+  }, [currentUser, formData.warehouseId]);
 
   const normalizeSearchText = (text: any): string => {
     if (text === null || text === undefined) return "";
@@ -369,33 +385,13 @@ export default function StockIn() {
       vendorId: formData.vendorId ? parseInt(formData.vendorId) : null,
       serialNumbers: isSerialized ? parsedSerials : null,
       applyEdv: formData.applyEdv ? 1 : 0,
-      warehouseId: currentUser?.warehouseId || 1,
+      warehouseId: formData.warehouseId ? parseInt(formData.warehouseId) : (currentUser?.warehouseId || 1),
     };
 
     createMutation.mutate(payload);
   };
 
-  if (user?.role !== "Admin" && currentUser?.staffCanViewStock === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[70vh] px-4 animate-in fade-in-0 duration-300">
-        <div className="bg-white border border-gray-100 p-8 rounded-2xl shadow-xl max-w-md w-full text-center space-y-6 glass-card relative overflow-hidden">
-          <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-red-500 to-amber-500"></div>
-          <div className="size-16 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto shadow-sm">
-            <Lock className="w-8 h-8" />
-          </div>
-          <div className="space-y-2">
-            <h3 className="text-lg font-black text-gray-900">Anbara Giriş Məhdudlaşdırılıb 🔒</h3>
-            <p className="text-xs text-gray-500 font-semibold leading-relaxed">
-              Bu bölməyə giriş mağaza administratoru tərəfindən məhdudlaşdırılmışdır. Səlahiyyət almaq üçün administratora müraciət edin.
-            </p>
-          </div>
-          <div className="border-t border-gray-100 pt-4">
-            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">QAZANPOS TƏHLÜKƏSİZLİK SİSTEMİ</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+
 
   return (
     <div className="space-y-6 animate-in fade-in-0">
@@ -666,6 +662,24 @@ export default function StockIn() {
               </div>
             )}
 
+            {/* Warehouse Selector */}
+            <div className="space-y-1.5">
+              <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Mədaxil Anbarı *</label>
+              <select
+                value={formData.warehouseId}
+                onChange={(e) => setFormData((prev) => ({ ...prev, warehouseId: e.target.value }))}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 cursor-pointer font-bold text-gray-700"
+                required
+              >
+                <option value="">Anbar Seçin...</option>
+                {warehouses.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Supplier / Vendor Selector */}
             <div className="space-y-1.5">
               <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Qeydiyyatlı Tədarükçü (Ledger)</label>
@@ -802,30 +816,32 @@ export default function StockIn() {
                         })()}
                       </td>
                       <td className="py-3 px-2 text-center pr-4">
-                        <button
-                          onClick={() => {
-                            setEditingEntry(entry);
-                            setEditFormData({
-                              id: entry.id,
-                              productId: String(entry.productId),
-                              quantity: String(entry.quantity),
-                              purchasePrice: String(entry.purchasePrice),
-                              paymentType: entry.paymentType,
-                              bankName: entry.bankName || "",
-                              creditDueDate: entry.creditDueDate || "",
-                              supplier: entry.supplier || "",
-                              notes: entry.notes || "",
-                              vendorId: entry.vendorId ? String(entry.vendorId) : "",
-                              applyEdv: entry.applyEdv !== 0,
-                            });
-                            setAdminPassword("");
-                            setIsEditModalOpen(true);
-                          }}
-                          className="p-1.5 hover:bg-gray-100 text-gray-500 hover:text-primary rounded-lg cursor-pointer transition-all inline-flex items-center justify-center"
-                          title="Düzəliş et"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
+                        {user?.role === "Admin" && (
+                          <button
+                            onClick={() => {
+                              setEditingEntry(entry);
+                              setEditFormData({
+                                id: entry.id,
+                                productId: String(entry.productId),
+                                quantity: String(entry.quantity),
+                                purchasePrice: String(entry.purchasePrice),
+                                paymentType: entry.paymentType,
+                                bankName: entry.bankName || "",
+                                creditDueDate: entry.creditDueDate || "",
+                                supplier: entry.supplier || "",
+                                notes: entry.notes || "",
+                                vendorId: entry.vendorId ? String(entry.vendorId) : "",
+                                applyEdv: entry.applyEdv !== 0,
+                              });
+                              setAdminPassword("");
+                              setIsEditModalOpen(true);
+                            }}
+                            className="p-1.5 hover:bg-gray-100 text-gray-500 hover:text-primary rounded-lg cursor-pointer transition-all inline-flex items-center justify-center"
+                            title="Düzəliş et"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))

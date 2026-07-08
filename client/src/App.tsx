@@ -297,9 +297,9 @@ function AppLayout({ children, user, currentUser, onLogout }: { children: React.
           label: "Anbar",
           icon: Boxes,
           items: [
+            { href: "/anbar", label: "Məhsul Qalıqları", icon: Boxes },
+            { href: "/anbar/daxil", label: "Yeni Mədaxil", icon: PlusCircle },
             ...((isAdmin || currentUser?.staffCanViewStock !== 0) ? [
-              { href: "/anbar", label: "Məhsul Qalıqları", icon: Boxes },
-              { href: "/anbar/daxil", label: "Yeni Mədaxil", icon: PlusCircle },
               { href: "/anbar/qaytaris", label: "Tədarükçüyə Qaytarış", icon: RotateCw }
             ] : []),
             ...((isAdmin || currentUser?.staffCanManageCatalog !== 0) ? [
@@ -955,7 +955,7 @@ function MainRoutes({ user, onLogout }: { user: any; onLogout: () => void }) {
              {isAdmin && <Route path="/tedarukculer" component={Vendors} />}
              {isAdmin && <Route path="/hr" component={Payroll} />}
              <Route path="/anbar" component={Stock} />
-             {(isAdmin || currentUser?.staffCanViewStock !== 0) && <Route path="/anbar/daxil" component={StockIn} />}
+             <Route path="/anbar/daxil" component={StockIn} />
              {(isAdmin || currentUser?.staffCanViewStock !== 0) && <Route path="/anbar/qaytaris" component={VendorReturns} />}
             {(isAdmin || currentUser?.staffCanManageCatalog !== 0) && <Route path="/mehsullar" component={Products} />}
             {isAdmin && <Route path="/etiketler" component={Labels} />}

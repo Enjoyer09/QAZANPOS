@@ -1599,9 +1599,6 @@ router.delete("/products/:id", async (req, res) => {
 
 router.get("/stock/entries", async (req, res) => {
   try {
-    if (!await checkUserPermission(req, "staffCanViewStock")) {
-      return res.status(403).json({ message: "Anbar mədaxil tarixçəsinə giriş administrator tərəfindən məhdudlaşdırılıb" });
-    }
     const entries = await db.query.stockEntries.findMany({
       where: eq(schema.stockEntries.tenantId, req.tenantId),
       with: { product: true, serials: true },
@@ -1635,10 +1632,6 @@ router.get("/stock/entries", async (req, res) => {
 // Create stock entry
 router.post("/stock/entries", async (req, res) => {
   try {
-    if (!await checkUserPermission(req, "staffCanViewStock")) {
-      return res.status(403).json({ message: "Anbara mədaxil etmək səlahiyyətiniz yoxdur" });
-    }
-
     const { productId, quantity, purchasePrice, supplier, notes, paymentType, creditDueDate, vendorId, serialNumbers, bankName, applyEdv, warehouseId } = req.body;
 
     if (!productId || !quantity || !purchasePrice || !paymentType) {
@@ -1959,13 +1952,9 @@ router.patch("/stock/entries/:id/pay", requireAdmin, async (req, res) => {
   }
 });
 
-// Edit stock entry with admin password verification
-router.put("/stock/entries/:id", async (req, res) => {
+// Edit stock entry (strictly restricted to Admin)
+router.put("/stock/entries/:id", requireAdmin, async (req, res) => {
   try {
-    if (!await checkUserPermission(req, "staffCanViewStock")) {
-      return res.status(403).json({ message: "Anbar mədaxilini redaktə etmək səlahiyyətiniz yoxdur" });
-    }
-
     const id = parseInt(req.params.id);
     const { quantity, purchasePrice, paymentType, creditDueDate, supplier, notes, vendorId, adminPassword, bankName, applyEdv } = req.body;
 
