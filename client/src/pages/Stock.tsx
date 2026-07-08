@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";import {
-  PlusCircle, Lock, ArrowLeftRight, Warehouse, ClipboardCheck, ShoppingCart, AlertTriangle, Printer, CheckCircle2
+  PlusCircle, Lock, ArrowLeftRight, Warehouse, ClipboardCheck, ShoppingCart, AlertTriangle, Printer, CheckCircle2, X, Edit2
 } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
 import { TableSkeleton } from "../components/Skeleton.tsx";
@@ -47,6 +47,11 @@ export default function Stock() {
   const [stocktakeCounts, setStocktakeCounts] = useState<Record<number, string>>({}); // productId -> counted qty
   const [stocktakeNotes, setStocktakeNotes] = useState<Record<number, string>>({}); // productId -> notes
   const [stocktakeSubmitted, setStocktakeSubmitted] = useState(false);
+
+  // Cost editing state
+  const [selectedCostProduct, setSelectedCostProduct] = useState<StockLevel | null>(null);
+  const [newCostValue, setNewCostValue] = useState<string>("");
+  const [isCostModalOpen, setIsCostModalOpen] = useState(false);
 
   const handleCopy = (text: string, index: number) => {
     navigator.clipboard.writeText(text);
@@ -172,6 +177,40 @@ export default function Stock() {
     },
     onError: () => {
       toast({ title: "Xəta!", description: "Sayim qeyd edilə bilmədi.", variant: "destructive" });
+    }
+  });
+
+  // Cost price update mutation
+  const updateCostMutation = useMutation({
+    mutationFn: async (data: { productId: number; newCost: number }) => {
+      const res = await fetch("/api/stock/update-cost", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Maya dəyəri yenilənərkən xəta baş verdi");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/stock/levels"] });
+      setIsCostModalOpen(false);
+      setSelectedCostProduct(null);
+      setNewCostValue("");
+      toast({
+        title: "Uğurlu əməliyyat",
+        description: "Məhsulun maya dəyəri və anbarın ümumi maliyyə hesabatları yeniləndi.",
+        variant: "success",
+      });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Xəta!",
+        description: err.message,
+        variant: "destructive",
+      });
     }
   });
 
@@ -448,13 +487,13 @@ export default function Stock() {
                 <tbody>
                   {isLoading ? (
                     <tr>
-                      <td colSpan={7} className="p-0">
+                      <td colSpan={9} className="p-0">
                         <TableSkeleton rows={5} />
                       </td>
                     </tr>
                   ) : filteredList.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="p-16 text-center text-xs text-gray-400">
+                      <td colSpan={9} className="p-16 text-center text-xs text-gray-400">
                         {searchQuery ? "Axtarışa uyğun məhsul tapılmadı." : "Anbar boşdur. Anbara məhsul mədaxil edin."}
                       </td>
                     </tr>
@@ -551,25 +590,41 @@ export default function Stock() {
                             })()}
                           </td>
                           <td className="p-4">
-                            {item.currentQuantity > 0 ? (
-                              <button
-                                onClick={() => {
-                                  setTransferProductId(item.productId);
-                                  const defaultFrom = selectedWarehouseId ? Number(selectedWarehouseId) : (currentUser?.warehouseId || warehousesList.find((w: any) => w.isDefault === 1)?.id || 1);
-                                  setTransferFromWarehouseId(defaultFrom);
-                                  const defaultTo = warehousesList.find((w: any) => w.id !== defaultFrom)?.id || "";
-                                  setTransferToWarehouseId(Number(defaultTo));
-                                  setTransferQuantity(1);
-                                  setSelectedTransferSerials([]);
-                                  setShowTransferModal(true);
-                                }}
-                                className="px-2 py-1 bg-white hover:bg-primary/5 border border-gray-200 hover:border-primary/30 text-gray-550 hover:text-primary rounded-lg transition-all cursor-pointer font-bold text-[10px] flex items-center gap-1"
-                              >
-                                <ArrowLeftRight className="w-3 h-3 text-primary" /> Yerdəyişmə
-                              </button>
-                            ) : (
-                              getStatusBadge(item.currentQuantity)
-                            )}
+                            <div className="flex items-center gap-1.5 flex-wrap justify-end sm:justify-start">
+                              {item.currentQuantity > 0 ? (
+                                <button
+                                  onClick={() => {
+                                    setTransferProductId(item.productId);
+                                    const defaultFrom = selectedWarehouseId ? Number(selectedWarehouseId) : (currentUser?.warehouseId || warehousesList.find((w: any) => w.isDefault === 1)?.id || 1);
+                                    setTransferFromWarehouseId(defaultFrom);
+                                    const defaultTo = warehousesList.find((w: any) => w.id !== defaultFrom)?.id || "";
+                                    setTransferToWarehouseId(Number(defaultTo));
+                                    setTransferQuantity(1);
+                                    setSelectedTransferSerials([]);
+                                    setShowTransferModal(true);
+                                  }}
+                                  className="px-2 py-1 bg-white hover:bg-primary/5 border border-gray-200 hover:border-primary/30 text-gray-550 hover:text-primary rounded-lg transition-all cursor-pointer font-bold text-[10px] flex items-center gap-1"
+                                >
+                                  <ArrowLeftRight className="w-3 h-3 text-primary" /> Yerdəyişmə
+                                </button>
+                              ) : (
+                                getStatusBadge(item.currentQuantity)
+                              )}
+
+                              {user?.role === "Admin" && (
+                                <button
+                                  onClick={() => {
+                                    setSelectedCostProduct(item);
+                                    setNewCostValue(item.lastPurchasePrice > 0 ? String(item.lastPurchasePrice) : "0");
+                                    setIsCostModalOpen(true);
+                                  }}
+                                  className="px-2 py-1 bg-white hover:bg-amber-500/5 border border-gray-200 hover:border-amber-500/30 text-gray-550 hover:text-amber-600 rounded-lg transition-all cursor-pointer font-bold text-[10px] flex items-center gap-1"
+                                  title="Məhsulun maya dəyərini (alış qiymətini) dəyişdir"
+                                >
+                                  <Edit2 className="w-2.5 h-2.5 text-amber-500" /> Maya
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -1174,6 +1229,89 @@ export default function Stock() {
             >
               Bağla
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Cost Adjustment Modal */}
+      {isCostModalOpen && selectedCostProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-xs animate-in fade-in-0 duration-200">
+          <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xl max-w-md w-full relative overflow-hidden glass-card space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-amber-500 to-orange-500"></div>
+
+            <div className="flex justify-between items-center pb-2 border-b border-gray-50">
+              <div>
+                <h3 className="text-sm font-black text-gray-900">Maya Dəyəri Düzəlişi</h3>
+                <p className="text-[10px] text-gray-400 mt-0.5 font-bold uppercase">{selectedCostProduct.productName}</p>
+              </div>
+              <button
+                onClick={() => {
+                  setIsCostModalOpen(false);
+                  setSelectedCostProduct(null);
+                  setNewCostValue("");
+                }}
+                className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="bg-amber-50/20 border border-amber-500/10 p-3.5 rounded-xl text-xs space-y-1.5">
+                <span className="text-amber-800 font-bold block uppercase text-[10px] tracking-wider">Cari Hesablanmış Maya Dəyəri:</span>
+                <span className="text-2xl font-black text-amber-600 font-mono block">
+                  {selectedCostProduct.lastPurchasePrice > 0 ? `${selectedCostProduct.lastPurchasePrice.toFixed(2)} ₼` : "0.00 ₼"}
+                </span>
+                <span className="text-[10px] text-gray-400 font-medium leading-relaxed block mt-1">
+                  Yeni daxil edəcəyiniz maya dəyəri məhsulun qalıq sayındakı FIFO hərəkətlərinə tətbiq olunacaq və mövcud anbar dəyərinizi yeniləyəcəkdir.
+                </span>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Yeni Maya Dəyəri (₼) *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="Məs. 15.50"
+                  value={newCostValue}
+                  onChange={(e) => setNewCostValue(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 bg-gray-50/50 font-mono font-bold"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCostModalOpen(false);
+                  setSelectedCostProduct(null);
+                  setNewCostValue("");
+                }}
+                className="flex-1 py-3 bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold text-xs rounded-xl transition-all cursor-pointer text-center"
+              >
+                İmtina
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!newCostValue.trim() || isNaN(parseFloat(newCostValue))) {
+                    toast({ title: "Xəta!", description: "Düzgün bir qiymət daxil edin", variant: "destructive" });
+                    return;
+                  }
+                  updateCostMutation.mutate({
+                    productId: selectedCostProduct.productId,
+                    newCost: parseFloat(newCostValue)
+                  });
+                }}
+                disabled={updateCostMutation.isPending}
+                className="flex-1 py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:opacity-90 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer text-center flex items-center justify-center gap-1.5"
+              >
+                {updateCostMutation.isPending ? "Yadda saxlanılır..." : "Yadda Saxla 💾"}
+              </button>
+            </div>
           </div>
         </div>
       )}

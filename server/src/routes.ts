@@ -2067,6 +2067,131 @@ router.put("/stock/entries/:id", requireAdmin, async (req, res) => {
   }
 });
 
+// Update product cost price (strictly restricted to Admin)
+router.post("/stock/update-cost", requireAdmin, async (req, res) => {
+  try {
+    const { productId, newCost } = req.body;
+    if (productId === undefined || newCost === undefined || isNaN(parseFloat(newCost))) {
+      return res.status(400).json({ message: "Məhsul və yeni qiymət düzgün göstərilməlidir" });
+    }
+
+    const costNum = parseFloat(newCost);
+    if (costNum < 0) {
+      return res.status(400).json({ message: "Maya dəyəri mənfi ola bilməz" });
+    }
+
+    // 1. Fetch all stock entries for this product (tenant scope)
+    const productEntries = await db
+      .select()
+      .from(schema.stockEntries)
+      .where(
+        and(
+          eq(schema.stockEntries.tenantId, req.tenantId),
+          eq(schema.stockEntries.productId, productId)
+        )
+      )
+      .orderBy(schema.stockEntries.id);
+
+    // 2. Fetch vendor returns for this product to compute net stock per entry
+    const vendorReturnsPerEntry = await db
+      .select({
+        stockEntryId: schema.vendorReturnItems.stockEntryId,
+        totalReturned: sql`SUM(${schema.vendorReturnItems.quantity})`
+      })
+      .from(schema.vendorReturnItems)
+      .where(eq(schema.vendorReturnItems.tenantId, req.tenantId))
+      .groupBy(schema.vendorReturnItems.stockEntryId);
+
+    const vrMap = new Map<number, number>();
+    vendorReturnsPerEntry.forEach(v => {
+      if (v.stockEntryId) vrMap.set(v.stockEntryId, parseFloat((v.totalReturned as string) || "0"));
+    });
+
+    // 3. Fetch sales/returns count to calculate total consumed quantity
+    const salesSum = await db
+      .select({ totalSold: sql`SUM(${schema.saleItems.quantity})` })
+      .from(schema.saleItems)
+      .where(and(eq(schema.saleItems.tenantId, req.tenantId), eq(schema.saleItems.productId, productId)));
+
+    const returnsSum = await db
+      .select({ totalReturned: sql`SUM(${schema.returnItems.quantity})` })
+      .from(schema.returnItems)
+      .where(
+        and(
+          eq(schema.returnItems.tenantId, req.tenantId),
+          eq(schema.returnItems.productId, productId),
+          eq(schema.returnItems.status, "returned_to_stock")
+        )
+      );
+
+    const adjustmentsSum = await db
+      .select({ totalAdjustments: sql`SUM(${schema.stockAdjustments.quantity})` })
+      .from(schema.stockAdjustments)
+      .where(and(eq(schema.stockAdjustments.tenantId, req.tenantId), eq(schema.stockAdjustments.productId, productId)));
+
+    const totalSold = parseFloat((salesSum[0]?.totalSold as string) || "0");
+    const totalReturned = parseFloat((returnsSum[0]?.totalReturned as string) || "0");
+    const totalAdjustments = parseFloat((adjustmentsSum[0]?.totalAdjustments as string) || "0");
+
+    const negativeAdjustments = totalAdjustments < 0 ? -totalAdjustments : 0;
+    const netSold = Math.max(0, totalSold - totalReturned + negativeAdjustments);
+
+    let soldRemaining = netSold;
+    let updatedEntriesCount = 0;
+
+    // Simulate FIFO to find which entries still have remaining stock
+    for (const entry of productEntries) {
+      const vrQty = vrMap.get(entry.id) || 0;
+      const adjustedQuantity = Math.max(0, entry.quantity - vrQty);
+      if (adjustedQuantity === 0) continue;
+
+      if (soldRemaining >= adjustedQuantity) {
+        soldRemaining -= adjustedQuantity;
+      } else {
+        // This entry has remaining items, and so do all subsequent ones.
+        // Update their purchasePrice in the database!
+        await db
+          .update(schema.stockEntries)
+          .set({ purchasePrice: costNum })
+          .where(eq(schema.stockEntries.id, entry.id));
+        
+        updatedEntriesCount++;
+      }
+    }
+
+    // 4. If no stock entries exist for this product, we create a new entry with quantity 0 to set the baseline purchase price!
+    if (productEntries.length === 0) {
+      await db.insert(schema.stockEntries).values({
+        tenantId: req.tenantId,
+        productId,
+        quantity: 0,
+        purchasePrice: costNum,
+        paymentType: "Nəğd",
+        paidStatus: "paid",
+        applyEdv: 1,
+        entryDate: new Date().toISOString(),
+        notes: "Sistem tərəfindən maya dəyəri düzəlişi baseline olaraq təyin edilib",
+      });
+      updatedEntriesCount++;
+    } else if (updatedEntriesCount === 0 && productEntries.length > 0) {
+      // If we have entries but they are all sold out, update the latest entry to set the next cost
+      const latestEntry = productEntries[productEntries.length - 1];
+      await db
+        .update(schema.stockEntries)
+        .set({ purchasePrice: costNum })
+        .where(eq(schema.stockEntries.id, latestEntry.id));
+      updatedEntriesCount++;
+    }
+
+    await logActivity(req, "STOCK_COST_ADJUST", `Məhsul ID ${productId} üçün maya dəyəri ${costNum} ₼ olaraq yeniləndi.`);
+
+    res.json({ success: true, updatedEntriesCount });
+  } catch (error: any) {
+    console.error("update-cost error:", error);
+    res.status(500).json({ message: "Maya dəyərini yeniləyərkən xəta baş verdi: " + error.message });
+  }
+});
+
 // ----------------------------------------------------
 // 3. CUSTOMERS ENDPOINTS
 // ----------------------------------------------------
