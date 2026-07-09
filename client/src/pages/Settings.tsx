@@ -2541,7 +2541,31 @@ export default function SettingsPage() {
                 <div className="pt-1">
                   <button
                     type="button"
-                    onClick={() => setMultiWarehouseEnabled(prev => prev === 1 ? 0 : 1)}
+                    onClick={async () => {
+                      const newVal = multiWarehouseEnabled === 1 ? 0 : 1;
+                      setMultiWarehouseEnabled(newVal);
+                      try {
+                        const res = await fetch("/api/settings", {
+                          method: "PUT",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ multiWarehouseEnabled: newVal }),
+                        });
+                        if (!res.ok) throw new Error();
+                        queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
+                        toast({
+                          title: newVal === 1 ? "Çoxsaylı Anbar aktivdir 👍" : "Çoxsaylı Anbar deaktivdir ❌",
+                          description: "Ayar uğurla yadda saxlanıldı.",
+                          variant: "success",
+                        });
+                      } catch {
+                        setMultiWarehouseEnabled(multiWarehouseEnabled); // rollback
+                        toast({
+                          title: "Xəta!",
+                          description: "Ayar yadda saxlanılmadı. Yenidən cəhd edin.",
+                          variant: "destructive",
+                        });
+                      }
+                    }}
                     className={`px-5 py-2.5 rounded-xl font-bold text-xs cursor-pointer border transition-all w-full sm:w-auto font-black ${
                       multiWarehouseEnabled === 1
                         ? "bg-green-500 text-white border-green-500 hover:bg-green-600"
