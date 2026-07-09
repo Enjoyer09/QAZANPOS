@@ -663,22 +663,24 @@ export default function StockIn() {
             )}
 
             {/* Warehouse Selector */}
-            <div className="space-y-1.5">
-              <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Mədaxil Anbarı *</label>
-              <select
-                value={formData.warehouseId}
-                onChange={(e) => setFormData((prev) => ({ ...prev, warehouseId: e.target.value }))}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 cursor-pointer font-bold text-gray-700"
-                required
-              >
-                <option value="">Anbar Seçin...</option>
-                {warehouses.map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {w.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {settings?.multiWarehouseEnabled !== 0 && (
+              <div className="space-y-1.5">
+                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Mədaxil Anbarı *</label>
+                <select
+                  value={formData.warehouseId}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, warehouseId: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 cursor-pointer font-bold text-gray-700"
+                  required
+                >
+                  <option value="">Anbar Seçin...</option>
+                  {warehouses.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {w.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Supplier / Vendor Selector */}
             <div className="space-y-1.5">

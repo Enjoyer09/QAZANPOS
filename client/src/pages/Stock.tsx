@@ -68,6 +68,15 @@ export default function Stock() {
     }
   })();
 
+  const { data: settings } = useQuery<any>({
+    queryKey: ["/api/settings"],
+    queryFn: async () => {
+      const res = await fetch("/api/settings");
+      if (!res.ok) throw new Error();
+      return res.json();
+    }
+  });
+
   const { data: currentUser } = useQuery<any>({
     queryKey: ["/api/users/me"],
     queryFn: async () => {
@@ -358,18 +367,20 @@ export default function Stock() {
             <Warehouse className="w-4 h-4" />
             Mövcud Qalıqlar
           </button>
-          <button
-            type="button"
-            onClick={() => setActiveStockTab("transfers")}
-            className={`flex items-center gap-2 px-5 py-3 border-b-2 text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
-              activeStockTab === "transfers"
-                ? "border-primary text-primary"
-                : "border-transparent text-gray-400 hover:text-gray-600"
-            }`}
-          >
-            <ArrowLeftRight className="w-4 h-4" />
-            Yerdəyişmə Tarixçəsi
-          </button>
+          {settings?.multiWarehouseEnabled !== 0 && (
+            <button
+              type="button"
+              onClick={() => setActiveStockTab("transfers")}
+              className={`flex items-center gap-2 px-5 py-3 border-b-2 text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                activeStockTab === "transfers"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-gray-400 hover:text-gray-600"
+              }`}
+            >
+              <ArrowLeftRight className="w-4 h-4" />
+              Yerdəyişmə Tarixçəsi
+            </button>
+          )}
           <button
             type="button"
             onClick={() => { setActiveStockTab("stocktake"); setStocktakeSubmitted(false); }}
@@ -396,7 +407,7 @@ export default function Stock() {
           </button>
         </div>
 
-        {activeStockTab === "list" && (
+        {activeStockTab === "list" && settings?.multiWarehouseEnabled !== 0 && (
           <div className="flex items-center gap-2 pb-2 sm:pb-0">
             <span className="text-[10px] text-gray-400 font-bold uppercase">Aktiv Anbar:</span>
             <select
@@ -411,7 +422,7 @@ export default function Stock() {
             </select>
           </div>
         )}
-        {activeStockTab === "stocktake" && (
+        {activeStockTab === "stocktake" && settings?.multiWarehouseEnabled !== 0 && (
           <div className="flex items-center gap-2 pb-2 sm:pb-0">
             <span className="text-[10px] text-gray-400 font-bold uppercase">Sayım Anbarı:</span>
             <select
@@ -591,7 +602,7 @@ export default function Stock() {
                           </td>
                           <td className="p-4">
                             <div className="flex items-center gap-1.5 flex-wrap justify-end sm:justify-start">
-                              {item.currentQuantity > 0 ? (
+                              {item.currentQuantity > 0 && settings?.multiWarehouseEnabled !== 0 ? (
                                 <button
                                   onClick={() => {
                                     setTransferProductId(item.productId);
@@ -608,7 +619,7 @@ export default function Stock() {
                                   <ArrowLeftRight className="w-3 h-3 text-primary" /> Yerdəyişmə
                                 </button>
                               ) : (
-                                getStatusBadge(item.currentQuantity)
+                                item.currentQuantity <= 0 && getStatusBadge(item.currentQuantity)
                               )}
 
                               {user?.role === "Admin" && (

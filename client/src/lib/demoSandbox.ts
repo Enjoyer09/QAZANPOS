@@ -142,6 +142,7 @@ const DEFAULT_SETTINGS = {
   voen: "1234567890",
   loyaltyRuleRate: 0.01,
   loyaltyMinPointsRedeem: 1.0,
+  multiWarehouseEnabled: 1,
 };
 
 const DEFAULT_LOGS = [

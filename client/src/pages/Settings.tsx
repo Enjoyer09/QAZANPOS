@@ -78,6 +78,7 @@ export default function SettingsPage() {
   const [lowStockAlertCount, setLowStockAlertCount] = useState("5");
   const [defaultCreditDays, setDefaultCreditDays] = useState("30");
   const [requireShift, setRequireShift] = useState(1);
+  const [multiWarehouseEnabled, setMultiWarehouseEnabled] = useState(1);
 
   // Azerbaijan Tax State
   const [voen, setVoen] = useState("");
@@ -369,6 +370,7 @@ export default function SettingsPage() {
       setLowStockAlertCount("" + (settingsData.lowStockAlertCount || 5));
       setDefaultCreditDays("" + (settingsData.defaultCreditDays || 30));
       setRequireShift(settingsData.requireShift ?? 1);
+      setMultiWarehouseEnabled(settingsData.multiWarehouseEnabled ?? 1);
       
       setReceiptWidth(settingsData.receiptWidth || "80mm");
       setShowBarcode(settingsData.showBarcode ?? 1);
@@ -908,6 +910,7 @@ export default function SettingsPage() {
       backupTime,
       telegramBackupEnabled,
       requireShift,
+      multiWarehouseEnabled,
 
       // Azerbaijan Tax fields
       voen: voen.trim() || null,
@@ -1236,18 +1239,20 @@ export default function SettingsPage() {
           <Landmark className="w-4 h-4" />
           Bank Ayarları 🏦
         </button>
-        <button
-          type="button"
-          onClick={() => setSettingsTab("warehouses")}
-          className={`flex items-center gap-2 px-5 py-3 border-b-2 text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
-            settingsTab === "warehouses"
-              ? "border-primary text-primary"
-              : "border-transparent text-gray-400 hover:text-gray-600"
-          }`}
-        >
-          <Warehouse className="w-4 h-4" />
-          Anbar Ayarları 🏢
-        </button>
+        {multiWarehouseEnabled === 1 && (
+          <button
+            type="button"
+            onClick={() => setSettingsTab("warehouses")}
+            className={`flex items-center gap-2 px-5 py-3 border-b-2 text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+              settingsTab === "warehouses"
+                ? "border-primary text-primary"
+                : "border-transparent text-gray-400 hover:text-gray-600"
+            }`}
+          >
+            <Warehouse className="w-4 h-4" />
+            Anbar Ayarları 🏢
+          </button>
+        )}
         <button
           type="button"
           onClick={() => setSettingsTab("loyalty")}
@@ -2529,6 +2534,23 @@ export default function SettingsPage() {
                   onChange={(e) => setDefaultCreditDays(e.target.value)}
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50"
                 />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Çoxsaylı Anbar (Multi-Warehouse)</label>
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setMultiWarehouseEnabled(prev => prev === 1 ? 0 : 1)}
+                    className={`px-5 py-2.5 rounded-xl font-bold text-xs cursor-pointer border transition-all w-full sm:w-auto font-black ${
+                      multiWarehouseEnabled === 1
+                        ? "bg-green-500 text-white border-green-500 hover:bg-green-600"
+                        : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
+                    }`}
+                  >
+                    {multiWarehouseEnabled === 1 ? "Aktivdir 👍" : "Deaktivdir ❌"}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

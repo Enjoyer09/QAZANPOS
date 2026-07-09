@@ -367,6 +367,7 @@ export const settings = pgTable("settings", {
   smsTemplateDebt: text("sms_template_debt"),
   smsTemplateSale: text("sms_template_sale"),
   requireShift: integer("require_shift").notNull().default(1), // 1 = shift required, 0 = no shift
+  multiWarehouseEnabled: integer("multi_warehouse_enabled").notNull().default(1), // 1 = enabled, 0 = disabled
 });
 
 // 8b. Expense Limits per Category
