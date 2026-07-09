@@ -367,7 +367,7 @@ export default function Stock() {
             <Warehouse className="w-4 h-4" />
             Mövcud Qalıqlar
           </button>
-          {settings?.multiWarehouseEnabled !== 0 && (
+          {settings?.multiWarehouseEnabled === 1 && (
             <button
               type="button"
               onClick={() => setActiveStockTab("transfers")}
@@ -407,7 +407,7 @@ export default function Stock() {
           </button>
         </div>
 
-        {activeStockTab === "list" && settings?.multiWarehouseEnabled !== 0 && (
+        {activeStockTab === "list" && settings?.multiWarehouseEnabled === 1 && (
           <div className="flex items-center gap-2 pb-2 sm:pb-0">
             <span className="text-[10px] text-gray-400 font-bold uppercase">Aktiv Anbar:</span>
             <select
@@ -422,7 +422,7 @@ export default function Stock() {
             </select>
           </div>
         )}
-        {activeStockTab === "stocktake" && settings?.multiWarehouseEnabled !== 0 && (
+        {activeStockTab === "stocktake" && settings?.multiWarehouseEnabled === 1 && (
           <div className="flex items-center gap-2 pb-2 sm:pb-0">
             <span className="text-[10px] text-gray-400 font-bold uppercase">Sayım Anbarı:</span>
             <select
@@ -602,7 +602,7 @@ export default function Stock() {
                           </td>
                           <td className="p-4">
                             <div className="flex items-center gap-1.5 flex-wrap justify-end sm:justify-start">
-                              {item.currentQuantity > 0 && settings?.multiWarehouseEnabled !== 0 ? (
+                              {item.currentQuantity > 0 && settings?.multiWarehouseEnabled === 1 ? (
                                 <button
                                   onClick={() => {
                                     setTransferProductId(item.productId);
