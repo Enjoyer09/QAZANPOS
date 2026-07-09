@@ -3,7 +3,7 @@ import cors from "cors";
 import router from "./routes/index.js";
 import path from "path";
 import { fileURLToPath } from "url";
-import { eq, desc, isNull, and } from "drizzle-orm";
+import { eq, desc, isNull, and, sql } from "drizzle-orm";
 import fs from "fs";
 import https from "https";
 import { hashPassword } from "./lib/auth.js";
@@ -42,6 +42,10 @@ import * as schema from "./db/schema.js";
 
 async function ensureDefaultTenantsAndUsers() {
   try {
+    // Auto-migrate: ensure settings has multi_warehouse_enabled column
+    console.log("Self-Healing Database: Ensuring multi_warehouse_enabled column exists in settings...");
+    await db.execute(sql`ALTER TABLE settings ADD COLUMN IF NOT EXISTS multi_warehouse_enabled integer NOT NULL DEFAULT 1;`);
+
     // 1. Ensure Tenant 1 (demo) exists
     const demoTenant = await db.query.tenants.findFirst({
       where: (t, { eq }) => eq(t.id, 1)
