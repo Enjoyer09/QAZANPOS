@@ -36,6 +36,7 @@ export default function settingsRoutes(): Router {
         "staffCanViewCustomers", "staffCanViewVendors", "staffCanViewExpenses",
         "activeBanks", "requireShift", "loyaltyRuleRate", "loyaltyMinPointsRedeem",
         "smsApiKey", "smsSenderName", "smsTemplateDebt", "smsTemplateSale",
+        "multiWarehouseEnabled",
       ];
 
       const updateData: Record<string, any> = {};
