@@ -332,6 +332,7 @@ export default function Stock() {
         </div>
 
         <div className="flex items-center gap-2">
+          {settings?.multiWarehouseEnabled === 1 && (
           <button
             onClick={() => {
               const userW = currentUser?.warehouseId || warehousesList.find((w: any) => w.isDefault === 1)?.id || 1;
@@ -344,6 +345,7 @@ export default function Stock() {
           >
             <ArrowLeftRight className="w-4 h-4 text-primary" /> Yerdəyişmə Et
           </button>
+          )}
           <Link href="/anbar/daxil">
             <button className="px-4 py-2.5 bg-primary text-white font-semibold text-sm rounded-xl hover:bg-primary/90 cursor-pointer flex items-center gap-2 shadow-md shadow-primary/10 transition-all hover-elevate">
               <PlusCircle className="w-4 h-4" /> Anbara Mədaxil
