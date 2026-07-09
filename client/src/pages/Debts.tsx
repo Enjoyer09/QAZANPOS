@@ -47,7 +47,7 @@ export default function Debts() {
   })();
   const isAdmin = user?.role === "Admin";
 
-  const { data: currentUser } = useQuery<any>({
+  const { data: currentUser, isLoading: isUserLoading } = useQuery<any>({
     queryKey: ["/api/users/me"],
     queryFn: async () => {
       const res = await fetch("/api/users/me");
@@ -341,7 +341,7 @@ export default function Debts() {
     }
   };
 
-  if (user?.role !== "Admin" && currentUser?.staffCanViewDebts === 0) {
+  if (user?.role !== "Admin" && (isUserLoading || currentUser?.staffCanViewDebts !== 1)) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[70vh] px-4 animate-in fade-in-0 duration-300">
         <div className="bg-white border border-gray-100 p-8 rounded-2xl shadow-xl max-w-md w-full text-center space-y-6 glass-card relative overflow-hidden">

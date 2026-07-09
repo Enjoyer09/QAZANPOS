@@ -3,7 +3,7 @@ import { db } from "../db/index.js";
 import * as schema from "../db/schema.js";
 import { eq, and, sql, desc, asc } from "drizzle-orm";
 import { hashPassword } from "../lib/auth.js";
-import { AuthenticatedRequest, requireAdmin, getMonthBoundaries, logActivity, computeRemainingDebt } from "./helpers.js";
+import { AuthenticatedRequest, requireAdmin, getMonthBoundaries, logActivity, computeRemainingDebt, checkUserPermission } from "./helpers.js";
 import { sendSMS, processSMSTemplate } from "../lib/sms.js";
 import { sendEmail, generatePnlEmailHtml, generatePnlTextSummary } from "../lib/email.js";
 
@@ -669,6 +669,9 @@ export default function dashboardRoutes(): Router {
 
   router.get("/credits/overdue", async (req: AuthenticatedRequest, res) => {
     try {
+      if (!await checkUserPermission(req, "staffCanViewDebts")) {
+        return res.status(403).json({ message: "Nisyə & Borc bölməsinə giriş icazəniz yoxdur." });
+      }
       const todayStr = new Date().toISOString().split("T")[0];
       const sales = await db.query.sales.findMany({
         where: and(eq(schema.sales.paymentStatus, "credit"), eq(schema.sales.tenantId, req.tenantId), sql`credit_due_date <= ${todayStr}`),
@@ -686,6 +689,9 @@ export default function dashboardRoutes(): Router {
 
   router.get("/credits/pending", async (req: AuthenticatedRequest, res) => {
     try {
+      if (!await checkUserPermission(req, "staffCanViewDebts")) {
+        return res.status(403).json({ message: "Nisyə & Borc bölməsinə giriş icazəniz yoxdur." });
+      }
       const sales = await db.query.sales.findMany({
         where: and(eq(schema.sales.paymentStatus, "credit"), eq(schema.sales.tenantId, req.tenantId)),
         with: { payments: true, returns: true },

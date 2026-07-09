@@ -8,7 +8,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { verifyTOTP, generateSecret, getOTPAuthURI } from "../db/totp.js";
 import { hashPassword, generateToken } from "../lib/auth.js";
-import { AuthenticatedRequest, logActivity } from "./helpers.js";
+import { AuthenticatedRequest, logActivity, requireAdmin } from "./helpers.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -226,6 +226,159 @@ export default function authRoutes(): Router {
       res.json(updated);
     } catch (error) {
       res.status(500).json({ message: "İstifadəçi anbar məlumatı yenilənərkən xəta baş verdi" });
+    }
+  });
+
+  // ─── User Management ─────────────────────────────────────────────────────
+
+  // GET /users — list all users for this tenant (Admin only)
+  router.get("/users", requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const list = await db
+        .select({
+          id: schema.users.id,
+          username: schema.users.username,
+          role: schema.users.role,
+          twoFactorEnabled: schema.users.twoFactorEnabled,
+          staffCanViewSalesHistory: schema.users.staffCanViewSalesHistory,
+          staffCanViewStock: schema.users.staffCanViewStock,
+          staffCanViewCustomers: schema.users.staffCanViewCustomers,
+          staffCanViewVendors: schema.users.staffCanViewVendors,
+          staffCanViewExpenses: schema.users.staffCanViewExpenses,
+          staffCanViewStockBalances: schema.users.staffCanViewStockBalances,
+          staffCanViewDebts: schema.users.staffCanViewDebts,
+          staffCanManageCatalog: schema.users.staffCanManageCatalog,
+          warehouseId: schema.users.warehouseId,
+        })
+        .from(schema.users)
+        .where(eq(schema.users.tenantId, req.tenantId))
+        .orderBy(schema.users.username);
+      res.json(list);
+    } catch (error) {
+      res.status(500).json({ message: "İstifadəçiləri gətirərkən xəta baş verdi" });
+    }
+  });
+
+  // POST /users — create a new user (Admin only)
+  router.post("/users", requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { username, password, role } = req.body;
+      if (!username || !password || !role) {
+        return res.status(400).json({ message: "Məcburi sahələri doldurun" });
+      }
+
+      const normalizedUsername = username.trim().toLowerCase();
+
+      const existing = await db.query.users.findFirst({
+        where: and(eq(schema.users.username, normalizedUsername), eq(schema.users.tenantId, req.tenantId))
+      });
+      if (existing) {
+        return res.status(400).json({ message: "Bu istifadəçi adı bu biznesdə artıq mövcuddur" });
+      }
+
+      const newUser = await db.insert(schema.users).values({
+        tenantId: req.tenantId,
+        username: normalizedUsername,
+        password: hashPassword(password.trim()),
+        role: role || "Staff",
+      }).returning();
+
+      await logActivity(req, "CREATE_USER", `Yeni istifadəçi hesabı yaradıldı: '${normalizedUsername}' (Rol: ${role})`);
+
+      res.json({ id: newUser[0].id, username: newUser[0].username, role: newUser[0].role });
+    } catch (error) {
+      res.status(500).json({ message: "İstifadəçi yaradılarkən xəta baş verdi" });
+    }
+  });
+
+  // PUT /users/:id/password — change user password
+  router.put("/users/:id/password", async (req: AuthenticatedRequest, res) => {
+    try {
+      const targetUserId = parseInt(req.params.id);
+      const { password } = req.body;
+      if (!password || !password.trim()) {
+        return res.status(400).json({ message: "Şifrə daxil edilməlidir" });
+      }
+
+      const targetUser = await db.query.users.findFirst({
+        where: and(eq(schema.users.id, targetUserId), eq(schema.users.tenantId, req.tenantId))
+      });
+      if (!targetUser) return res.status(404).json({ message: "İstifadəçi tapılmadı" });
+
+      const reqRole = req.headers["x-user-role"] as string;
+      const reqUsername = req.headers["x-user-username"] as string;
+      const reqUsernameStr = typeof reqUsername === "string" ? reqUsername.trim().toLowerCase() : "";
+      const isSelf = reqUsernameStr && targetUser.username === reqUsernameStr;
+      const isAdmin = reqRole === "Admin";
+
+      if (!isAdmin && !isSelf) {
+        return res.status(403).json({ message: "Bu şifrəni dəyişmək üçün kifayət qədər səlahiyyətiniz yoxdur." });
+      }
+
+      await db.update(schema.users).set({ password: hashPassword(password.trim()) })
+        .where(and(eq(schema.users.id, targetUserId), eq(schema.users.tenantId, req.tenantId)));
+
+      await logActivity(req, "CHANGE_PASSWORD", `'${targetUser.username}' istifadəçisinin sistem şifrəsini yenilədi`);
+      res.json({ message: "Şifrə uğurla dəyişdirildi" });
+    } catch (error) {
+      res.status(500).json({ message: "Şifrə yenilənərkən xəta baş verdi" });
+    }
+  });
+
+  // PUT /users/:id/permissions — update individual staff permissions (Admin only)
+  router.put("/users/:id/permissions", requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const targetUserId = parseInt(req.params.id);
+      const {
+        staffCanViewSalesHistory, staffCanViewStock, staffCanViewCustomers,
+        staffCanViewVendors, staffCanViewExpenses, staffCanViewStockBalances,
+        staffCanViewDebts, staffCanManageCatalog
+      } = req.body;
+
+      const targetUser = await db.query.users.findFirst({
+        where: and(eq(schema.users.id, targetUserId), eq(schema.users.tenantId, req.tenantId))
+      });
+      if (!targetUser) return res.status(404).json({ message: "İstifadəçi tapılmadı" });
+
+      const [updated] = await db.update(schema.users).set({
+        staffCanViewSalesHistory: staffCanViewSalesHistory !== undefined ? parseInt(staffCanViewSalesHistory as any) : undefined,
+        staffCanViewStock: staffCanViewStock !== undefined ? parseInt(staffCanViewStock as any) : undefined,
+        staffCanViewCustomers: staffCanViewCustomers !== undefined ? parseInt(staffCanViewCustomers as any) : undefined,
+        staffCanViewVendors: staffCanViewVendors !== undefined ? parseInt(staffCanViewVendors as any) : undefined,
+        staffCanViewExpenses: staffCanViewExpenses !== undefined ? parseInt(staffCanViewExpenses as any) : undefined,
+        staffCanViewStockBalances: staffCanViewStockBalances !== undefined ? parseInt(staffCanViewStockBalances as any) : undefined,
+        staffCanViewDebts: staffCanViewDebts !== undefined ? parseInt(staffCanViewDebts as any) : undefined,
+        staffCanManageCatalog: staffCanManageCatalog !== undefined ? parseInt(staffCanManageCatalog as any) : undefined,
+      }).where(and(eq(schema.users.id, targetUserId), eq(schema.users.tenantId, req.tenantId))).returning();
+
+      await logActivity(req, "UPDATE_USER_PERMISSIONS", `'${targetUser.username}' istifadəçisinin individual səlahiyyətlərini yenilədi`);
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ message: "Səlahiyyətləri yeniləyərkən xəta baş verdi" });
+    }
+  });
+
+  // DELETE /users/:id — delete a user (Admin only, cannot delete self)
+  router.delete("/users/:id", requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const targetUserId = parseInt(req.params.id);
+      const reqUsername = req.headers["x-user-username"] as string;
+
+      const targetUser = await db.query.users.findFirst({
+        where: and(eq(schema.users.id, targetUserId), eq(schema.users.tenantId, req.tenantId))
+      });
+      if (!targetUser) return res.status(404).json({ message: "İstifadəçi tapılmadı" });
+
+      const reqUsernameStr = typeof reqUsername === "string" ? reqUsername.trim().toLowerCase() : "";
+      if (reqUsernameStr && targetUser.username === reqUsernameStr) {
+        return res.status(400).json({ message: "Öz hesabınızı silə bilməzsiniz!" });
+      }
+
+      await db.delete(schema.users).where(and(eq(schema.users.id, targetUserId), eq(schema.users.tenantId, req.tenantId)));
+      await logActivity(req, "DELETE_USER", `'${targetUser.username}' (Rol: ${targetUser.role}) istifadəçi hesabını sistemdən sildi`);
+      res.json({ message: "İstifadəçi silindi" });
+    } catch (error) {
+      res.status(500).json({ message: "İstifadəçi silinərkən xəta baş verdi" });
     }
   });
 
