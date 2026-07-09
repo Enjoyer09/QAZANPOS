@@ -48,10 +48,20 @@ export default function Stock() {
   const [stocktakeNotes, setStocktakeNotes] = useState<Record<number, string>>({}); // productId -> notes
   const [stocktakeSubmitted, setStocktakeSubmitted] = useState(false);
 
-  // Cost editing state
+  // Cost editing state (legacy, kept for mutation reuse)
   const [selectedCostProduct, setSelectedCostProduct] = useState<StockLevel | null>(null);
   const [newCostValue, setNewCostValue] = useState<string>("");
   const [isCostModalOpen, setIsCostModalOpen] = useState(false);
+
+  // Edit modal state
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editProduct, setEditProduct] = useState<StockLevel | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editCost, setEditCost] = useState("");
+  const [editQtyType, setEditQtyType] = useState<"add" | "remove">("add");
+  const [editQtyAmount, setEditQtyAmount] = useState("");
+  const [editQtyNotes, setEditQtyNotes] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
 
   const handleCopy = (text: string, index: number) => {
     navigator.clipboard.writeText(text);
@@ -222,6 +232,91 @@ export default function Stock() {
       });
     }
   });
+
+  // ── Edit modal: save all changes ────────────────────────────────────────
+  const handleEditSave = async () => {
+    if (!editProduct) return;
+    setEditSaving(true);
+    const errors: string[] = [];
+
+    // 1. Update product name if changed
+    if (editName.trim() && editName.trim() !== editProduct.productName) {
+      try {
+        const res = await fetch(`/api/products/${editProduct.productId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: editName.trim() }),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          errors.push(err.message || "Ad yenilənərkən xəta");
+        } else {
+          queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+        }
+      } catch {
+        errors.push("Ad yenilənərkən şəbəkə xətası");
+      }
+    }
+
+    // 2. Adjust stock quantity if provided
+    if (editQtyAmount.trim() && parseFloat(editQtyAmount) > 0) {
+      try {
+        const defaultWarehouseId = warehousesList.find((w: any) => w.isDefault === 1)?.id ||
+          currentUser?.warehouseId || 1;
+        const warehouseId = selectedWarehouseId ? parseInt(selectedWarehouseId) : defaultWarehouseId;
+        const res = await fetch("/api/stock/adjust", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            productId: editProduct.productId,
+            warehouseId,
+            type: editQtyType === "add" ? "manual_add" : "manual_remove",
+            quantity: parseFloat(editQtyAmount),
+            notes: editQtyNotes.trim() || (editQtyType === "add" ? "Əl ilə giriş" : "Əl ilə çıxış"),
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          errors.push(err.message || "Say tənzimlənərkən xəta");
+        } else {
+          queryClient.invalidateQueries({ queryKey: ["/api/stock/levels"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/stock/adjustments"] });
+        }
+      } catch {
+        errors.push("Say tənzimlənərkən şəbəkə xətası");
+      }
+    }
+
+    // 3. Update cost price if provided and changed
+    if (editCost.trim() && !isNaN(parseFloat(editCost)) &&
+        parseFloat(editCost) !== editProduct.lastPurchasePrice) {
+      try {
+        const res = await fetch("/api/stock/update-cost", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ productId: editProduct.productId, newCost: parseFloat(editCost) }),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          errors.push(err.message || "Maya dəyəri yenilənərkən xəta");
+        } else {
+          queryClient.invalidateQueries({ queryKey: ["/api/stock/levels"] });
+        }
+      } catch {
+        errors.push("Maya dəyəri yenilənərkən şəbəkə xətası");
+      }
+    }
+
+    setEditSaving(false);
+
+    if (errors.length > 0) {
+      toast({ title: "Xəta!", description: errors.join(" | "), variant: "destructive" });
+    } else {
+      toast({ title: "Yadda saxlanıldı ✅", description: "Məhsul məlumatları uğurla yeniləndi.", variant: "success" });
+      setIsEditModalOpen(false);
+      setEditProduct(null);
+    }
+  };
 
   // Procurement drafts query
   const { data: procurementDrafts = [], isLoading: isPOLoading } = useQuery<any[]>({
@@ -627,14 +722,18 @@ export default function Stock() {
                               {user?.role === "Admin" && (
                                 <button
                                   onClick={() => {
-                                    setSelectedCostProduct(item);
-                                    setNewCostValue(item.lastPurchasePrice > 0 ? String(item.lastPurchasePrice) : "0");
-                                    setIsCostModalOpen(true);
+                                    setEditProduct(item);
+                                    setEditName(item.productName);
+                                    setEditCost(item.lastPurchasePrice > 0 ? String(item.lastPurchasePrice) : "");
+                                    setEditQtyType("add");
+                                    setEditQtyAmount("");
+                                    setEditQtyNotes("");
+                                    setIsEditModalOpen(true);
                                   }}
-                                  className="px-2 py-1 bg-white hover:bg-amber-500/5 border border-gray-200 hover:border-amber-500/30 text-gray-550 hover:text-amber-600 rounded-lg transition-all cursor-pointer font-bold text-[10px] flex items-center gap-1"
-                                  title="Məhsulun maya dəyərini (alış qiymətini) dəyişdir"
+                                  className="px-2 py-1 bg-white hover:bg-primary/5 border border-gray-200 hover:border-primary/30 text-gray-550 hover:text-primary rounded-lg transition-all cursor-pointer font-bold text-[10px] flex items-center gap-1"
+                                  title="Məhsul adını, sayını və ya maya dəyərini dəyişdir"
                                 >
-                                  <Edit2 className="w-2.5 h-2.5 text-amber-500" /> Maya
+                                  <Edit2 className="w-2.5 h-2.5 text-primary" /> Düzəlt
                                 </button>
                               )}
                             </div>
@@ -1246,83 +1345,193 @@ export default function Stock() {
         </div>
       )}
 
-      {/* Cost Adjustment Modal */}
+      {/* Cost Adjustment Modal (legacy — kept for possible direct use) */}
       {isCostModalOpen && selectedCostProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-xs animate-in fade-in-0 duration-200">
           <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xl max-w-md w-full relative overflow-hidden glass-card space-y-4 animate-in zoom-in-95 duration-200">
             <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-amber-500 to-orange-500"></div>
-
             <div className="flex justify-between items-center pb-2 border-b border-gray-50">
               <div>
                 <h3 className="text-sm font-black text-gray-900">Maya Dəyəri Düzəlişi</h3>
                 <p className="text-[10px] text-gray-400 mt-0.5 font-bold uppercase">{selectedCostProduct.productName}</p>
               </div>
+              <button onClick={() => { setIsCostModalOpen(false); setSelectedCostProduct(null); setNewCostValue(""); }} className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Yeni Maya Dəyəri (₼)</label>
+              <input type="number" step="0.01" min="0" placeholder="Məs. 15.50" value={newCostValue} onChange={(e) => setNewCostValue(e.target.value)} className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 bg-gray-50/50 font-mono font-bold" />
+            </div>
+            <div className="flex gap-2.5 pt-2">
+              <button type="button" onClick={() => { setIsCostModalOpen(false); setSelectedCostProduct(null); setNewCostValue(""); }} className="flex-1 py-3 bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold text-xs rounded-xl transition-all cursor-pointer text-center">İmtina</button>
+              <button type="button" onClick={() => { if (!newCostValue.trim() || isNaN(parseFloat(newCostValue))) { toast({ title: "Xəta!", description: "Düzgün bir qiymət daxil edin", variant: "destructive" }); return; } updateCostMutation.mutate({ productId: selectedCostProduct.productId, newCost: parseFloat(newCostValue) }); }} disabled={updateCostMutation.isPending} className="flex-1 py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:opacity-90 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer text-center">
+                {updateCostMutation.isPending ? "Yadda saxlanılır..." : "Yadda Saxla 💾"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Düzəlt Modal ─────────────────────────────────────────────────── */}
+      {isEditModalOpen && editProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-xs animate-in fade-in-0 duration-200">
+          <div className="bg-white border border-gray-100 rounded-2xl shadow-2xl max-w-lg w-full relative overflow-hidden glass-card animate-in zoom-in-95 duration-200">
+            {/* Gradient header stripe */}
+            <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-primary via-blue-500 to-indigo-500"></div>
+
+            {/* Header */}
+            <div className="flex justify-between items-start p-6 pb-4 border-b border-gray-100">
+              <div>
+                <h3 className="text-sm font-black text-gray-900 flex items-center gap-2">
+                  <Edit2 className="w-4 h-4 text-primary" /> Məhsul Düzəliş Paneli
+                </h3>
+                <p className="text-[11px] text-gray-400 mt-0.5 font-semibold">{editProduct.productName}</p>
+              </div>
               <button
-                onClick={() => {
-                  setIsCostModalOpen(false);
-                  setSelectedCostProduct(null);
-                  setNewCostValue("");
-                }}
-                className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+                onClick={() => { setIsEditModalOpen(false); setEditProduct(null); }}
+                className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="space-y-4">
-              <div className="bg-amber-50/20 border border-amber-500/10 p-3.5 rounded-xl text-xs space-y-1.5">
-                <span className="text-amber-800 font-bold block uppercase text-[10px] tracking-wider">Cari Hesablanmış Maya Dəyəri:</span>
-                <span className="text-2xl font-black text-amber-600 font-mono block">
-                  {selectedCostProduct.lastPurchasePrice > 0 ? `${selectedCostProduct.lastPurchasePrice.toFixed(2)} ₼` : "0.00 ₼"}
-                </span>
-                <span className="text-[10px] text-gray-400 font-medium leading-relaxed block mt-1">
-                  Yeni daxil edəcəyiniz maya dəyəri məhsulun qalıq sayındakı FIFO hərəkətlərinə tətbiq olunacaq və mövcud anbar dəyərinizi yeniləyəcəkdir.
-                </span>
+            <div className="p-6 space-y-5">
+
+              {/* ── 1. Məhsul Adı ── */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="inline-flex w-4 h-4 rounded-full bg-primary/10 text-primary items-center justify-center text-[9px] font-black">1</span>
+                  Məhsul Adı
+                </label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/30 bg-gray-50/50 text-sm font-semibold"
+                  placeholder="Məhsul adını daxil edin"
+                />
               </div>
 
+              {/* ── 2. Say Tənzimləməsi ── */}
+              <div className="space-y-2.5">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="inline-flex w-4 h-4 rounded-full bg-primary/10 text-primary items-center justify-center text-[9px] font-black">2</span>
+                  Say Tənzimləməsi
+                  <span className="ml-auto text-gray-300 font-bold">Cari: <span className="text-gray-700">{editProduct.currentQuantity} {editProduct.unit}</span></span>
+                </label>
+
+                {/* Giriş / Çıxış toggle */}
+                <div className="flex rounded-xl border border-gray-200 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setEditQtyType("add")}
+                    className={`flex-1 py-2.5 text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                      editQtyType === "add"
+                        ? "bg-emerald-500 text-white"
+                        : "bg-white text-gray-400 hover:bg-gray-50"
+                    }`}
+                  >
+                    <span className="text-base leading-none">+</span> Giriş (Əlavə)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditQtyType("remove")}
+                    className={`flex-1 py-2.5 text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                      editQtyType === "remove"
+                        ? "bg-red-500 text-white"
+                        : "bg-white text-gray-400 hover:bg-gray-50"
+                    }`}
+                  >
+                    <span className="text-base leading-none">−</span> Çıxış (Azalt)
+                  </button>
+                </div>
+
+                <div className="flex gap-2">
+                  <div className="flex-1 space-y-1">
+                    <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">Miqdar ({editProduct.unit})</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.001"
+                      value={editQtyAmount}
+                      onChange={(e) => setEditQtyAmount(e.target.value)}
+                      placeholder="0"
+                      className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/30 bg-gray-50/50 font-mono font-bold text-sm"
+                    />
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">Qeyd (ixtiyari)</label>
+                    <input
+                      type="text"
+                      value={editQtyNotes}
+                      onChange={(e) => setEditQtyNotes(e.target.value)}
+                      placeholder="Səbəb..."
+                      className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/30 bg-gray-50/50 text-xs font-semibold"
+                    />
+                  </div>
+                </div>
+
+                {editQtyAmount && parseFloat(editQtyAmount) > 0 && (
+                  <div className={`text-[10px] font-bold px-3 py-1.5 rounded-lg ${
+                    editQtyType === "add"
+                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                      : "bg-red-50 text-red-700 border border-red-200"
+                  }`}>
+                    Yeni qalıq: {editQtyType === "add"
+                      ? (editProduct.currentQuantity + parseFloat(editQtyAmount || "0")).toFixed(2)
+                      : Math.max(0, editProduct.currentQuantity - parseFloat(editQtyAmount || "0")).toFixed(2)
+                    } {editProduct.unit}
+                  </div>
+                )}
+              </div>
+
+              {/* ── 3. Maya Qiyməti ── */}
               <div className="space-y-1.5">
-                <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Yeni Maya Dəyəri (₼) *</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="Məs. 15.50"
-                  value={newCostValue}
-                  onChange={(e) => setNewCostValue(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 bg-gray-50/50 font-mono font-bold"
-                  required
-                />
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="inline-flex w-4 h-4 rounded-full bg-primary/10 text-primary items-center justify-center text-[9px] font-black">3</span>
+                  Maya (Alış) Qiyməti
+                  <span className="ml-auto text-gray-300 font-bold">Cari: <span className="text-amber-600 font-mono">{editProduct.lastPurchasePrice.toFixed(2)} ₼</span></span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={editCost}
+                    onChange={(e) => setEditCost(e.target.value)}
+                    placeholder={editProduct.lastPurchasePrice.toFixed(2)}
+                    className="w-full pl-4 pr-10 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400/30 bg-gray-50/50 font-mono font-bold text-sm"
+                  />
+                  <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs">₼</span>
+                </div>
+                <p className="text-[10px] text-gray-400">Boş buraxılsa maya qiyməti dəyişdirilməyəcək. FIFO əsasında qalıq mədaxillərinə tətbiq olunur.</p>
+              </div>
+
+              {/* Info note */}
+              <div className="bg-blue-50/50 border border-blue-200/60 rounded-xl px-4 py-2.5 text-[10px] text-blue-700 font-semibold flex items-start gap-2">
+                <span className="mt-0.5 text-blue-400">ℹ️</span>
+                Say dəyişiklikləri anbar dəyəri, mənfəət marjası və bütün maliyyə hesabatlarına avtomatik əks olunacaq.
               </div>
             </div>
 
-            <div className="flex gap-2.5 pt-2">
+            {/* Footer */}
+            <div className="flex gap-3 px-6 pb-6">
               <button
                 type="button"
-                onClick={() => {
-                  setIsCostModalOpen(false);
-                  setSelectedCostProduct(null);
-                  setNewCostValue("");
-                }}
-                className="flex-1 py-3 bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold text-xs rounded-xl transition-all cursor-pointer text-center"
+                onClick={() => { setIsEditModalOpen(false); setEditProduct(null); }}
+                className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl transition-all cursor-pointer"
               >
-                İmtina
+                Ləğv et
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  if (!newCostValue.trim() || isNaN(parseFloat(newCostValue))) {
-                    toast({ title: "Xəta!", description: "Düzgün bir qiymət daxil edin", variant: "destructive" });
-                    return;
-                  }
-                  updateCostMutation.mutate({
-                    productId: selectedCostProduct.productId,
-                    newCost: parseFloat(newCostValue)
-                  });
-                }}
-                disabled={updateCostMutation.isPending}
-                className="flex-1 py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:opacity-90 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer text-center flex items-center justify-center gap-1.5"
+                onClick={handleEditSave}
+                disabled={editSaving}
+                className="flex-2 px-8 py-3 bg-gradient-to-r from-primary to-indigo-600 hover:opacity-90 text-white font-bold text-xs rounded-xl shadow-md shadow-primary/20 transition-all cursor-pointer flex items-center gap-2 disabled:opacity-60"
               >
-                {updateCostMutation.isPending ? "Yadda saxlanılır..." : "Yadda Saxla 💾"}
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                {editSaving ? "Saxlanılır..." : "Yadda Saxla"}
               </button>
             </div>
           </div>
