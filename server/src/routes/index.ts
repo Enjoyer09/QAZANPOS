@@ -10,6 +10,7 @@ import expenseRoutes from "./expenses.js";
 import dashboardRoutes from "./dashboard.js";
 import settingsRoutes from "./settings.js";
 import activityLogRoutes from "./activity-logs.js";
+import superRoutes from "./super.js";
 
 const router = Router();
 
@@ -28,5 +29,6 @@ router.use(expenseRoutes());
 router.use(dashboardRoutes());
 router.use(settingsRoutes());
 router.use(activityLogRoutes());
+router.use(superRoutes());
 
 export default router;
