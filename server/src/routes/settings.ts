@@ -15,7 +15,13 @@ export default function settingsRoutes(): Router {
         where: eq(schema.settings.tenantId, req.tenantId)
       });
       if (!setting) return res.status(404).json({ message: "Tənzimləmələr tapılmadı" });
-      res.json(setting);
+
+      // Also fetch billingTier from tenants table (it lives there, not in settings)
+      const tenant = await db.query.tenants.findFirst({
+        where: eq(schema.tenants.id, req.tenantId)
+      });
+
+      res.json({ ...setting, billingTier: tenant?.billingTier ?? "free" });
     } catch (error) {
       res.status(500).json({ message: "Tənzimləmələri gətirərkən xəta baş verdi" });
     }
