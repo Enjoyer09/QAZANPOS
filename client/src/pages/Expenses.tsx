@@ -80,7 +80,8 @@ export default function Expenses() {
 
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-  const [filterActive, setFilterActive] = useState(false);
+  const [appliedFrom, setAppliedFrom] = useState("");
+  const [appliedTo, setAppliedTo] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
 
   // Form State
@@ -97,12 +98,14 @@ export default function Expenses() {
   const isAdmin = user?.role === "Admin";
 
   // Queries & Mutations
-  const params = filterActive ? `?from=${fromDate}&to=${toDate}` : "";
+  const filterParams = appliedFrom || appliedTo
+    ? `?from=${appliedFrom}&to=${appliedTo}`
+    : "";
 
   const { data: list, isLoading } = useQuery<Expense[]>({
-    queryKey: ["/api/expenses", fromDate, toDate, filterActive],
+    queryKey: ["/api/expenses", appliedFrom, appliedTo],
     queryFn: async () => {
-      const res = await fetch(`/api/expenses${params}`);
+      const res = await fetch(`/api/expenses${filterParams}`);
       if (!res.ok) throw new Error();
       return res.json();
     },
@@ -222,15 +225,19 @@ export default function Expenses() {
   });
 
   const handleFilter = () => {
-    setFilterActive(true);
+    setAppliedFrom(fromDate);
+    setAppliedTo(toDate);
   };
 
   const handleReset = () => {
     setFromDate("");
     setToDate("");
-    setFilterActive(false);
+    setAppliedFrom("");
+    setAppliedTo("");
     setSearchQuery("");
   };
+
+  const filterActive = !!(appliedFrom || appliedTo);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -521,7 +528,11 @@ export default function Expenses() {
                     <TrendingDown className="w-5.5 h-5.5" />
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Ümumi Dövr Xərcləri</span>
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">
+                      {filterActive
+                        ? `Seçilmiş Dövr: ${appliedFrom || "..."} → ${appliedTo || "..."}`
+                        : "Bütün Dövrün Xərcləri"}
+                    </span>
                     <span className="text-2xl font-black text-red-600 font-mono mt-0.5 block">
                       {totalExpenses.toFixed(2)} ₼
                     </span>

@@ -11,7 +11,27 @@ export default function expenseRoutes(): Router {
 
   router.get("/expenses", async (req: AuthenticatedRequest, res) => {
     try {
-      const expenses = await db.select().from(schema.expenses).where(eq(schema.expenses.tenantId, req.tenantId)).orderBy(desc(schema.expenses.date));
+      const { from, to } = req.query as { from?: string; to?: string };
+
+      const conditions = [eq(schema.expenses.tenantId, req.tenantId)];
+
+      if (from) {
+        // Start of the from date (00:00:00)
+        conditions.push(gte(schema.expenses.date, new Date(from).toISOString()));
+      }
+      if (to) {
+        // End of the to date (23:59:59)
+        const toDate = new Date(to);
+        toDate.setHours(23, 59, 59, 999);
+        conditions.push(lte(schema.expenses.date, toDate.toISOString()));
+      }
+
+      const expenses = await db
+        .select()
+        .from(schema.expenses)
+        .where(and(...conditions))
+        .orderBy(desc(schema.expenses.date));
+
       res.json(expenses);
     } catch (error) {
       res.status(500).json({ message: "Xərcləri gətirərkən xəta baş verdi" });
