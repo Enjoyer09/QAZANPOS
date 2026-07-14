@@ -99,7 +99,7 @@ export default function Vendors() {
   });
 
   // Query vendors
-  const { data: vendors = [], isLoading } = useQuery<Vendor[]>({
+  const { data: vendors = [], isLoading, isError } = useQuery<Vendor[]>({
     queryKey: ["/api/vendors"],
     queryFn: async () => {
       const res = await fetch("/api/vendors");
@@ -586,6 +586,24 @@ export default function Vendors() {
       printWindow.close();
     }, 250);
   };
+
+  // ─── Error / Permission Guard ──────────────────────────────────────────
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[70vh] px-4">
+        <div className="bg-white border border-red-100 p-8 rounded-2xl shadow-xl max-w-md w-full text-center space-y-4">
+          <div className="size-14 rounded-2xl bg-red-50 text-red-500 flex items-center justify-center mx-auto">
+            <AlertCircle className="w-7 h-7" />
+          </div>
+          <h3 className="text-lg font-black text-gray-900">Giriş Məhdudlaşdırılıb 🔒</h3>
+          <p className="text-xs text-gray-500 font-semibold leading-relaxed">
+            Bu bölməyə giriş icazəniz yoxdur və ya məlumatlar yüklənərkən xəta baş verdi.
+            Administratora müraciət edin.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6 select-none">
