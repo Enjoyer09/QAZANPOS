@@ -243,7 +243,8 @@ export default function SalesHistory() {
   // Sales History Tab States
   const [fromDate, setFromDate] = useState(todayStr);
   const [toDate, setToDate] = useState(todayStr);
-  const [filterActive, setFilterActive] = useState(true);
+  const [appliedFrom, setAppliedFrom] = useState(todayStr);
+  const [appliedTo, setAppliedTo] = useState(todayStr);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSeller, setSelectedSeller] = useState("");
 
@@ -253,7 +254,7 @@ export default function SalesHistory() {
   // Reset page when queries change
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [fromDate, toDate, filterActive, searchQuery, selectedSeller, activeTab]);
+  }, [appliedFrom, appliedTo, searchQuery, selectedSeller, activeTab]);
 
   // Horizontal scroll Refs
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -319,9 +320,10 @@ export default function SalesHistory() {
   });
 
   // Sales Query
-  const params = filterActive ? `?from=${fromDate}&to=${toDate}` : "";
+  const filterActive = !!(appliedFrom || appliedTo);
+  const params = `?from=${appliedFrom}&to=${appliedTo}`;
   const { data: sales, isLoading } = useQuery<Sale[]>({
-    queryKey: ["/api/sales", fromDate, toDate, filterActive],
+    queryKey: ["/api/sales", appliedFrom, appliedTo],
     queryFn: async () => {
       const res = await fetch(`/api/sales${params}`);
       if (!res.ok) throw new Error();
@@ -340,14 +342,16 @@ export default function SalesHistory() {
   }, [sales]);
 
   const handleFilter = () => {
-    setFilterActive(true);
+    setAppliedFrom(fromDate);
+    setAppliedTo(toDate);
   };
 
   const handleReset = () => {
-    const todayStr = getTodayString();
-    setFromDate(todayStr);
-    setToDate(todayStr);
-    setFilterActive(true);
+    const t = getTodayString();
+    setFromDate(t);
+    setToDate(t);
+    setAppliedFrom(t);
+    setAppliedTo(t);
     setSearchQuery("");
     setSelectedSeller("");
   };

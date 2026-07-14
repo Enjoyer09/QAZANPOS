@@ -475,8 +475,16 @@ function CogsMarginWidget({ data }: { data: any }) {
 
 export default function Dashboard() {
   const { toast } = useToast();
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+  const getTodayStr = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  };
+  const todayStr = getTodayStr();
+
+  const [fromDate, setFromDate] = useState(todayStr);
+  const [toDate, setToDate] = useState(todayStr);
+  const [appliedFrom, setAppliedFrom] = useState(todayStr);
+  const [appliedTo, setAppliedTo] = useState(todayStr);
 
   // Safe & Kassa Transfers state
   const [transferAmount, setTransferAmount] = useState("");
@@ -486,7 +494,6 @@ export default function Dashboard() {
   const [safeActionAmount, setSafeActionAmount] = useState("");
   const [safeActionDesc, setSafeActionDesc] = useState("");
   const [isSubmittingSafeAction, setIsSubmittingSafeAction] = useState(false);
-  const [filterActive, setFilterActive] = useState(false);
   const [activeTab, setActiveTab] = useState<"summary" | "analytics" | "finance">("summary");
 
   // Cash Register Adjust state
@@ -516,15 +523,14 @@ export default function Dashboard() {
   });
 
   // Queries
-  const summaryParams = filterActive
-    ? `?from=${fromDate}&to=${toDate}`
-    : "";
+  const filterActive = !!(appliedFrom || appliedTo);
+  const summaryParams = `?from=${appliedFrom}&to=${appliedTo}`;
 
   const {
     data: summary,
     isLoading: isSummaryLoading,
   } = useQuery<SummaryData>({
-    queryKey: ["/api/dashboard/summary", fromDate, toDate, filterActive],
+    queryKey: ["/api/dashboard/summary", appliedFrom, appliedTo],
     queryFn: async () => {
       const res = await fetch(`/api/dashboard/summary${summaryParams}`);
       if (!res.ok) throw new Error();
@@ -646,19 +652,22 @@ export default function Dashboard() {
   };
 
   const handleFilter = () => {
-    setFilterActive(true);
+    setAppliedFrom(fromDate);
+    setAppliedTo(toDate);
   };
 
   const handleReset = () => {
-    setFromDate("");
-    setToDate("");
-    setFilterActive(false);
+    const t = getTodayStr();
+    setFromDate(t);
+    setToDate(t);
+    setAppliedFrom(t);
+    setAppliedTo(t);
   };
 
   const getPeriodLabel = () => {
-    if (!filterActive) return "Bu gün";
-    const fromStr = fromDate ? new Date(fromDate).toLocaleDateString("az-AZ") : "...";
-    const toStr = toDate ? new Date(toDate).toLocaleDateString("az-AZ") : "...";
+    const fromStr = appliedFrom ? new Date(appliedFrom).toLocaleDateString("az-AZ") : "...";
+    const toStr = appliedTo ? new Date(appliedTo).toLocaleDateString("az-AZ") : "...";
+    if (appliedFrom === todayStr && appliedTo === todayStr) return "Bu gün";
     return `${fromStr} — ${toStr}`;
   };
 

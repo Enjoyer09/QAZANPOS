@@ -78,10 +78,16 @@ export default function Expenses() {
     },
   });
 
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-  const [appliedFrom, setAppliedFrom] = useState("");
-  const [appliedTo, setAppliedTo] = useState("");
+  const getTodayStr = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  };
+  const todayStr = getTodayStr();
+
+  const [fromDate, setFromDate] = useState(todayStr);
+  const [toDate, setToDate] = useState(todayStr);
+  const [appliedFrom, setAppliedFrom] = useState(todayStr);
+  const [appliedTo, setAppliedTo] = useState(todayStr);
   const [searchQuery, setSearchQuery] = useState("");
 
   // Form State
@@ -230,10 +236,11 @@ export default function Expenses() {
   };
 
   const handleReset = () => {
-    setFromDate("");
-    setToDate("");
-    setAppliedFrom("");
-    setAppliedTo("");
+    const t = getTodayStr();
+    setFromDate(t);
+    setToDate(t);
+    setAppliedFrom(t);
+    setAppliedTo(t);
     setSearchQuery("");
   };
 
