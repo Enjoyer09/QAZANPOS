@@ -530,37 +530,6 @@ export default function Expenses() {
                 <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider hidden sm:inline">QAZANPOS XƏRC HESABATI</span>
               </div>
 
-              {/* Cash Card */}
-              <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-xs glass flex flex-col justify-between hover:border-emerald-500/20 transition-all">
-                <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider block">Nəqd (Kassa)</span>
-                <span className="text-lg font-black text-emerald-700 font-mono mt-2 block">
-                  {cashExpenses.toFixed(2)} ₼
-                </span>
-              </div>
-
-              {/* Card / Bank Card */}
-              <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-xs glass flex flex-col justify-between hover:border-blue-500/20 transition-all">
-                <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider block">Kart / Bank</span>
-                <span className="text-lg font-black text-blue-700 font-mono mt-2 block">
-                  {cardExpenses.toFixed(2)} ₼
-                </span>
-              </div>
-
-              {/* Investor Debt Card */}
-              <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-xs glass flex flex-col justify-between hover:border-purple-500/20 transition-all col-span-2 sm:col-span-1">
-                <span className="text-[10px] font-bold text-purple-600 uppercase tracking-wider block">İnvestor Borcu</span>
-                <span className="text-lg font-black text-purple-700 font-mono mt-2 block">
-                  {investorDebtExpenses.toFixed(2)} ₼
-                </span>
-              </div>
-
-              {/* Other Card */}
-              <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-xs glass flex flex-col justify-between hover:border-gray-300 transition-all col-span-2 sm:col-span-1">
-                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Digər</span>
-                <span className="text-lg font-black text-gray-600 font-mono mt-2 block">
-                  {otherExpenses.toFixed(2)} ₼
-                </span>
-              </div>
             </div>
           )}
 
