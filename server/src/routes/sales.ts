@@ -12,8 +12,8 @@ export default function salesRoutes(): Router {
     try {
       const { from, to } = req.query;
       let conditions = eq(schema.sales.tenantId, req.tenantId);
-      if (from) conditions = and(conditions, gte(schema.sales.saleDate, `${from}T00:00:00.000Z`)) as any;
-      if (to) conditions = and(conditions, lte(schema.sales.saleDate, `${to}T23:59:59.999Z`)) as any;
+      if (from) conditions = and(conditions, gte(schema.sales.saleDate, `${from}T00:00:00.000`)) as any;
+      if (to) conditions = and(conditions, lte(schema.sales.saleDate, `${to}T23:59:59.999`)) as any;
 
       if (!await checkUserPermission(req, "staffCanViewSalesHistory")) {
         return res.status(403).json({ message: "Satış tarixçəsinə giriş administrator tərəfindən məhdudlaşdırılıb" });

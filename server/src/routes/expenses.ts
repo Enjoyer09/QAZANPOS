@@ -16,14 +16,12 @@ export default function expenseRoutes(): Router {
       const conditions = [eq(schema.expenses.tenantId, req.tenantId)];
 
       if (from) {
-        // Start of the from date (00:00:00)
-        conditions.push(gte(schema.expenses.date, new Date(from).toISOString()));
+        // Use string prefix: ISO dates stored as "2026-07-14T..." so >= "2026-07-14" works correctly
+        conditions.push(gte(schema.expenses.date, from));
       }
       if (to) {
-        // End of the to date (23:59:59)
-        const toDate = new Date(to);
-        toDate.setHours(23, 59, 59, 999);
-        conditions.push(lte(schema.expenses.date, toDate.toISOString()));
+        // "2026-07-14" + "T23:59:59.999" covers the full day regardless of UTC offset
+        conditions.push(lte(schema.expenses.date, `${to}T23:59:59.999`));
       }
 
       const expenses = await db
