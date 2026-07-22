@@ -1039,6 +1039,14 @@ export default function POS() {
         customerPhone = cust.phone;
         customerEmail = cust.email;
         customerAddress = cust.address;
+      } else {
+        // Customer list not loaded yet — block checkout to prevent data loss
+        toast({
+          title: "Müştəri məlumatı yüklənmədi",
+          description: "Müştəri siyahısı hələ tam yüklənməyib. Bir az gözləyin və yenidən cəhd edin.",
+          variant: "destructive"
+        });
+        return;
       }
     }
 
