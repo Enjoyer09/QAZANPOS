@@ -39,7 +39,7 @@ export default function salesRoutes(): Router {
 
   router.post("/sales", async (req: AuthenticatedRequest, res) => {
     try {
-      const { customerId, paymentType, creditDueDate, notes, items, totalAmount, totalCost, paidAmount, offlineId, salesChannel, marketplaceFee, bankName, applyEdv, warehouseId } = req.body;
+      const { customerId, customerName: clientCustomerName, customerPhone: clientCustomerPhone, paymentType, creditDueDate, notes, items, totalAmount, totalCost, paidAmount, offlineId, salesChannel, marketplaceFee, bankName, applyEdv, warehouseId } = req.body;
 
       if (!items || items.length === 0 || !paymentType) {
         return res.status(400).json({ message: "Çek məlumatları boş ola bilməz" });
@@ -67,12 +67,15 @@ export default function salesRoutes(): Router {
         if (defaultWarehouse) targetWarehouseId = defaultWarehouse.id;
       }
 
-      let customerName = "Anonim Müştəri";
-      let customerPhone = "";
-      if (customerId) {
+      // Use client-provided name first; fall back to DB lookup if name missing
+      let customerName = clientCustomerName || "";
+      let customerPhone = clientCustomerPhone || "";
+      if (customerId && !customerName) {
+        // Client sent customerId but couldn't resolve name (offline/race condition) — look up from DB
         const cust = await db.query.customers.findFirst({ where: and(eq(schema.customers.id, customerId), eq(schema.customers.tenantId, req.tenantId)) });
         if (cust) { customerName = cust.name; customerPhone = cust.phone || ""; }
       }
+      if (!customerName) customerName = "Anonim Müştəri";
 
       const rawSeller = req.headers["x-user-username"] as string;
       const sellerName = rawSeller ? rawSeller.trim().toLowerCase() : (req.headers["x-user-role"] === "Admin" ? "admin" : "satici");
