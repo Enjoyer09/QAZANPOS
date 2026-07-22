@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/index.js";
 import * as schema from "../db/schema.js";
-import { eq, and, gte, lte, sql, desc } from "drizzle-orm";
+import { eq, and, gte, lte, sql, desc, isNull, or, inArray } from "drizzle-orm";
 import { AuthenticatedRequest, requireAdmin, checkUserPermission, logActivity, verifyTenantLimit, computeFIFOSaleCost, computeRemainingDebt, fetchTenantStockMetrics } from "./helpers.js";
 import { sendTelegramNotification } from "../lib/telegram.js";
 
@@ -614,6 +614,73 @@ export default function salesRoutes(): Router {
       });
     } catch (error) {
       res.status(500).json({ message: "Növbə bağlanarkən xəta baş verdi" });
+    }
+  });
+
+  // ── One-time repair: fix "Anonim Müştəri" where customer_id is set ────────────
+  router.post("/sales/repair-customer-names", requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      // Find all sales in this tenant where customerId is set but customerName is wrong
+      const brokenSales = await db
+        .select()
+        .from(schema.sales)
+        .where(
+          and(
+            eq(schema.sales.tenantId, req.tenantId),
+            // has a customer ID
+            sql`${schema.sales.customerId} IS NOT NULL`,
+            // but name is missing or default
+            or(
+              isNull(schema.sales.customerName),
+              eq(schema.sales.customerName, "Anonim Müştəri"),
+              eq(schema.sales.customerName, "")
+            )
+          )
+        );
+
+      if (brokenSales.length === 0) {
+        return res.json({ fixed: 0, message: "Düzlədilməsi lazım olan satış tapilmadı." });
+      }
+
+      // Get unique customer IDs
+      const customerIds = [...new Set(brokenSales.map(s => s.customerId!))]; 
+      const customers = await db
+        .select()
+        .from(schema.customers)
+        .where(and(
+          eq(schema.customers.tenantId, req.tenantId),
+          inArray(schema.customers.id, customerIds)
+        ));
+
+      const customerMap = new Map(customers.map(c => [c.id, c]));
+
+      let fixed = 0;
+      const results: { saleId: number; oldName: string | null; newName: string }[] = [];
+
+      for (const sale of brokenSales) {
+        const cust = customerMap.get(sale.customerId!);
+        if (!cust) continue; // customer was deleted — skip
+
+        await db
+          .update(schema.sales)
+          .set({
+            customerName: cust.name,
+            customerPhone: cust.phone || sale.customerPhone || "",
+          })
+          .where(and(eq(schema.sales.id, sale.id), eq(schema.sales.tenantId, req.tenantId)));
+
+        results.push({ saleId: sale.id, oldName: sale.customerName, newName: cust.name });
+        fixed++;
+      }
+
+      await logActivity(req, "REPAIR_CUSTOMER_NAMES",
+        `${fixed} satışda müştəri adı düzlədildi (Anonim → əsl ad)`
+      );
+
+      res.json({ fixed, results, message: `${fixed} satışda müştəri adı uğurla düzlədildi.` });
+    } catch (error) {
+      console.error("Repair customer names error:", error);
+      res.status(500).json({ message: "Düzlətmə zamanı xəta baş verdi" });
     }
   });
 
