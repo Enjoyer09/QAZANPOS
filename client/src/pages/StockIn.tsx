@@ -534,9 +534,9 @@ export default function StockIn() {
                 <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Alış Qiyməti (₼) *</label>
                 <input
                   type="number"
-                  min="0.01"
-                  step="0.01"
-                  placeholder="0.00"
+                  min="0.0001"
+                  step="any"
+                  placeholder="0.0000"
                   value={formData.purchasePrice}
                   onChange={(e) => setFormData((prev) => ({ ...prev, purchasePrice: e.target.value }))}
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50"
@@ -958,8 +958,8 @@ export default function StockIn() {
                   <label className="text-gray-400 uppercase tracking-wider block text-[9px]">Alış Qiyməti (₼) *</label>
                   <input
                     type="number"
-                    min="0.01"
-                    step="0.01"
+                    min="0.0001"
+                    step="any"
                     value={editFormData.purchasePrice}
                     onChange={(e) => setEditFormData((prev: any) => ({ ...prev, purchasePrice: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-white"
