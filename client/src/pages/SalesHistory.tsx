@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useToast } from "../components/Toast.tsx";
 import {
@@ -19,7 +19,9 @@ import {
   X,
   XCircle,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Pencil,
+  Save
 } from "lucide-react";
 import { TableSkeleton } from "../components/Skeleton.tsx";
 
@@ -70,6 +72,17 @@ export default function SalesHistory() {
   const [showVoidConfirm, setShowVoidConfirm] = useState(false);
   const [selectedSaleForVoid, setSelectedSaleForVoid] = useState<Sale | null>(null);
 
+  // ── Edit Sale States ──────────────────────────────────────────────────────
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingSale, setEditingSale] = useState<Sale | null>(null);
+  const [editPaymentType, setEditPaymentType] = useState("");
+  const [editBankName, setEditBankName] = useState("");
+  const [editCustomerName, setEditCustomerName] = useState("");
+  const [editCustomerPhone, setEditCustomerPhone] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  const [editSaleDate, setEditSaleDate] = useState("");
+  const [editItems, setEditItems] = useState<{ id: number; productName: string; salePrice: string; quantity: string; purchasePrice: number }[]>([]);
+
   const getSaleReturnableQty = (sale: Sale) => {
     let totalSold = 0;
     if (sale.items) {
@@ -107,6 +120,29 @@ export default function SalesHistory() {
     setReturnStatuses(initialStatuses);
     setReturnSerials(initialSerials);
     setIsReturnModalOpen(true);
+  };
+
+  const handleOpenEdit = (sale: Sale) => {
+    setEditingSale(sale);
+    setEditPaymentType(sale.paymentType);
+    setEditBankName(sale.bankName || "");
+    setEditCustomerName(sale.customerName || "");
+    setEditCustomerPhone(sale.customerPhone || "");
+    setEditNotes(sale.notes || "");
+    // Format saleDate to YYYY-MM-DDTHH:MM for datetime-local input
+    const d = new Date(sale.saleDate);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    setEditSaleDate(`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`);
+    setEditItems(
+      (sale.items || []).map((item: any) => ({
+        id: item.id,
+        productName: item.product?.name || item.productName || "Məhsul",
+        salePrice: String(item.salePrice),
+        quantity: String(item.quantity),
+        purchasePrice: item.purchasePrice,
+      }))
+    );
+    setEditModalOpen(true);
   };
 
   const handleVoidSale = async () => {
@@ -237,6 +273,61 @@ export default function SalesHistory() {
     const dd = String(today.getDate()).padStart(2, "0");
     return `${yyyy}-${mm}-${dd}`;
   };
+
+  const editMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      const res = await fetch(`/api/sales/${editingSale!.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-role": user?.role || "Admin",
+          "x-user-username": user?.username || "",
+        },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Redaktə xəta verdi");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "✅ Satış yeniləndi!", description: "Dəyişikliklər uğurla yadda saxlanıldı.", variant: "success" });
+      setEditModalOpen(false);
+      setEditingSale(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/summary"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/pnl"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Xəta!", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleSaveEdit = () => {
+    if (!editingSale) return;
+    // Validate
+    for (const item of editItems) {
+      if (isNaN(parseFloat(item.salePrice)) || parseFloat(item.salePrice) < 0) {
+        toast({ title: "Xəta", description: `${item.productName} üçün düzgün qiymət daxil edin.`, variant: "destructive" });
+        return;
+      }
+      if (isNaN(parseFloat(item.quantity)) || parseFloat(item.quantity) <= 0) {
+        toast({ title: "Xəta", description: `${item.productName} üçün düzgün miqdar daxil edin.`, variant: "destructive" });
+        return;
+      }
+    }
+    editMutation.mutate({
+      paymentType: editPaymentType,
+      bankName: editBankName || null,
+      customerName: editCustomerName,
+      customerPhone: editCustomerPhone,
+      notes: editNotes || null,
+      saleDate: editSaleDate ? new Date(editSaleDate).toISOString() : undefined,
+      items: editItems.map(i => ({ id: i.id, salePrice: parseFloat(i.salePrice), quantity: parseFloat(i.quantity) })),
+    });
+  };
+
 
   const todayStr = getTodayString();
 
@@ -768,6 +859,15 @@ export default function SalesHistory() {
                                   title="Geri Qaytar"
                                 >
                                   <RotateCcw className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              {isAdmin && (
+                                <button
+                                  onClick={() => handleOpenEdit(sale)}
+                                  className="p-2 border border-indigo-100 hover:border-indigo-300 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50/40 rounded-xl cursor-pointer bg-white transition-all"
+                                  title="Satışı Redaktə Et"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
                                 </button>
                               )}
                               {isAdmin && (
@@ -1508,6 +1608,193 @@ export default function SalesHistory() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* ── Edit Sale Modal ─────────────────────────────────────────────────── */}
+      {editModalOpen && editingSale && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-start justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl my-8 animate-in fade-in slide-in-from-bottom-4 duration-300 overflow-hidden">
+
+            {/* Header */}
+            <div className="flex items-center justify-between p-5 border-b border-gray-100 bg-gradient-to-r from-indigo-50 to-white">
+              <div className="flex items-center gap-3">
+                <div className="size-9 rounded-xl bg-indigo-500 text-white flex items-center justify-center shadow-md shadow-indigo-500/20">
+                  <Pencil className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-black text-gray-900 text-base">Satışı Redaktə Et</h3>
+                  <p className="text-[10px] text-gray-400 font-semibold">Qaimdə №{editingSale.id.toString().padStart(5, "0")}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => { setEditModalOpen(false); setEditingSale(null); }}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl cursor-pointer transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-5 space-y-5 max-h-[70vh] overflow-y-auto">
+
+              {/* Məhsullar cədvəli */}
+              <div className="space-y-2">
+                <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Məhsullar / Qiymətlər</h4>
+                <div className="border border-gray-100 rounded-2xl overflow-hidden">
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 border-b border-gray-100">
+                      <tr>
+                        <th className="text-left p-3 font-bold text-gray-500">Məhsul</th>
+                        <th className="text-center p-3 font-bold text-gray-500 w-24">Miqdar</th>
+                        <th className="text-center p-3 font-bold text-gray-500 w-28">Satış Qiyməti</th>
+                        <th className="text-right p-3 font-bold text-gray-500 w-24">Cəm</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {editItems.map((item, idx) => (
+                        <tr key={item.id} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50/40"}>
+                          <td className="p-3 font-semibold text-gray-700 max-w-[160px] truncate">{item.productName}</td>
+                          <td className="p-2">
+                            <input
+                              type="number"
+                              min="0.001"
+                              step="any"
+                              value={item.quantity}
+                              onChange={e => {
+                                const updated = [...editItems];
+                                updated[idx] = { ...updated[idx], quantity: e.target.value };
+                                setEditItems(updated);
+                              }}
+                              className="w-full text-center border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-white font-mono text-xs"
+                            />
+                          </td>
+                          <td className="p-2">
+                            <div className="relative">
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={item.salePrice}
+                                onChange={e => {
+                                  const updated = [...editItems];
+                                  updated[idx] = { ...updated[idx], salePrice: e.target.value };
+                                  setEditItems(updated);
+                                }}
+                                className="w-full text-center border border-gray-200 rounded-lg px-2 py-1.5 pr-5 focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-white font-mono text-xs"
+                              />
+                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-[10px] font-bold">₼</span>
+                            </div>
+                          </td>
+                          <td className="p-3 text-right font-mono font-bold text-gray-800">
+                            {(parseFloat(item.salePrice || "0") * parseFloat(item.quantity || "0")).toFixed(2)} ₼
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="border-t border-gray-100 bg-indigo-50/40">
+                      <tr>
+                        <td colSpan={3} className="p-3 text-xs font-black text-gray-600 text-right">Yeni Cəm:</td>
+                        <td className="p-3 text-right font-mono font-black text-indigo-700">
+                          {editItems.reduce((s, i) => s + parseFloat(i.salePrice||"0") * parseFloat(i.quantity||"0"), 0).toFixed(2)} ₼
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+
+              {/* Ödəniş növü */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Ödəniş Üsuluv</label>
+                  <select
+                    value={editPaymentType}
+                    onChange={e => setEditPaymentType(e.target.value)}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-gray-50/50"
+                  >
+                    {["Nəğd", "Kart", "Kart2Kart", "Köçürmə", "Nisyə"].map(pt => (
+                      <option key={pt} value={pt}>{pt}</option>
+                    ))}
+                  </select>
+                </div>
+                {editPaymentType === "Kart" && (
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Bank / Kart Adı</label>
+                    <input
+                      type="text"
+                      value={editBankName}
+                      onChange={e => setEditBankName(e.target.value)}
+                      placeholder="Məs. ABB, Kapital..."
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-gray-50/50"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Müştəri */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Müştəri Adı</label>
+                  <input
+                    type="text"
+                    value={editCustomerName}
+                    onChange={e => setEditCustomerName(e.target.value)}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-gray-50/50"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Telefon</label>
+                  <input
+                    type="text"
+                    value={editCustomerPhone}
+                    onChange={e => setEditCustomerPhone(e.target.value)}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-gray-50/50"
+                  />
+                </div>
+              </div>
+
+              {/* Satış tarixi */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Satış Tarixi / Saati</label>
+                <input
+                  type="datetime-local"
+                  value={editSaleDate}
+                  onChange={e => setEditSaleDate(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-gray-50/50"
+                />
+              </div>
+
+              {/* Qeyd */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Qeyd</label>
+                <textarea
+                  rows={2}
+                  value={editNotes}
+                  onChange={e => setEditNotes(e.target.value)}
+                  placeholder="Satışa dair qeydlər..."
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-gray-50/50 resize-none"
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-gray-50/80 border-t border-gray-100 flex items-center justify-end gap-2.5">
+              <button
+                onClick={() => { setEditModalOpen(false); setEditingSale(null); }}
+                className="px-4 py-2 border border-gray-200 text-gray-500 font-semibold rounded-xl hover:bg-gray-100 cursor-pointer transition-all text-xs"
+              >
+                İmtina
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={editMutation.isPending}
+                className="px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 cursor-pointer disabled:opacity-50 transition-all flex items-center gap-1.5 shadow-md shadow-indigo-600/20 text-xs"
+              >
+                <Save className="w-3.5 h-3.5" />
+                {editMutation.isPending ? "Saxlanır..." : "Dəyişiklikləri Yadda Saxla"}
+              </button>
+            </div>
           </div>
         </div>
       )}

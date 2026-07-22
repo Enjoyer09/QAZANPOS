@@ -238,6 +238,83 @@ export default function salesRoutes(): Router {
     }
   });
 
+  // ── Edit a sale (Admin only) ─────────────────────────────────────────────
+  router.put("/sales/:id", requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { paymentType, customerName, customerPhone, bankName, creditDueDate, notes, saleDate, items } = req.body;
+
+      // Fetch existing sale with items
+      const sale = await db.query.sales.findFirst({
+        where: and(eq(schema.sales.id, id), eq(schema.sales.tenantId, req.tenantId)),
+        with: { items: true },
+      });
+      if (!sale) return res.status(404).json({ message: "Satış tapılmadı" });
+
+      // Update each sale_item's salePrice (purchasePrice stays unchanged — COGS snapshot)
+      let newTotalAmount = 0;
+      let newTotalCost = 0;
+
+      if (items && Array.isArray(items) && items.length > 0) {
+        for (const editItem of items) {
+          const itemId = parseInt(editItem.id);
+          const newSalePrice = parseFloat(editItem.salePrice);
+          const newQuantity = parseFloat(editItem.quantity);
+
+          // Find the original item to get purchasePrice
+          const origItem = sale.items.find((i: any) => i.id === itemId);
+          if (!origItem) continue;
+
+          const purchasePrice = origItem.purchasePrice;
+
+          await db
+            .update(schema.saleItems)
+            .set({ salePrice: newSalePrice, quantity: newQuantity })
+            .where(and(eq(schema.saleItems.id, itemId), eq(schema.saleItems.tenantId, req.tenantId)));
+
+          newTotalAmount += newSalePrice * newQuantity;
+          newTotalCost += purchasePrice * newQuantity;
+        }
+      } else {
+        // No items provided — recalculate from existing items
+        for (const item of sale.items) {
+          newTotalAmount += (item as any).salePrice * (item as any).quantity;
+          newTotalCost += (item as any).purchasePrice * (item as any).quantity;
+        }
+      }
+
+      // Build update payload — only update fields that were provided
+      const updatePayload: Record<string, any> = {
+        totalAmount: newTotalAmount,
+        totalCost: newTotalCost,
+      };
+      if (paymentType !== undefined) updatePayload.paymentType = paymentType;
+      if (customerName !== undefined) updatePayload.customerName = customerName;
+      if (customerPhone !== undefined) updatePayload.customerPhone = customerPhone;
+      if (bankName !== undefined) updatePayload.bankName = bankName;
+      if (creditDueDate !== undefined) updatePayload.creditDueDate = creditDueDate;
+      if (notes !== undefined) updatePayload.notes = notes;
+      if (saleDate !== undefined) updatePayload.saleDate = saleDate;
+
+      const [updated] = await db
+        .update(schema.sales)
+        .set(updatePayload)
+        .where(and(eq(schema.sales.id, id), eq(schema.sales.tenantId, req.tenantId)))
+        .returning();
+
+      await logActivity(
+        req,
+        "EDIT_SALE",
+        `Satış redaktə edildi: Çek № ${id} (Yeni məbləğ: ${newTotalAmount.toFixed(2)} ₼, Ödəniş: ${updatePayload.paymentType || sale.paymentType})`
+      );
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Edit sale error:", error);
+      res.status(500).json({ message: "Satış redaktə edilərkən xəta baş verdi" });
+    }
+  });
+
   router.patch("/sales/:id/pay-credit", async (req: AuthenticatedRequest, res) => {
     try {
       const id = parseInt(req.params.id);
