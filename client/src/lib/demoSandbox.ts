@@ -857,7 +857,7 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
         if (item.serialNumbers && Array.isArray(item.serialNumbers) && item.serialNumbers.length > 0) {
           item.serialNumbers.forEach((sNum: string) => {
             const cleaned = sNum.trim().toUpperCase();
-            const serialObj = serials.find((s: any) => s.productId === item.productId && s.serialNumber === cleaned && s.status === "in_stock" && s.warehouseId === warehouseId);
+            const serialObj = serials.find((s: any) => s.productId === item.productId && s.serialNumber === cleaned && s.status === "in_stock");
             if (serialObj) {
               serialObj.status = "sold";
               serialObj.saleId = nextId;

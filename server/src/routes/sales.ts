@@ -90,11 +90,9 @@ export default function salesRoutes(): Router {
         processedItems.push({ productId: item.productId, quantity: qty, salePrice: parseFloat(item.salePrice), purchasePrice: fifoCost, serialNumbers: item.serialNumbers });
       }
 
-      // ── Stok yoxlaması (Admin → bütün anbarlar, Staff → öz anbarı) ──
+      // ── Stok yoxlaması (bütün istifadəçilər üçün bütün anbarlar üzrə balansa baxılır) ──
       const userRole = req.headers["x-user-role"] as string;
-      const isAdminSale = userRole === "Admin";
-      const stockCheckWarehouseId = isAdminSale ? undefined : (targetWarehouseId || undefined);
-      const { allProducts: stockProducts, metrics: stockMetrics } = await fetchTenantStockMetrics(req.tenantId, stockCheckWarehouseId);
+      const { allProducts: stockProducts, metrics: stockMetrics } = await fetchTenantStockMetrics(req.tenantId);
       const productNameLookup = new Map(stockProducts.map(p => [p.id, p.name]));
       const stockWarnings: { productId: number; productName: string; requested: number; available: number }[] = [];
 
@@ -118,10 +116,10 @@ export default function salesRoutes(): Router {
         }
       }
 
-      // ── Admin üçün: target anbarda stok çatmazsa xəbərdarlıq hazırla ──
+      // ── Target anbarda stok çatmazsa xəbərdarlıq hazırla ──
       let warehouseWarning: { productId: number; productName: string; targetStock: number; requested: number; globalStock: number; message: string } | null = null;
       
-      if (isAdminSale && targetWarehouseId) {
+      if (targetWarehouseId) {
         const targetMetrics = await fetchTenantStockMetrics(req.tenantId, targetWarehouseId);
         
         for (const item of processedItems) {
@@ -136,7 +134,7 @@ export default function salesRoutes(): Router {
               targetStock,
               requested: item.quantity,
               globalStock,
-              message: `"${pName}" məhsulu üçün anbarınızda ${targetStock} ədəd var, tələb ${item.quantity} ədəd. Çatışmayan ${(item.quantity - targetStock).toFixed(2)} ədədi digər anbarlardan köçürmək üçün Anbar səhifəsində "Yerdəyişmə Et" düyməsindən istifadə edin.`,
+              message: `"${pName}" məhsulu üçün təyin olunmuş anbarda ${targetStock} ədəd var, tələb ${item.quantity} ədəd. Çatışmayan ${(item.quantity - targetStock).toFixed(2)} ədəd digər anbarın balansı hesabına satıldı.`,
             };
             break; // bir məhsul kifayətdir, hamısını göstərməyə ehtiyac yox
           }
@@ -189,7 +187,6 @@ export default function salesRoutes(): Router {
             for (const sNum of item.serialNumbers) {
               const cleaned = sNum.trim().toUpperCase();
               const serialConditions = [eq(schema.productSerials.serialNumber, cleaned), eq(schema.productSerials.tenantId, req.tenantId), eq(schema.productSerials.status, "in_stock")];
-              if (!isAdminSale && targetWarehouseId) serialConditions.push(eq(schema.productSerials.warehouseId, targetWarehouseId));
               await tx.update(schema.productSerials).set({ status: "sold", saleId, soldAt: new Date().toISOString() }).where(and(...serialConditions));
             }
           }
