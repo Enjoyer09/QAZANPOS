@@ -143,7 +143,9 @@ const DEFAULT_SETTINGS = {
   loyaltyRuleRate: 0.01,
   loyaltyMinPointsRedeem: 1.0,
   multiWarehouseEnabled: 1,
+  billingTier: "pro",
 };
+
 
 const DEFAULT_LOGS = [
   { id: 1, username: "admin", action: "Sistemə giriş olundu (Demo sessiya)", timestamp: getPastIsoDate(0) },

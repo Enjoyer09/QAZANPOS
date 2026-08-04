@@ -883,11 +883,13 @@ export default function dashboardRoutes(): Router {
   router.get("/settings", async (req: AuthenticatedRequest, res) => {
     try {
       const settings = await db.query.settings.findFirst({ where: eq(schema.settings.tenantId, req.tenantId) });
-      res.json(settings || {});
+      const tenant = await db.query.tenants.findFirst({ where: eq(schema.tenants.id, req.tenantId) });
+      res.json({ ...(settings || {}), billingTier: tenant?.billingTier || "free" });
     } catch (error) {
       res.status(500).json({ message: "Tənzimləmələri gətirərkən xəta baş verdi" });
     }
   });
+
 
   router.post("/settings", async (req: AuthenticatedRequest, res) => {
     try {
