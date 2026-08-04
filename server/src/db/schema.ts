@@ -487,7 +487,31 @@ export const productSerials = pgTable("product_serials", {
   productSerialsTenantSerialIdx: uniqueIndex("product_serials_tenant_serial_idx").on(table.tenantId, table.serialNumber)
 }));
 
+// 23. Immutable Inventory Ledger (Stock Movements Log)
+export const inventoryLedger = pgTable("inventory_ledger", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" })
+    .default(1),
+  productId: integer("product_id")
+    .notNull()
+    .references(() => products.id, { onDelete: "cascade" }),
+  warehouseId: integer("warehouse_id")
+    .references(() => warehouses.id, { onDelete: "set null" }),
+  quantity: doublePrecision("quantity").notNull(), // positive for additions/returns, negative for sales/deductions
+  movementType: text("movement_type").notNull(), // "stock_in", "sale", "return", "stock_adjustment", "transfer_out", "transfer_in", "vendor_return", "void_sale"
+  referenceType: text("reference_type"), // "sale", "return", "stock_entry", "transfer", "adjustment", "vendor_return"
+  referenceId: integer("reference_id"), // ID of sale, return, stockEntry, etc.
+  userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
+  username: text("username"),
+  unitPrice: doublePrecision("unit_price").default(0),
+  notes: text("notes"),
+  createdAt: text("created_at").notNull(),
+});
+
 // Relations Definitions for Drizzle ORM queries
+
 export const tenantsRelations = relations(tenants, ({ many }) => ({
   products: many(products),
   stockEntries: many(stockEntries),
@@ -916,3 +940,23 @@ export const heldSalesRelations = relations(heldSales, ({ one }) => ({
     references: [warehouses.id],
   }),
 }));
+
+export const inventoryLedgerRelations = relations(inventoryLedger, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [inventoryLedger.tenantId],
+    references: [tenants.id],
+  }),
+  product: one(products, {
+    fields: [inventoryLedger.productId],
+    references: [products.id],
+  }),
+  warehouse: one(warehouses, {
+    fields: [inventoryLedger.warehouseId],
+    references: [warehouses.id],
+  }),
+  user: one(users, {
+    fields: [inventoryLedger.userId],
+    references: [users.id],
+  }),
+}));
+

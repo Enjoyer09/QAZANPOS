@@ -3,7 +3,8 @@ import { db } from "../db/index.js";
 import * as schema from "../db/schema.js";
 import { eq, and, sql, desc, asc, inArray } from "drizzle-orm";
 import { hashPassword } from "../lib/auth.js";
-import { AuthenticatedRequest, requireAdmin, checkUserPermission, logActivity, fetchTenantStockMetrics, verifyTenantLimit, computeFIFOSaleCost } from "./helpers.js";
+import { AuthenticatedRequest, requireAdmin, checkUserPermission, logActivity, fetchTenantStockMetrics, verifyTenantLimit, computeFIFOSaleCost, recordLedgerMovement } from "./helpers.js";
+
 import { sendTelegramNotification } from "../lib/telegram.js";
 
 export default function stockRoutes(): Router {
@@ -110,7 +111,22 @@ export default function stockRoutes(): Router {
         }).returning();
         const entryId = entry[0].id;
 
+        await recordLedgerMovement(tx, {
+          tenantId: req.tenantId,
+          productId,
+          warehouseId: targetWarehouseId,
+          quantity: parseFloat(quantity),
+          movementType: "stock_in",
+          referenceType: "stock_entry",
+          referenceId: entryId,
+          userId: req.user?.userId || null,
+          username: req.headers["x-user-username"] as string || null,
+          unitPrice: parseFloat(purchasePrice),
+          notes: `Anbara Mədaxil${supplier ? ` (Tədarükçü: ${supplier})` : ""}`,
+        });
+
         if ((isSerialized || isSerializedInput) && serialNumbers) {
+
           for (const sNum of serialNumbers) {
             await tx.insert(schema.productSerials).values({
               tenantId: req.tenantId, productId, stockEntryId: entryId,
@@ -399,6 +415,34 @@ export default function stockRoutes(): Router {
         notes: notes || null, serialNumbers: serialsList.length > 0 ? JSON.stringify(serialsList) : null,
       }).returning();
 
+      // Ledger: Transfer Out
+      await recordLedgerMovement(db, {
+        tenantId: req.tenantId,
+        productId: parseInt(productId),
+        warehouseId: parseInt(fromWarehouseId),
+        quantity: -parseFloat(quantity),
+        movementType: "transfer_out",
+        referenceType: "transfer",
+        referenceId: transfer.id,
+        userId: req.user?.userId || null,
+        username: String(req.headers["x-user-username"] || "Sistem"),
+        notes: `Anbar Yerdəyişməsi (Çıxış: Anbar #${fromWarehouseId} -> #${toWarehouseId})`,
+      });
+
+      // Ledger: Transfer In
+      await recordLedgerMovement(db, {
+        tenantId: req.tenantId,
+        productId: parseInt(productId),
+        warehouseId: parseInt(toWarehouseId),
+        quantity: parseFloat(quantity),
+        movementType: "transfer_in",
+        referenceType: "transfer",
+        referenceId: transfer.id,
+        userId: req.user?.userId || null,
+        username: String(req.headers["x-user-username"] || "Sistem"),
+        notes: `Anbar Yerdəyişməsi (Mədaxil: Anbar #${fromWarehouseId} -> #${toWarehouseId})`,
+      });
+
       await logActivity(req, "STOCK_TRANSFER", `${quantity} ədəd '${product.name}' məhsulu yerdəyişmə edildi. Anbar: ${fromWarehouseId} -> ${toWarehouseId}`);
       res.json(transfer);
     } catch (error: any) {
@@ -436,8 +480,24 @@ export default function stockRoutes(): Router {
           adjustedBy: String(req.headers["x-user-username"] || "Sistem"),
           notes: notes || null,
         }).returning();
+
+        const adjQty = type === "found" ? parseFloat(quantity) : -parseFloat(quantity);
+        await recordLedgerMovement(db, {
+          tenantId: req.tenantId,
+          productId: parseInt(productId),
+          warehouseId: parseInt(warehouseId),
+          quantity: adjQty,
+          movementType: "stock_adjustment",
+          referenceType: "adjustment",
+          referenceId: record.id,
+          userId: req.user?.userId || null,
+          username: String(req.headers["x-user-username"] || "Sistem"),
+          notes: `Sayım Tənzimləməsi (${type === "found" ? "Tapıldı/Artıq" : "Əskik/İtki"})`,
+        });
+
         created.push(record);
       }
+
 
       await logActivity(req, "STOCK_ADJUST", `Sayım tənzimləməsi tamamlandı: ${created.length} məhsul`);
       res.json({ success: true, adjusted: created });

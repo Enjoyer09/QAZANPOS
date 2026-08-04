@@ -2,7 +2,8 @@ import { Router } from "express";
 import { db } from "../db/index.js";
 import * as schema from "../db/schema.js";
 import { eq, and, gte, lte, sql, desc, isNull, or, inArray } from "drizzle-orm";
-import { AuthenticatedRequest, requireAdmin, checkUserPermission, logActivity, verifyTenantLimit, computeFIFOSaleCost, computeRemainingDebt, fetchTenantStockMetrics } from "./helpers.js";
+import { AuthenticatedRequest, requireAdmin, checkUserPermission, logActivity, verifyTenantLimit, computeFIFOSaleCost, computeRemainingDebt, fetchTenantStockMetrics, recordLedgerMovement } from "./helpers.js";
+
 import { sendTelegramNotification } from "../lib/telegram.js";
 
 export default function salesRoutes(): Router {
@@ -183,6 +184,19 @@ export default function salesRoutes(): Router {
 
         for (const item of processedItems) {
           await tx.insert(schema.saleItems).values({ tenantId: req.tenantId, saleId, productId: item.productId, quantity: item.quantity, salePrice: item.salePrice, purchasePrice: item.purchasePrice });
+          await recordLedgerMovement(tx, {
+            tenantId: req.tenantId,
+            productId: item.productId,
+            warehouseId: targetWarehouseId,
+            quantity: -item.quantity,
+            movementType: "sale",
+            referenceType: "sale",
+            referenceId: saleId,
+            userId: req.user?.userId || null,
+            username: sellerName,
+            unitPrice: item.salePrice,
+            notes: `POS Satışı (Çek № ${saleId})`,
+          });
           if (item.serialNumbers && Array.isArray(item.serialNumbers) && item.serialNumbers.length > 0) {
             for (const sNum of item.serialNumbers) {
               const cleaned = sNum.trim().toUpperCase();
@@ -191,6 +205,7 @@ export default function salesRoutes(): Router {
             }
           }
         }
+
 
         if (isCredit && paidAmount && parseFloat(paidAmount) > 0) {
           await tx.insert(schema.creditPayments).values({ tenantId: req.tenantId, saleId, paymentDate: new Date().toISOString(), amount: parseFloat(paidAmount), paymentType: req.body.downpaymentType || "Nəğd" });
@@ -459,8 +474,28 @@ export default function salesRoutes(): Router {
           }
         }
 
-        // 2. Satışı sil (cascade: saleItems, creditPayments avtomatik silinir)
+        // 2. Ledger-ə bərpa yazısı əlavə et
+        if (sale.items && sale.items.length > 0) {
+          for (const item of sale.items) {
+            await recordLedgerMovement(tx, {
+              tenantId: req.tenantId,
+              productId: item.productId,
+              warehouseId: sale.warehouseId || null,
+              quantity: item.quantity,
+              movementType: "void_sale",
+              referenceType: "sale",
+              referenceId: id,
+              userId: req.user?.userId || null,
+              username: req.headers["x-user-username"] as string || "admin",
+              unitPrice: item.salePrice,
+              notes: `Satışın ləğv edilməsi (Çek № ${id})`,
+            });
+          }
+        }
+
+        // 3. Satışı sil (cascade: saleItems, creditPayments avtomatik silinir)
         await tx.delete(schema.sales).where(eq(schema.sales.id, id));
+
       });
 
       await logActivity(req, "VOID_SALE",
@@ -521,6 +556,23 @@ export default function salesRoutes(): Router {
             tenantId: req.tenantId, returnId: newReturn.id, productId: parseInt(item.productId),
             quantity: qty, salePrice, purchasePrice, status,
           });
+
+          if (status === "returned_to_stock") {
+            await recordLedgerMovement(tx, {
+              tenantId: req.tenantId,
+              productId: parseInt(item.productId),
+              warehouseId: targetWarehouseId,
+              quantity: qty,
+              movementType: "return",
+              referenceType: "return",
+              referenceId: newReturn.id,
+              userId: req.user?.userId || null,
+              username: req.headers["x-user-username"] as string || "satici",
+              unitPrice: salePrice,
+              notes: `Müştəri Qaytarışı (Qaytarış № ${newReturn.id}${saleId ? `, Çek № ${saleId}` : ""})`,
+            });
+          }
+
 
           if (item.serialNumbers && Array.isArray(item.serialNumbers)) {
             for (const sNum of item.serialNumbers) {

@@ -167,7 +167,45 @@ export async function logActivity(req: AuthenticatedRequest, action: string, des
   }
 }
 
+// ─── Inventory Ledger Helper ──────────────────────────────────────────────
+
+export interface LedgerMovementInput {
+  tenantId: number;
+  productId: number;
+  warehouseId?: number | null;
+  quantity: number; // positive for addition/returns, negative for sales/deductions
+  movementType: "stock_in" | "sale" | "return" | "stock_adjustment" | "transfer_out" | "transfer_in" | "vendor_return" | "void_sale";
+  referenceType?: "sale" | "return" | "stock_entry" | "transfer" | "adjustment" | "vendor_return" | null;
+  referenceId?: number | null;
+  userId?: number | null;
+  username?: string | null;
+  unitPrice?: number;
+  notes?: string | null;
+}
+
+export async function recordLedgerMovement(txOrDb: any, data: LedgerMovementInput) {
+  try {
+    await txOrDb.insert(schema.inventoryLedger).values({
+      tenantId: data.tenantId,
+      productId: data.productId,
+      warehouseId: data.warehouseId || null,
+      quantity: data.quantity,
+      movementType: data.movementType,
+      referenceType: data.referenceType || null,
+      referenceId: data.referenceId || null,
+      userId: data.userId || null,
+      username: data.username || null,
+      unitPrice: data.unitPrice || 0,
+      notes: data.notes || null,
+      createdAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("Failed to record inventory ledger movement:", error);
+  }
+}
+
 // ─── Remaining Debt Helper ────────────────────────────────────────────────
+
 
 /**
  * Compute the remaining debt for a credit sale.
@@ -388,7 +426,26 @@ export async function fetchTenantStockMetrics(tenantId: number, warehouseId?: nu
     .from(schema.products)
     .where(and(eq(schema.products.tenantId, tenantId), eq(schema.products.isArchived, 0)));
 
+  // Query inventory_ledger for ledger-based stock quantities
+  let ledgerGroup;
+  if (warehouseId) {
+    ledgerGroup = await db
+      .select({ productId: schema.inventoryLedger.productId, totalQty: sql`SUM(${schema.inventoryLedger.quantity})` })
+      .from(schema.inventoryLedger)
+      .where(and(eq(schema.inventoryLedger.tenantId, tenantId), eq(schema.inventoryLedger.warehouseId, warehouseId)))
+      .groupBy(schema.inventoryLedger.productId);
+  } else {
+    ledgerGroup = await db
+      .select({ productId: schema.inventoryLedger.productId, totalQty: sql`SUM(${schema.inventoryLedger.quantity})` })
+      .from(schema.inventoryLedger)
+      .where(eq(schema.inventoryLedger.tenantId, tenantId))
+      .groupBy(schema.inventoryLedger.productId);
+  }
+  const ledgerMap = new Map<number, number>();
+  ledgerGroup.forEach(g => ledgerMap.set(g.productId, parseFloat((g.totalQty as string) || "0")));
+
   const globalRestockedGroup = await db
+
     .select({ productId: schema.stockEntries.productId, totalRestocked: sql`SUM(${schema.stockEntries.quantity})` })
     .from(schema.stockEntries)
     .where(eq(schema.stockEntries.tenantId, tenantId))
@@ -567,7 +624,9 @@ export async function fetchTenantStockMetrics(tenantId: number, warehouseId?: nu
     const totalTransferredIn = transferredInMap.get(productId) || 0;
     const localAdjustments = adjustmentsMap.get(productId) || 0;
 
-    const currentQuantity = Math.max(0, totalRestocked - totalSold + totalReturned - totalVendorReturned - totalTransferredOut + totalTransferredIn + localAdjustments);
+    const calculatedQty = Math.max(0, totalRestocked - totalSold + totalReturned - totalVendorReturned - totalTransferredOut + totalTransferredIn + localAdjustments);
+    const currentQuantity = ledgerMap.has(productId) ? Math.max(0, ledgerMap.get(productId)!) : calculatedQty;
+
 
     const gRestocked = globalRestockedMap.get(productId) || 0;
     const gSold = globalSoldMap.get(productId) || 0;

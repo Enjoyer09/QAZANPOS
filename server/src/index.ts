@@ -46,6 +46,27 @@ async function ensureDefaultTenantsAndUsers() {
     console.log("Self-Healing Database: Ensuring multi_warehouse_enabled column exists in settings...");
     await db.execute(sql`ALTER TABLE settings ADD COLUMN IF NOT EXISTS multi_warehouse_enabled integer NOT NULL DEFAULT 1;`);
 
+    // Auto-migrate: ensure inventory_ledger table exists
+    console.log("Self-Healing Database: Ensuring inventory_ledger table exists...");
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS inventory_ledger (
+        id SERIAL PRIMARY KEY,
+        tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE DEFAULT 1,
+        product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+        warehouse_id INTEGER REFERENCES warehouses(id) ON DELETE SET NULL,
+        quantity DOUBLE PRECISION NOT NULL,
+        movement_type TEXT NOT NULL,
+        reference_type TEXT,
+        reference_id INTEGER,
+        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        username TEXT,
+        unit_price DOUBLE PRECISION DEFAULT 0,
+        notes TEXT,
+        created_at TEXT NOT NULL
+      );
+    `);
+
+
     // 1. Ensure Tenant 1 (demo) exists
     const demoTenant = await db.query.tenants.findFirst({
       where: (t, { eq }) => eq(t.id, 1)
