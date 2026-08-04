@@ -121,41 +121,71 @@ export default function dashboardRoutes(): Router {
 
   router.get("/dashboard/balances", async (req: AuthenticatedRequest, res) => {
     try {
-      const sales = await db.select().from(schema.sales).where(eq(schema.sales.tenantId, req.tenantId));
-      const returns = await db.select().from(schema.returns).where(eq(schema.returns.tenantId, req.tenantId));
+      const sales = await db.query.sales.findMany({
+        where: eq(schema.sales.tenantId, req.tenantId),
+        with: { payments: true, returns: true }
+      });
+      const returnsList = await db.select().from(schema.returns).where(eq(schema.returns.tenantId, req.tenantId));
       const expenses = await db.select().from(schema.expenses).where(eq(schema.expenses.tenantId, req.tenantId));
       const safeTransfers = await db.select().from(schema.safeTransfers).where(eq(schema.safeTransfers.tenantId, req.tenantId));
-
-      // Include salary payments, vendor payments for complete financial picture
       const salaryPaymentsList = await db.select().from(schema.salaryPayments).where(eq(schema.salaryPayments.tenantId, req.tenantId));
       const vendorPaymentsList = await db.select().from(schema.vendorPayments).where(eq(schema.vendorPayments.tenantId, req.tenantId));
+      const allCreditPayments = await db.select().from(schema.creditPayments).where(eq(schema.creditPayments.tenantId, req.tenantId));
 
       let kassa = 0, safe = 0, bank = 0, debt = 0;
 
       for (const sale of sales) {
-        if (sale.paymentType === "Nəğd") kassa += sale.totalAmount;
-        else if (["Kart", "Kart2Kart", "Köçürmə"].includes(sale.paymentType || "")) bank += sale.totalAmount;
-        if (sale.paymentStatus === "credit") debt += sale.totalAmount;
+        if (sale.paymentType === "Nəğd") {
+          kassa += sale.totalAmount;
+        } else if (["Kart", "Kart2Kart", "Köçürmə"].includes(sale.paymentType || "")) {
+          bank += sale.totalAmount;
+        } else if (sale.paymentStatus === "credit" || sale.paymentType === "Nisyə") {
+          const remDebt = computeRemainingDebt(sale, sale.payments || [], sale.returns || []);
+          debt += remDebt;
+        }
       }
-      for (const ret of returns) kassa -= ret.totalAmount;
+
+      // Add collected credit payments to cash/bank
+      for (const cp of allCreditPayments) {
+        if (cp.paymentType === "Nəğd") kassa += cp.amount;
+        else if (["Kart", "Kart2Kart", "Köçürmə"].includes(cp.paymentType || "")) bank += cp.amount;
+      }
+
+      // Subtract returns (refunds) from cash/bank if non-credit return
+      const salesMap = new Map(sales.map(s => [s.id, s]));
+      for (const ret of returnsList) {
+        const associatedSale = ret.saleId ? salesMap.get(ret.saleId) : null;
+        if (associatedSale && (associatedSale.paymentStatus === "credit" || associatedSale.paymentType === "Nisyə")) {
+          // Credit return already deducted in computeRemainingDebt above
+          continue;
+        }
+        if (associatedSale && ["Kart", "Kart2Kart", "Köçürmə"].includes(associatedSale.paymentType || "")) {
+          bank -= ret.totalAmount;
+        } else {
+          kassa -= ret.totalAmount;
+        }
+      }
+
       for (const exp of expenses) {
         if (exp.paymentType === "cash") kassa -= exp.amount;
         else if (exp.paymentType === "card") bank -= exp.amount;
       }
+
       for (const st of safeTransfers) {
         if (st.type === "kassa_to_safe" || st.type === "safe_deposit") safe += st.amount;
         else if (st.type === "safe_withdrawal") safe -= st.amount;
       }
 
-      // Deduct salary payments and vendor payments from cash
       for (const sp of salaryPaymentsList) {
         if (sp.paymentType === "Nəğd") kassa -= sp.amount;
         else if (["Kart", "Kart2Kart", "Köçürmə"].includes(sp.paymentType)) bank -= sp.amount;
       }
+
       for (const vp of vendorPaymentsList) {
         if (vp.paymentType === "Nəğd") kassa -= vp.amount;
         else if (["Kart", "Kart2Kart", "Köçürmə"].includes(vp.paymentType)) bank -= vp.amount;
       }
+
 
       // Fetch the manually counted cash register balance (if any)
       const cashReg = await db.query.cashRegister.findFirst({
