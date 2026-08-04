@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/index.js";
 import * as schema from "../db/schema.js";
-import { eq, and, sql, desc, asc } from "drizzle-orm";
+import { eq, and, sql, desc, asc, inArray } from "drizzle-orm";
 import { hashPassword } from "../lib/auth.js";
 import { AuthenticatedRequest, requireAdmin, getMonthBoundaries, logActivity, computeRemainingDebt, checkUserPermission } from "./helpers.js";
 import { sendSMS, processSMSTemplate } from "../lib/sms.js";
@@ -23,11 +23,42 @@ export default function dashboardRoutes(): Router {
       const allExpenses = await db.select().from(schema.expenses).where(eq(schema.expenses.tenantId, tenantId));
       const products = await db.select().from(schema.products).where(and(eq(schema.products.tenantId, tenantId), eq(schema.products.isArchived, 0)));
 
-      const todayRevenue = todaySales.reduce((s, sale) => s + sale.totalAmount, 0);
-      const todayCost = todaySales.reduce((s, sale) => s + sale.totalCost, 0);
+      // Qaytarışları hesaba almaq
+      const todayReturns = await db.select().from(schema.returns)
+        .where(and(eq(schema.returns.tenantId, tenantId), sql`return_date >= ${todayStr} AND return_date < ${todayStr + "T23:59:59.999Z"}`));
+      const monthReturns = await db.select().from(schema.returns)
+        .where(and(eq(schema.returns.tenantId, tenantId), sql`return_date >= ${firstDay}`));
+
+      const todayReturnAmount = todayReturns.reduce((s, r) => s + r.totalAmount, 0);
+      const monthReturnAmount = monthReturns.reduce((s, r) => s + r.totalAmount, 0);
+
+      const todayReturnIds = todayReturns.map(r => r.id);
+      const monthReturnIds = monthReturns.map(r => r.id);
+
+      let todayReturnCost = 0;
+      if (todayReturnIds.length > 0) {
+        const items = await db.select().from(schema.returnItems)
+          .where(and(eq(schema.returnItems.tenantId, tenantId), inArray(schema.returnItems.returnId, todayReturnIds)));
+        todayReturnCost = items.filter(i => i.status === "returned_to_stock").reduce((s, i) => s + (i.quantity * i.purchasePrice), 0);
+      }
+
+      let monthReturnCost = 0;
+      if (monthReturnIds.length > 0) {
+        const items = await db.select().from(schema.returnItems)
+          .where(and(eq(schema.returnItems.tenantId, tenantId), inArray(schema.returnItems.returnId, monthReturnIds)));
+        monthReturnCost = items.filter(i => i.status === "returned_to_stock").reduce((s, i) => s + (i.quantity * i.purchasePrice), 0);
+      }
+
+      const grossTodayRevenue = todaySales.reduce((s, sale) => s + sale.totalAmount, 0);
+      const grossTodayCost = todaySales.reduce((s, sale) => s + sale.totalCost, 0);
+      const todayRevenue = Math.max(0, grossTodayRevenue - todayReturnAmount);
+      const todayCost = Math.max(0, grossTodayCost - todayReturnCost);
       const todayExpenses = allExpenses.filter(e => e.date?.startsWith(todayStr)).reduce((s, e) => s + e.amount, 0);
-      const monthRevenue = monthSales.reduce((s, sale) => s + sale.totalAmount, 0);
-      const monthCost = monthSales.reduce((s, sale) => s + sale.totalCost, 0);
+
+      const grossMonthRevenue = monthSales.reduce((s, sale) => s + sale.totalAmount, 0);
+      const grossMonthCost = monthSales.reduce((s, sale) => s + sale.totalCost, 0);
+      const monthRevenue = Math.max(0, grossMonthRevenue - monthReturnAmount);
+      const monthCost = Math.max(0, grossMonthCost - monthReturnCost);
       const monthExpenses = allExpenses.filter(e => e.date >= firstDay).reduce((s, e) => s + e.amount, 0);
 
       const totalStockValue = products.reduce((sum, p) => sum + (0 * 0), 0); // placeholder
@@ -56,6 +87,7 @@ export default function dashboardRoutes(): Router {
         monthExpenses, monthNetProfit: Math.max(0, monthRevenue - monthCost - monthExpenses),
         totalStockValue, lowStockCount, totalCreditDebt, overdueCreditsCount, myTotalDebt: 0,
       });
+
     } catch (error) {
       res.status(500).json({ message: "Statistika hesablanarkən xəta baş verdi" });
     }
