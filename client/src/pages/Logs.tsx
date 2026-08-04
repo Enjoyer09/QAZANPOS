@@ -248,11 +248,19 @@ export default function Logs() {
             {logs.map((log) => {
               const Icon = actionIcons[log.action] || HelpCircle;
               const badgeClass = actionBadges[log.action] || "bg-gray-50 text-gray-500 border-gray-100";
-              const time = new Date(log.timestamp).toLocaleTimeString("az-AZ", {
+              const dateObj = new Date(log.timestamp);
+              const formattedDate = dateObj.toLocaleDateString("az-AZ", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+              });
+              const formattedTime = dateObj.toLocaleTimeString("az-AZ", {
                 hour: "2-digit",
                 minute: "2-digit",
                 second: "2-digit",
               });
+              const fullDateTime = `${formattedDate} ${formattedTime}`;
+
 
               return (
                 <div key={log.id} className="relative group animate-in slide-in-from-left-2 duration-300">
@@ -291,7 +299,7 @@ export default function Logs() {
                     {/* Log Time */}
                     <div className="text-right shrink-0">
                       <span className="font-black text-gray-950 font-mono bg-white/80 border border-gray-100 px-2.5 py-1 rounded-lg shadow-2xs">
-                        {time}
+                        {fullDateTime}
                       </span>
                     </div>
                   </div>

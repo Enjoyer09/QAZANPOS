@@ -203,7 +203,13 @@ export default function salesRoutes(): Router {
         return newSale[0];
       });
 
-      await logActivity(req, "CHECKOUT_SALE", `POS satışı həyata keçirdi: Çek № ${saleResult.id} (Məbləğ: ${totalAmount} ₼, Müştəri: ${customerName}, Ödəniş: ${paymentType})`);
+      const itemDetails = processedItems.map(item => {
+        const pName = productNameLookup.get(item.productId) || `ID: ${item.productId}`;
+        return `${pName} (${item.quantity} ədəd x ${item.salePrice} ₼)`;
+      }).join(", ");
+
+      await logActivity(req, "CHECKOUT_SALE", `POS satışı: Çek № ${saleResult.id} | Satılan mallar: [${itemDetails}] | Məbləğ: ${totalAmount} ₼ (Müştəri: ${customerName}, Ödəniş: ${paymentType})`);
+
       res.json(warehouseWarning ? { ...saleResult, warehouseWarning } : saleResult);
 
       sendTelegramNotification(req.tenantId, `⚡ <b>Yeni POS Satışı!</b>\n\n<b>Çek №:</b> <code>${saleResult.id}</code>\n<b>Müştəri:</b> ${customerName}\n<b>Ödəniş Üsulu:</b> ${paymentType}\n<b>Ümumi Məbləğ:</b> <code>${parseFloat(totalAmount).toFixed(2)} ₼</code>\n<b>Maya Dəyəri:</b> <code>${parseFloat(totalCost).toFixed(2)} ₼</code>\n<b>Gəlir:</b> <code>${(parseFloat(totalAmount) - parseFloat(totalCost)).toFixed(2)} ₼</code>`).catch(() => {});
@@ -528,7 +534,18 @@ export default function salesRoutes(): Router {
         return newReturn;
       });
 
-      await logActivity(req, "CREATE_RETURN", `Qaytarış qeydə alındı: #${result.id.toString().padStart(5, "0")}`);
+      const productIds = items.map((i: any) => parseInt(i.productId));
+      const returnedProducts = await db.select().from(schema.products)
+        .where(and(eq(schema.products.tenantId, req.tenantId), inArray(schema.products.id, productIds)));
+      const prodMap = new Map(returnedProducts.map(p => [p.id, p.name]));
+
+      const returnDetails = items.map((i: any) => {
+        const pName = prodMap.get(parseInt(i.productId)) || `ID: ${i.productId}`;
+        return `${pName} (${i.quantity} ədəd x ${i.salePrice} ₼)`;
+      }).join(", ");
+
+      await logActivity(req, "CREATE_RETURN", `Müştəri qaytarışı: Qaytarış № ${result.id}${saleId ? ` (Çek № ${saleId})` : ""} | Qaytarılan mallar: [${returnDetails}] | Məbləğ: ${result.totalAmount} ₼ | Səbəb: ${reason || "Qeyd olunmayıb"}`);
+
       res.json(result);
     } catch (error) {
       console.error("Return error:", error);
