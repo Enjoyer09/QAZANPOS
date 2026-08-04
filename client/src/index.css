@@ -201,6 +201,30 @@
   color: #1e293b;
 }
 
+/* Enhanced Ultra-Glassmorphism Classes */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.58);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  box-shadow: 0 20px 50px -15px rgba(15, 23, 42, 0.07),
+              inset 0 1px 1px rgba(255, 255, 255, 0.6);
+}
+
+.glass-modal-overlay {
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(12px) saturate(150%);
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+}
+
+.glass-badge {
+  background: rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+
+
 /* Micro-animations */
 .hover-elevate {
   transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
