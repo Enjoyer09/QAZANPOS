@@ -27,7 +27,9 @@ import {
 
 // Reusable components
 import { ToastProvider, ToastViewport, useToast } from "./components/Toast.tsx";
+import { ShiftQuickBar } from "./components/ShiftQuickBar.tsx";
 import { syncOfflineSalesToServer, syncOfflineReturnsToServer } from "./lib/offlineSync.ts";
+
 
 // Pages (will implement them next)
 import Dashboard from "./pages/Dashboard.tsx";
@@ -978,7 +980,9 @@ function MainRoutes({ user, onLogout }: { user: any; onLogout: () => void }) {
           </Switch>
         )}
       </TransitionSwitch>
+      <ShiftQuickBar />
     </AppLayout>
+
   );
 }
 

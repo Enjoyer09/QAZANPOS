@@ -72,7 +72,11 @@ export default function SalesHistory() {
   const [showVoidConfirm, setShowVoidConfirm] = useState(false);
   const [selectedSaleForVoid, setSelectedSaleForVoid] = useState<Sale | null>(null);
 
-  // ── Edit Sale States ──────────────────────────────────────────────────────
+  // Drawer State
+  const [drawerSale, setDrawerSale] = useState<Sale | null>(null);
+
+  // Edit Sale States ──────────────────────────────────────────────────────
+
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingSale, setEditingSale] = useState<Sale | null>(null);
   const [editPaymentType, setEditPaymentType] = useState("");
@@ -847,11 +851,14 @@ export default function SalesHistory() {
                           </td>
                           <td className="p-4 text-right pr-6">
                             <div className="flex items-center justify-end gap-1.5">
-                              <Link href={`/satislar/${sale.id}`}>
-                                <button className="p-2 border border-gray-100 hover:border-gray-200 text-gray-500 hover:text-primary rounded-xl cursor-pointer bg-white transition-all" title="Bax">
-                                  <Eye className="w-3.5 h-3.5" />
-                                </button>
-                              </Link>
+                              <button
+                                onClick={() => setDrawerSale(sale)}
+                                className="p-2 border border-gray-100 hover:border-gray-200 text-gray-500 hover:text-primary rounded-xl cursor-pointer bg-white transition-all shadow-2xs"
+                                title="Sürətli Çek Baxışı"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                              </button>
+
                               {getSaleReturnableQty(sale) > 0 && (
                                 <button
                                   onClick={() => handleInitiateReturn(sale)}
@@ -1798,6 +1805,119 @@ export default function SalesHistory() {
           </div>
         </div>
       )}
+
+      {/* Right Slide-Over Drawer for Quick Sale & Thermal Receipt Inspection */}
+      {drawerSale && (
+        <div className="fixed inset-0 z-50 overflow-hidden bg-black/50 backdrop-blur-xs animate-in fade-in-0 duration-200">
+          <div className="absolute inset-y-0 right-0 max-w-full flex pl-10">
+            <div className="w-screen max-w-md bg-white border-l border-gray-100 shadow-2xl flex flex-col justify-between animate-in slide-in-from-right duration-300">
+              {/* Drawer Header */}
+              <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-primary/10 text-primary rounded-xl">
+                    <ShoppingBag className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-gray-900 text-sm">Çek № #{drawerSale.id.toString().padStart(5, "0")}</h3>
+                    <p className="text-[10px] text-gray-400 font-bold">
+                      {new Date(drawerSale.saleDate).toLocaleString("az-AZ")}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setDrawerSale(null)}
+                  className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-all"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Drawer Content: Thermal Receipt Simulator */}
+              <div className="p-6 overflow-y-auto space-y-6 flex-1">
+                {/* Simulated 80mm Thermal Receipt */}
+                <div className="bg-amber-50/40 border border-amber-200/60 rounded-2xl p-5 font-mono text-xs shadow-xs text-gray-800 space-y-4 relative overflow-hidden">
+                  <div className="text-center border-b border-dashed border-amber-300 pb-3 space-y-1">
+                    <h4 className="font-black text-sm uppercase tracking-wider">QAZAN POS ÇEK</h4>
+                    <p className="text-[10px] text-gray-500 font-bold">Mağaza Satış Qaiməsi</p>
+                    <p className="text-[10px] text-gray-400">Tarix: {new Date(drawerSale.saleDate).toLocaleString("az-AZ")}</p>
+                  </div>
+
+                  {/* Customer & Cashier Metadata */}
+                  <div className="text-[11px] space-y-1 border-b border-dashed border-amber-300 pb-3">
+                    <div className="flex justify-between">
+                      <span className="text-gray-500 font-bold">Müştəri:</span>
+                      <span className="font-black">{drawerSale.customerName || "Anonim Müştəri"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500 font-bold">Kassir:</span>
+                      <span className="font-bold">{drawerSale.sellerName || "satici"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500 font-bold">Ödəniş Üsulu:</span>
+                      <span className="font-bold uppercase text-primary">{drawerSale.paymentType}</span>
+                    </div>
+                  </div>
+
+                  {/* Items List */}
+                  <div className="space-y-2 border-b border-dashed border-amber-300 pb-3">
+                    <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                      <span>Məhsul</span>
+                      <span>Say x Qiymət = Cəm</span>
+                    </div>
+                    {drawerSale.items?.map((item: any, idx: number) => (
+                      <div key={idx} className="flex justify-between text-xs font-semibold">
+                        <span className="truncate max-w-[180px]">{item.product?.name || `Məhsul ID: ${item.productId}`}</span>
+                        <span>{item.quantity} x {item.salePrice.toFixed(2)} = {(item.quantity * item.salePrice).toFixed(2)} ₼</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Total Calculations */}
+                  <div className="space-y-1 text-right pt-1 font-bold">
+                    <div className="text-sm font-black flex justify-between">
+                      <span>YEKUN:</span>
+                      <span className="text-primary">{drawerSale.totalAmount.toFixed(2)} ₼</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Returns attached info */}
+                {drawerSale.returns && drawerSale.returns.length > 0 && (
+                  <div className="bg-red-50 border border-red-100 rounded-2xl p-4 space-y-2 text-xs">
+                    <h5 className="font-extrabold text-red-700 flex items-center gap-1.5">
+                      <RotateCcw className="w-4 h-4" />
+                      Qaytarış Qeydləri ({drawerSale.returns.length})
+                    </h5>
+                    {drawerSale.returns.map((ret: any) => (
+                      <div key={ret.id} className="flex justify-between text-[11px] text-red-600 font-medium">
+                        <span>Qaytarış #{ret.id} ({new Date(ret.returnDate).toLocaleDateString("az-AZ")})</span>
+                        <span className="font-mono font-bold">-{ret.totalAmount.toFixed(2)} ₼</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Drawer Footer Actions */}
+              <div className="p-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-3">
+                <Link href={`/satislar/${drawerSale.id}`}>
+                  <button className="py-2.5 px-4 bg-primary text-white rounded-xl font-bold text-xs hover:bg-primary/95 transition-all shadow-md shadow-primary/10 flex items-center justify-center gap-1.5 cursor-pointer">
+                    <Eye className="w-4 h-4" />
+                    Tam Çekə Bax
+                  </button>
+                </Link>
+                <button
+                  onClick={() => setDrawerSale(null)}
+                  className="px-4 py-2.5 border border-gray-200 text-gray-500 rounded-xl font-semibold text-xs hover:bg-gray-100 transition-colors cursor-pointer"
+                >
+                  Bağla
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

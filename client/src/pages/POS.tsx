@@ -60,6 +60,7 @@ export default function POS() {
     };
   }, []);
 
+
   const user = (() => {
     try {
       const userStr = localStorage.getItem("qazanpos_user");
@@ -124,6 +125,32 @@ export default function POS() {
   const [customItemName, setCustomItemName] = useState("");
   const [customItemPrice, setCustomItemPrice] = useState("");
   const [isSubmittingCustomItem, setIsSubmittingCustomItem] = useState(false);
+
+  // POS Keyboard Shortcuts Handler
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        if (e.key === "Escape") {
+          (e.target as HTMLElement).blur();
+        }
+        return;
+      }
+      if (e.key === "F1") {
+        e.preventDefault();
+        const searchInput = document.querySelector<HTMLInputElement>("#pos-product-search");
+        if (searchInput) searchInput.focus();
+      } else if (e.key === "F2") {
+        e.preventDefault();
+        setUseLoyaltyPoints((prev) => !prev);
+      } else if (e.key === "Escape") {
+        setIsCustomItemOpen(false);
+        setIsQuickCreateOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
 
   // POS Mode State
   const [posMode, setPosMode] = useState<"sale" | "return">("sale");
@@ -2097,6 +2124,32 @@ export default function POS() {
           </div>
         </div>
       )}
+
+      {/* Keyboard Shortcuts Quick Bar */}
+
+      <div className="hidden lg:flex items-center justify-between bg-white border-t border-gray-100 px-6 py-2 text-[11px] font-bold text-gray-500 shadow-2xs">
+        <div className="flex items-center gap-6">
+          <span className="flex items-center gap-1.5">
+            <kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded font-mono text-[10px] text-gray-800 font-bold shadow-2xs">F1</kbd> Axtarış
+          </span>
+          <span className="flex items-center gap-1.5">
+            <kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded font-mono text-[10px] text-gray-800 font-bold shadow-2xs">F2</kbd> Loyallıq Bonus
+          </span>
+          <span className="flex items-center gap-1.5">
+            <kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded font-mono text-[10px] text-gray-800 font-bold shadow-2xs">F3</kbd> Çeki Saxla
+          </span>
+          <span className="flex items-center gap-1.5">
+            <kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded font-mono text-[10px] text-gray-800 font-bold shadow-2xs">F4</kbd> Ödəniş
+          </span>
+          <span className="flex items-center gap-1.5">
+            <kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded font-mono text-[10px] text-gray-800 font-bold shadow-2xs">Esc</kbd> Təmizlə / Bağla
+          </span>
+        </div>
+        <div className="flex items-center gap-2 text-gray-400 text-[10px]">
+          <span>POS Erqonomik Terminal v2.4</span>
+        </div>
+      </div>
     </div>
   );
 }
+
