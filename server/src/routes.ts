@@ -9,6 +9,8 @@ import { fileURLToPath } from "url";
 import { verifyTOTP, generateSecret, getOTPAuthURI } from "./db/totp.js";
 import { sendTelegramNotification } from "./lib/telegram.js";
 import { hashPassword, generateToken, verifyToken } from "./lib/auth.js";
+import { recordLedgerMovement } from "./routes/helpers.js";
+
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -5972,17 +5974,34 @@ router.post("/stock/adjust", async (req, res) => {
         }).returning();
         records.push(rec[0]);
 
+        const isIncrease = ["found", "surplus", "manual_add", "add"].includes(String(adj.type).toLowerCase());
+        const adjQty = isIncrease ? parseFloat(adj.quantity) : -parseFloat(adj.quantity);
+
+        await recordLedgerMovement(tx, {
+          tenantId: req.tenantId,
+          productId: parseInt(adj.productId),
+          warehouseId: parseInt(adj.warehouseId),
+          quantity: adjQty,
+          movementType: "stock_adjustment",
+          referenceType: "adjustment",
+          referenceId: rec[0].id,
+          userId: (req as any).user?.userId || null,
+          username,
+          notes: adj.notes || `Sayım Tənzimləməsi (${isIncrease ? "Giriş/Əlavə" : "Çıxış/Azaltma"})`,
+        });
+
         // Log to activity logs
         await tx.insert(schema.activityLogs).values({
           tenantId: req.tenantId,
           username,
           action: "SAYIM_TƏNZİMLƏMƏ",
-          description: `Məhsul ID: ${adj.productId}, Anbar ID: ${adj.warehouseId} üzrə sayım tənzimləməsi (${adj.type === "shrinkage" ? "Əskik" : "Artıq"}): ${adj.quantity} ədəd`,
+          description: `Məhsul ID: ${adj.productId}, Anbar ID: ${adj.warehouseId} üzrə sayım tənzimləməsi (${isIncrease ? "Əlavə/Giriş" : "Çıxış/Azaltma"}): ${adj.quantity} ədəd`,
           timestamp: new Date().toISOString(),
         });
       }
       return records;
     });
+
 
     res.json({ success: true, adjusted: inserted });
   } catch (error) {

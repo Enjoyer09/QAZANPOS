@@ -1414,77 +1414,84 @@ export default function Stock() {
               </div>
 
               {/* ── 2. Say Tənzimləməsi ── */}
-              <div className="space-y-2.5">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <span className="inline-flex w-4 h-4 rounded-full bg-primary/10 text-primary items-center justify-center text-[9px] font-black">2</span>
-                  Say Tənzimləməsi
-                  <span className="ml-auto text-gray-300 font-bold">Cari: <span className="text-gray-700">{editProduct.currentQuantity} {editProduct.unit}</span></span>
-                </label>
+              {(() => {
+                const currentLiveStock = list?.find((s: any) => s.productId === editProduct.productId)?.currentQuantity ?? editProduct.currentQuantity;
+                return (
 
-                {/* Giriş / Çıxış toggle */}
-                <div className="flex rounded-xl border border-gray-200 overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => setEditQtyType("add")}
-                    className={`flex-1 py-2.5 text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                      editQtyType === "add"
-                        ? "bg-emerald-500 text-white"
-                        : "bg-white text-gray-400 hover:bg-gray-50"
-                    }`}
-                  >
-                    <span className="text-base leading-none">+</span> Giriş (Əlavə)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditQtyType("remove")}
-                    className={`flex-1 py-2.5 text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                      editQtyType === "remove"
-                        ? "bg-red-500 text-white"
-                        : "bg-white text-gray-400 hover:bg-gray-50"
-                    }`}
-                  >
-                    <span className="text-base leading-none">−</span> Çıxış (Azalt)
-                  </button>
-                </div>
+                  <div className="space-y-2.5">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <span className="inline-flex w-4 h-4 rounded-full bg-primary/10 text-primary items-center justify-center text-[9px] font-black">2</span>
+                      Say Tənzimləməsi
+                      <span className="ml-auto text-gray-300 font-bold">Cari: <span className="text-gray-700 font-mono font-bold">{currentLiveStock} {editProduct.unit}</span></span>
+                    </label>
 
-                <div className="flex gap-2">
-                  <div className="flex-1 space-y-1">
-                    <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">Miqdar ({editProduct.unit})</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.001"
-                      value={editQtyAmount}
-                      onChange={(e) => setEditQtyAmount(e.target.value)}
-                      placeholder="0"
-                      className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/30 bg-gray-50/50 font-mono font-bold text-sm"
-                    />
-                  </div>
-                  <div className="flex-1 space-y-1">
-                    <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">Qeyd (ixtiyari)</label>
-                    <input
-                      type="text"
-                      value={editQtyNotes}
-                      onChange={(e) => setEditQtyNotes(e.target.value)}
-                      placeholder="Səbəb..."
-                      className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/30 bg-gray-50/50 text-xs font-semibold"
-                    />
-                  </div>
-                </div>
+                    {/* Giriş / Çıxış toggle */}
+                    <div className="flex rounded-xl border border-gray-200 overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setEditQtyType("add")}
+                        className={`flex-1 py-2.5 text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                          editQtyType === "add"
+                            ? "bg-emerald-500 text-white shadow-sm"
+                            : "bg-white text-gray-400 hover:bg-gray-50"
+                        }`}
+                      >
+                        <span className="text-base leading-none">+</span> Giriş (Əlavə)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditQtyType("remove")}
+                        className={`flex-1 py-2.5 text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                          editQtyType === "remove"
+                            ? "bg-red-500 text-white shadow-sm"
+                            : "bg-white text-gray-400 hover:bg-gray-50"
+                        }`}
+                      >
+                        <span className="text-base leading-none">−</span> Çıxış (Azalt)
+                      </button>
+                    </div>
 
-                {editQtyAmount && parseFloat(editQtyAmount) > 0 && (
-                  <div className={`text-[10px] font-bold px-3 py-1.5 rounded-lg ${
-                    editQtyType === "add"
-                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                      : "bg-red-50 text-red-700 border border-red-200"
-                  }`}>
-                    Yeni qalıq: {editQtyType === "add"
-                      ? (editProduct.currentQuantity + parseFloat(editQtyAmount || "0")).toFixed(2)
-                      : Math.max(0, editProduct.currentQuantity - parseFloat(editQtyAmount || "0")).toFixed(2)
-                    } {editProduct.unit}
+                    <div className="flex gap-2">
+                      <div className="flex-1 space-y-1">
+                        <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">Miqdar ({editProduct.unit})</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.001"
+                          value={editQtyAmount}
+                          onChange={(e) => setEditQtyAmount(e.target.value)}
+                          placeholder="0"
+                          className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/30 bg-gray-50/50 font-mono font-bold text-sm"
+                        />
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">Qeyd (ixtiyari)</label>
+                        <input
+                          type="text"
+                          value={editQtyNotes}
+                          onChange={(e) => setEditQtyNotes(e.target.value)}
+                          placeholder="Səbəb..."
+                          className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/30 bg-gray-50/50 text-xs font-semibold"
+                        />
+                      </div>
+                    </div>
+
+                    {editQtyAmount && parseFloat(editQtyAmount) > 0 && (
+                      <div className={`text-[10px] font-bold px-3 py-1.5 rounded-lg ${
+                        editQtyType === "add"
+                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                          : "bg-red-50 text-red-700 border border-red-200"
+                      }`}>
+                        Yeni qalıq: {editQtyType === "add"
+                          ? (currentLiveStock + parseFloat(editQtyAmount || "0")).toFixed(2)
+                          : Math.max(0, currentLiveStock - parseFloat(editQtyAmount || "0")).toFixed(2)
+                        } {editProduct.unit}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                );
+              })()}
+
 
               {/* ── 3. Maya Qiyməti ── */}
               <div className="space-y-1.5">

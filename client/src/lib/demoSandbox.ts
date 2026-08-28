@@ -2002,12 +2002,14 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
       // Adjust product currentQuantity locally in sandbox
       const pIdx = products.findIndex((p: any) => p.id === rec.productId);
       if (pIdx !== -1) {
-        if (rec.type === "found" || rec.type === "surplus") {
+        const isIncrease = ["found", "surplus", "manual_add", "add"].includes(String(rec.type).toLowerCase());
+        if (isIncrease) {
           products[pIdx].currentQuantity = (products[pIdx].currentQuantity || 0) + rec.quantity;
         } else {
           products[pIdx].currentQuantity = Math.max(0, (products[pIdx].currentQuantity || 0) - rec.quantity);
         }
       }
+
 
       return rec;
     });

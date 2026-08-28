@@ -481,7 +481,8 @@ export default function stockRoutes(): Router {
           notes: notes || null,
         }).returning();
 
-        const adjQty = type === "found" ? parseFloat(quantity) : -parseFloat(quantity);
+        const isIncrease = ["found", "surplus", "manual_add", "add"].includes(String(type).toLowerCase());
+        const adjQty = isIncrease ? parseFloat(quantity) : -parseFloat(quantity);
         await recordLedgerMovement(db, {
           tenantId: req.tenantId,
           productId: parseInt(productId),
@@ -492,11 +493,12 @@ export default function stockRoutes(): Router {
           referenceId: record.id,
           userId: req.user?.userId || null,
           username: String(req.headers["x-user-username"] || "Sistem"),
-          notes: `Sayım Tənzimləməsi (${type === "found" ? "Tapıldı/Artıq" : "Əskik/İtki"})`,
+          notes: notes || `Sayım Tənzimləməsi (${isIncrease ? "Giriş/Əlavə" : "Çıxış/Azaltma"})`,
         });
 
         created.push(record);
       }
+
 
 
       await logActivity(req, "STOCK_ADJUST", `Sayım tənzimləməsi tamamlandı: ${created.length} məhsul`);
