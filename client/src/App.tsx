@@ -482,7 +482,8 @@ function AppLayout({ children, user, currentUser, onLogout }: { children: React.
                     className="absolute left-0 top-full pt-1.5 w-60 z-50 animate-in fade-in slide-in-from-top-2 duration-150"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <div className="bg-white/95 backdrop-blur-md border border-gray-100 rounded-2xl p-2.5 shadow-2xl flex flex-col gap-1">
+                    <div className="bg-white border border-gray-100 rounded-2xl p-2.5 shadow-2xl flex flex-col gap-1">
+
                       {group.items.map((item) => {
                         const Icon = item.icon;
                         const isActive =
