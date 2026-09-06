@@ -1399,6 +1399,8 @@ export default function SettingsPage() {
         {/* Left Forms column */}
         <form onSubmit={handleSave} className="lg:col-span-2 space-y-6">
 
+          {settingsTab === "general" && (
+            <>
               {/* Plan Status Card */}
               {settingsData && (() => {
                 const currentTier = settingsData.billingTier || "pro";
@@ -1460,9 +1462,7 @@ export default function SettingsPage() {
                 );
               })()}
 
-          {settingsTab === "general" && (
-
-            /* Card 1: Shop profile */
+            {/* Card 1: Shop profile */}
             <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card">
             <div className="flex items-center gap-2 mb-6 border-b border-gray-100/50 pb-3">
               <Store className="w-5 h-5 text-primary" />
@@ -1548,7 +1548,8 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
-          )}
+        </>
+      )}
 
           {settingsTab === "tax" && (
             /* Card 3: Azerbaijan Tax Settings */
