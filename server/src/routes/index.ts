@@ -38,8 +38,8 @@ router.use(settingsRoutes());
 router.use(activityLogRoutes());
 router.use(superRoutes());
 router.use(apiKeysRoutes());
-router.use(publicApiRoutes());
 router.use(uploadRoutes());
+router.use(publicApiRoutes());
 
 export default router;
 

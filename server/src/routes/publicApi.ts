@@ -59,6 +59,11 @@ export default function publicApiRoutes(): Router {
     res: Response,
     next: NextFunction
   ) => {
+    // If not a public API route, pass through immediately
+    if (!req.path.startsWith("/public")) {
+      return next();
+    }
+
     try {
       const apiKeyHeader = (req.headers["x-api-key"] || req.headers["x-auth-key"]) as string | undefined;
       const authHeader = req.headers["authorization"];
@@ -115,9 +120,9 @@ export default function publicApiRoutes(): Router {
     }
   };
 
-  // Apply rate limiter + auth to all routes in this module
-  router.use(publicApiLimiter);
-  router.use(authenticatePublicApiKey);
+  // Apply rate limiter + auth strictly to /public routes
+  router.use("/public", publicApiLimiter);
+  router.use("/public", authenticatePublicApiKey);
 
   // --------------------------------------------------------------------------
   // 1. GET /public/catalog — Paginated catalog with live stock & search
