@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Edit2, Trash2, X, Tag, Lock, Archive, RotateCcw, ChevronLeft, ChevronRight, Image as ImageIcon, Upload, Link as LinkIcon, Sparkles, Loader2 } from "lucide-react";
+import { Plus, Edit2, Trash2, X, Tag, Lock, Archive, RotateCcw, ChevronLeft, ChevronRight, Image as ImageIcon, Upload, Link as LinkIcon, Sparkles, Loader2, PanelLeftClose, PanelLeft } from "lucide-react";
 import { TableSkeleton } from "../components/Skeleton.tsx";
 import { useToast } from "../components/Toast.tsx";
 import { generateValidEAN13 } from "../components/Barcode.tsx";
@@ -70,6 +70,7 @@ export default function Products() {
   const [selectedProductForLabel, setSelectedProductForLabel] = useState<Product | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(20);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [uploadCompressionInfo, setUploadCompressionInfo] = useState<string | null>(null);
   const [imageInputMode, setImageInputMode] = useState<"upload" | "url">("upload");
@@ -431,76 +432,71 @@ export default function Products() {
   const totalArchivedCount = archivedProducts.length;
 
   return (
-    <div className="flex flex-col lg:flex-row gap-6 items-start animate-in fade-in-0">
-      {/* Sol Sidebar: Kateqoriyalar */}
-      <div className="w-full lg:w-60 bg-white border border-gray-100 p-4 rounded-2xl shadow-xs glass-card space-y-4 shrink-0">
-        <div>
-          <h3 className="text-sm font-black text-gray-950 tracking-tight">Kateqoriyalar</h3>
-          <p className="text-[10px] text-gray-400 font-semibold mt-0.5">Filterləmək üçün seçin</p>
+    <div className="flex flex-col lg:flex-row gap-6 items-start w-full min-w-0 animate-in fade-in-0">
+      {/* 1. Mobile & Tablet: Horizontal Category Pill Selector */}
+      <div className="lg:hidden w-full space-y-2.5">
+        {/* Active / Archived Toggle */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex bg-white p-1 rounded-xl border border-gray-200 text-xs shadow-2xs">
+            <button
+              type="button"
+              onClick={() => handleTabChange("active")}
+              className={`px-3 py-1.5 text-center text-[11px] font-black rounded-lg transition-all cursor-pointer ${
+                activeTab === "active"
+                  ? "bg-primary text-white shadow-xs"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              Aktiv ({totalActiveCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => handleTabChange("archived")}
+              className={`px-3 py-1.5 text-center text-[11px] font-black rounded-lg transition-all cursor-pointer ${
+                activeTab === "archived"
+                  ? "bg-red-600 text-white shadow-xs"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              Arxiv ({totalArchivedCount})
+            </button>
+          </div>
+
+          <span className="text-[11px] font-bold text-gray-500 truncate max-w-[150px]">
+            {selectedCategory === "all" ? "Bütün Kateqoriyalar" : selectedCategory}
+          </span>
         </div>
 
-        {/* Aktiv / Arxiv Tabları */}
-        <div className="flex bg-gray-50 p-1 rounded-xl border border-gray-100/50 text-xs">
+        {/* Horizontal Category Pill Bar */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none touch-pan-x">
           <button
-            onClick={() => handleTabChange("active")}
-            className={`flex-1 py-1.5 text-center text-[10px] font-extrabold rounded-lg transition-all cursor-pointer ${
-              activeTab === "active"
-                ? "bg-primary text-white shadow-xs"
-                : "text-gray-400 hover:text-gray-600"
-            }`}
-          >
-            Aktiv ({totalActiveCount})
-          </button>
-          <button
-            onClick={() => handleTabChange("archived")}
-            className={`flex-1 py-1.5 text-center text-[10px] font-extrabold rounded-lg transition-all cursor-pointer ${
-              activeTab === "archived"
-                ? "bg-red-600 text-white shadow-xs"
-                : "text-gray-400 hover:text-gray-600"
-            }`}
-          >
-            Arxiv ({totalArchivedCount})
-          </button>
-        </div>
-
-        {/* Kateqoriyalar Siyahısı */}
-        <div className="space-y-1 max-h-[500px] overflow-y-auto pr-1">
-          <button
+            type="button"
             onClick={() => setSelectedCategory("all")}
-            className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-extrabold flex justify-between items-center transition-all cursor-pointer border ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer shrink-0 border ${
               selectedCategory === "all"
-                ? (activeTab === "active" ? "bg-primary/10 text-primary border-primary/20" : "bg-red-50 text-red-600 border-red-100")
-                : "text-gray-700 hover:bg-gray-50 border-transparent"
+                ? (activeTab === "active" ? "bg-primary text-white border-primary shadow-xs" : "bg-red-600 text-white border-red-600 shadow-xs")
+                : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
             }`}
           >
-            <span>Hamısı</span>
-            <span className={`px-2 py-0.5 rounded-md text-[10px] font-black ${
-              selectedCategory === "all"
-                ? (activeTab === "active" ? "bg-primary text-white" : "bg-red-600 text-white")
-                : "bg-gray-200 text-gray-500"
-            }`}>
-              {activeTab === "active" ? totalActiveCount : totalArchivedCount}
-            </span>
+            Hamısı ({activeTab === "active" ? totalActiveCount : totalArchivedCount})
           </button>
-
           {(activeTab === "active" ? activeCategories : archivedCategories).map(cat => {
             const count = (activeTab === "active" ? activeCatCounts : archivedCatCounts).get(cat) || 0;
             const isSelected = selectedCategory === cat;
             return (
               <button
                 key={cat}
+                type="button"
                 onClick={() => setSelectedCategory(cat)}
-                className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-extrabold flex justify-between items-center transition-all cursor-pointer border ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer shrink-0 border flex items-center gap-1.5 ${
                   isSelected
-                    ? (activeTab === "active" ? "bg-primary/10 text-primary border-primary/20" : "bg-red-50 text-red-600 border-red-100")
-                    : "text-gray-700 hover:bg-gray-50/50 border-transparent"
+                    ? (activeTab === "active" ? "bg-primary text-white border-primary shadow-xs" : "bg-red-600 text-white border-red-600 shadow-xs")
+                    : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
                 }`}
               >
-                <span className="truncate pr-2">{cat}</span>
-                <span className={`px-2 py-0.5 rounded-md text-[10px] font-black shrink-0 ${
-                  isSelected
-                    ? (activeTab === "active" ? "bg-primary text-white" : "bg-red-600 text-white")
-                    : "bg-gray-200 text-gray-500"
+                <span>{cat}</span>
+                <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-black ${
+                  isSelected ? "bg-white/20 text-white" : "bg-gray-100 text-gray-500"
                 }`}>
                   {count}
                 </span>
@@ -510,25 +506,125 @@ export default function Products() {
         </div>
       </div>
 
+      {/* 2. Desktop: Sol Sidebar: Kateqoriyalar */}
+      {!isSidebarCollapsed && (
+        <div className="hidden lg:block w-56 xl:w-60 bg-white border border-gray-100 p-4 rounded-2xl shadow-xs glass-card space-y-4 shrink-0 transition-all">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-black text-gray-950 tracking-tight">Kateqoriyalar</h3>
+              <p className="text-[10px] text-gray-400 font-semibold mt-0.5">Filterləmək üçün seçin</p>
+            </div>
+            <button
+              onClick={() => setIsSidebarCollapsed(true)}
+              className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+              title="Kateqoriyaları Gizlət (Tam Ekran Cədvəl)"
+            >
+              <PanelLeftClose className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Aktiv / Arxiv Tabları */}
+          <div className="flex bg-gray-50 p-1 rounded-xl border border-gray-100/50 text-xs">
+            <button
+              onClick={() => handleTabChange("active")}
+              className={`flex-1 py-1.5 text-center text-[10px] font-extrabold rounded-lg transition-all cursor-pointer ${
+                activeTab === "active"
+                  ? "bg-primary text-white shadow-xs"
+                  : "text-gray-400 hover:text-gray-600"
+              }`}
+            >
+              Aktiv ({totalActiveCount})
+            </button>
+            <button
+              onClick={() => handleTabChange("archived")}
+              className={`flex-1 py-1.5 text-center text-[10px] font-extrabold rounded-lg transition-all cursor-pointer ${
+                activeTab === "archived"
+                  ? "bg-red-600 text-white shadow-xs"
+                  : "text-gray-400 hover:text-gray-600"
+              }`}
+            >
+              Arxiv ({totalArchivedCount})
+            </button>
+          </div>
+
+          {/* Kateqoriyalar Siyahısı */}
+          <div className="space-y-1 max-h-[500px] overflow-y-auto pr-1">
+            <button
+              onClick={() => setSelectedCategory("all")}
+              className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-extrabold flex justify-between items-center transition-all cursor-pointer border ${
+                selectedCategory === "all"
+                  ? (activeTab === "active" ? "bg-primary/10 text-primary border-primary/20" : "bg-red-50 text-red-600 border-red-100")
+                  : "text-gray-700 hover:bg-gray-50 border-transparent"
+              }`}
+            >
+              <span>Hamısı</span>
+              <span className={`px-2 py-0.5 rounded-md text-[10px] font-black ${
+                selectedCategory === "all"
+                  ? (activeTab === "active" ? "bg-primary text-white" : "bg-red-600 text-white")
+                  : "bg-gray-200 text-gray-500"
+              }`}>
+                {activeTab === "active" ? totalActiveCount : totalArchivedCount}
+              </span>
+            </button>
+
+            {(activeTab === "active" ? activeCategories : archivedCategories).map(cat => {
+              const count = (activeTab === "active" ? activeCatCounts : archivedCatCounts).get(cat) || 0;
+              const isSelected = selectedCategory === cat;
+              return (
+                <button
+                  key={cat}
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-extrabold flex justify-between items-center transition-all cursor-pointer border ${
+                    isSelected
+                      ? (activeTab === "active" ? "bg-primary/10 text-primary border-primary/20" : "bg-red-50 text-red-600 border-red-100")
+                      : "text-gray-700 hover:bg-gray-50/50 border-transparent"
+                  }`}
+                >
+                  <span className="truncate pr-2">{cat}</span>
+                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-black shrink-0 ${
+                    isSelected
+                      ? (activeTab === "active" ? "bg-primary text-white" : "bg-red-600 text-white")
+                      : "bg-gray-200 text-gray-500"
+                  }`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Sağ Hissə: Məhsul Siyahısı */}
-      <div className="flex-1 w-full space-y-6">
+      <div className="flex-1 w-full min-w-0 space-y-6">
         {/* Top action header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-black text-gray-900 tracking-tight">
-              {activeTab === "active" ? "Məhsul Kataloqu" : "Arxivlənmiş Məhsullar"}
-            </h2>
-            <p className="text-xs text-gray-400 mt-1">
-              {activeTab === "active" 
-                ? "Sistemdəki bütün məhsulların siyahısı və idarəedilməsi" 
-                : "Tarixçəsi qorunan, lakin aktiv dövriyyədən çıxarılmış məhsullar"}
-            </p>
+          <div className="flex items-center gap-3">
+            {isSidebarCollapsed && (
+              <button
+                onClick={() => setIsSidebarCollapsed(false)}
+                className="hidden lg:flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 text-gray-700 font-bold text-xs rounded-xl hover:bg-gray-50 cursor-pointer shadow-xs transition-all shrink-0"
+                title="Kateqoriyaları Göstər"
+              >
+                <PanelLeft className="w-4 h-4 text-primary" /> Kateqoriyalar
+              </button>
+            )}
+            <div>
+              <h2 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight">
+                {activeTab === "active" ? "Məhsul Kataloqu" : "Arxivlənmiş Məhsullar"}
+              </h2>
+              <p className="text-xs text-gray-400 mt-0.5">
+                {activeTab === "active" 
+                  ? "Sistemdəki bütün məhsulların siyahısı və idarəedilməsi" 
+                  : "Tarixçəsi qorunan, lakin aktiv dövriyyədən çıxarılmış məhsullar"}
+              </p>
+            </div>
           </div>
 
           {activeTab === "active" && (
             <button
               onClick={handleOpenNew}
-              className="px-4 py-2.5 bg-primary text-white font-semibold text-sm rounded-xl hover:bg-primary/90 cursor-pointer flex items-center gap-2 shadow-md shadow-primary/10 transition-all hover-elevate shrink-0"
+              className="px-4 py-2.5 bg-primary text-white font-semibold text-xs sm:text-sm rounded-xl hover:bg-primary/90 cursor-pointer flex items-center justify-center gap-2 shadow-md shadow-primary/10 transition-all hover-elevate shrink-0 w-full sm:w-auto"
             >
               <Plus className="w-4 h-4" /> Yeni Məhsul
             </button>
@@ -536,7 +632,7 @@ export default function Products() {
         </div>
 
         {/* Search Input bar */}
-        <div className="bg-white border border-gray-100 p-4 rounded-2xl shadow-xs glass-card text-sm font-semibold max-w-xl">
+        <div className="bg-white border border-gray-100 p-3.5 sm:p-4 rounded-2xl shadow-xs glass-card text-sm font-semibold w-full max-w-xl">
           <div className="space-y-1.5">
             <label className="text-gray-500 uppercase tracking-wider block text-[10px] font-extrabold">Məhsul Axtar</label>
             <input
@@ -550,19 +646,19 @@ export default function Products() {
         </div>
 
         {/* Main product table card */}
-        <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-xs glass-card">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm border-collapse min-w-[650px]">
+        <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-xs glass-card w-full">
+          <div className="overflow-x-auto scrollbar-thin">
+            <table className="w-full text-left text-sm border-collapse">
               <thead>
-                <tr className="border-b border-gray-100 bg-gray-50/50 text-xs font-black text-gray-800 uppercase tracking-wider">
-                  <th className="p-4 w-12 text-center">#</th>
-                  <th className="p-4">Ad</th>
-                  <th className="p-4">Barkod</th>
-                  <th className="p-4">Kateqoriya</th>
-                  <th className="p-4">Ölçü Vahidi</th>
-                  <th className="p-4">Tədarükçü</th>
-                  <th className="p-4">Təsvir (Qeyd)</th>
-                  <th className="p-4 text-right pr-6">Əməliyyatlar</th>
+                <tr className="border-b border-gray-100 bg-gray-50/50 text-[11px] sm:text-xs font-black text-gray-800 uppercase tracking-wider">
+                  <th className="py-3 px-3 sm:px-4 w-10 text-center">#</th>
+                  <th className="py-3 px-3 sm:px-4 min-w-[160px]">Məhsul</th>
+                  <th className="py-3 px-3 sm:px-4 hidden sm:table-cell">Barkod</th>
+                  <th className="py-3 px-3 sm:px-4 hidden md:table-cell">Kateqoriya</th>
+                  <th className="py-3 px-3 sm:px-4 hidden lg:table-cell">Ölçü Vahidi</th>
+                  <th className="py-3 px-3 sm:px-4 hidden xl:table-cell">Tədarükçü</th>
+                  <th className="py-3 px-3 sm:px-4 hidden 2xl:table-cell">Təsvir (Qeyd)</th>
+                  <th className="py-3 px-3 sm:px-4 text-right pr-4 sm:pr-6 w-24 sm:w-32">Əməliyyatlar</th>
                 </tr>
               </thead>
               <tbody>
@@ -574,7 +670,7 @@ export default function Products() {
                   </tr>
                 ) : filteredList.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="p-16 text-center text-xs text-gray-400">
+                    <td colSpan={8} className="p-12 sm:p-16 text-center text-xs text-gray-400">
                       {searchQuery ? "Axtarışa uyğun məhsul tapılmadı." : "Bu bölmədə məhsul yoxdur."}
                     </td>
                   </tr>
@@ -582,101 +678,115 @@ export default function Products() {
                   paginatedList.map((item, idx) => {
                     const itemIndex = pageSize === -1 ? idx + 1 : (currentPage - 1) * pageSize + idx + 1;
                     return (
-                      <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/30 transition-all text-sm">
-                        <td className="p-4 text-center font-mono text-gray-500 font-bold">{itemIndex}</td>
-                      <td className="p-4 font-bold text-gray-900">
-                        <div className="flex items-center gap-3">
-                          {item.imageUrl ? (
-                            <img
-                              src={item.imageUrl}
-                              alt={item.name}
-                              className="w-9 h-9 object-cover rounded-xl border border-gray-100 shrink-0 bg-gray-50 shadow-2xs"
-                              onError={(e) => {
-                                (e.target as HTMLElement).style.display = "none";
-                              }}
-                            />
-                          ) : (
-                            <div className="w-9 h-9 rounded-xl bg-gray-100/70 border border-gray-200/50 flex items-center justify-center text-gray-400 shrink-0">
-                              <ImageIcon className="w-4 h-4 opacity-50" />
+                      <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/30 transition-all text-xs sm:text-sm">
+                        <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-center font-mono text-gray-400 font-bold">{itemIndex}</td>
+                        <td className="py-2.5 sm:py-3 px-3 sm:px-4 font-bold text-gray-900 min-w-[160px]">
+                          <div className="flex items-center gap-2.5 sm:gap-3">
+                            {item.imageUrl ? (
+                              <img
+                                src={item.imageUrl}
+                                alt={item.name}
+                                className="w-8 h-8 sm:w-9 sm:h-9 object-cover rounded-xl border border-gray-100 shrink-0 bg-gray-50 shadow-2xs"
+                                onError={(e) => {
+                                  (e.target as HTMLElement).style.display = "none";
+                                }}
+                              />
+                            ) : (
+                              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gray-100/70 border border-gray-200/50 flex items-center justify-center text-gray-400 shrink-0">
+                                <ImageIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 opacity-50" />
+                              </div>
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate font-bold text-gray-900" title={item.name}>{item.name}</div>
+                              <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                                {item.barcode && (
+                                  <span className="sm:hidden font-mono text-[10px] text-gray-500 font-bold">
+                                    {item.barcode}
+                                  </span>
+                                )}
+                                {item.category && (
+                                  <span className="md:hidden bg-primary/10 text-primary px-1.5 py-0.2 rounded text-[9px] font-black">
+                                    {item.category}
+                                  </span>
+                                )}
+                                {item.warrantyMonths ? (
+                                  <span className="inline-block bg-blue-50 text-blue-600 border border-blue-100 px-1.5 py-0.2 rounded-md text-[9px] font-black select-none">
+                                    🛡️ {item.warrantyMonths} ay
+                                  </span>
+                                ) : null}
+                              </div>
                             </div>
-                          )}
-                          <div className="min-w-0">
-                            <div className="truncate">{item.name}</div>
-                            {item.warrantyMonths ? (
-                              <span className="inline-block bg-blue-50 text-blue-600 border border-blue-100 px-1.5 py-0.5 rounded-md text-[10px] font-black mt-1 select-none animate-in fade-in duration-200">
-                                🛡️ {item.warrantyMonths} ay zəmanət
-                              </span>
-                            ) : null}
                           </div>
-                        </div>
-                      </td>
-                      <td className="p-4 font-mono text-xs text-gray-600 font-bold">{item.barcode || "—"}</td>
-                      <td className="p-4 font-medium text-gray-600">
-                        {item.category ? (
-                          <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-md text-xs font-black">
-                            {item.category}
-                          </span>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                      <td className="p-4 text-gray-700 font-bold">{item.unit}</td>
-                      <td className="p-4 font-bold text-gray-800">
-                        {item.vendorId && vendors ? (
-                          vendors.find(v => v.id === item.vendorId)?.name || "—"
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                      <td className="p-4 text-gray-600 font-medium truncate max-w-xs">{item.description || "—"}</td>
-                      <td className="p-4 text-right pr-6">
-                        <div className="flex items-center justify-end gap-2">
-                          {item.isArchived === 1 ? (
-                            <button
-                              onClick={() => archiveMutation.mutate({ id: item.id, isArchived: 0 })}
-                              className="p-2 border border-green-100 hover:border-green-200 text-green-600 hover:text-green-700 rounded-xl cursor-pointer transition-all bg-white flex items-center gap-1 text-[10px] font-bold"
-                              title="Arxivdən Bərpa Et"
-                            >
-                              <RotateCcw className="w-3.5 h-3.5" /> Bərpa Et
-                            </button>
+                        </td>
+                        <td className="py-2.5 sm:py-3 px-3 sm:px-4 font-mono text-xs text-gray-600 font-bold hidden sm:table-cell">{item.barcode || "—"}</td>
+                        <td className="py-2.5 sm:py-3 px-3 sm:px-4 font-medium text-gray-600 hidden md:table-cell">
+                          {item.category ? (
+                            <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-md text-xs font-black">
+                              {item.category}
+                            </span>
                           ) : (
-                            <>
-                              <button
-                                onClick={() => setSelectedProductForLabel(item)}
-                                className="p-2 border border-amber-100 hover:border-amber-200 text-amber-600 hover:text-amber-700 rounded-xl cursor-pointer transition-all bg-white"
-                                title="Qiymət Kağızı Çap Et"
-                              >
-                                <Tag className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => handleOpenEdit(item)}
-                                className="p-2 border border-gray-100 hover:border-gray-200 text-gray-500 hover:text-gray-900 rounded-xl cursor-pointer transition-all bg-white"
-                              >
-                                <Edit2 className="w-3.5 h-3.5" />
-                              </button>
-                              {(item as any).hasHistory ? (
-                                <button
-                                  onClick={() => setArchiveId(item.id)}
-                                  className="p-2 border border-blue-100 hover:border-blue-200 hover:bg-blue-50 text-blue-600 rounded-xl cursor-pointer transition-all bg-white flex items-center gap-1 text-[10px] font-bold"
-                                  title="Arxivə Göndər (Tarixçəsi var)"
-                                >
-                                  <Archive className="w-3.5 h-3.5" /> Arxivlə
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => setDeleteId(item.id)}
-                                  className="p-2 border border-red-50 hover:bg-red-50 text-red-500 rounded-xl cursor-pointer transition-all bg-white"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                            </>
+                            "—"
                           )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
+                        </td>
+                        <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-gray-700 font-bold hidden lg:table-cell">{item.unit}</td>
+                        <td className="py-2.5 sm:py-3 px-3 sm:px-4 font-bold text-gray-800 hidden xl:table-cell">
+                          {item.vendorId && vendors ? (
+                            vendors.find(v => v.id === item.vendorId)?.name || "—"
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-gray-600 font-medium truncate max-w-[150px] hidden 2xl:table-cell">{item.description || "—"}</td>
+                        <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-right pr-4 sm:pr-6">
+                          <div className="flex items-center justify-end gap-1 sm:gap-1.5">
+                            {item.isArchived === 1 ? (
+                              <button
+                                onClick={() => archiveMutation.mutate({ id: item.id, isArchived: 0 })}
+                                className="p-1.5 sm:p-2 border border-green-100 hover:border-green-200 text-green-600 hover:text-green-700 rounded-xl cursor-pointer transition-all bg-white flex items-center gap-1 text-[10px] font-bold"
+                                title="Arxivdən Bərpa Et"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Bərpa Et</span>
+                              </button>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => setSelectedProductForLabel(item)}
+                                  className="p-1.5 sm:p-2 border border-amber-100 hover:border-amber-200 text-amber-600 hover:text-amber-700 rounded-xl cursor-pointer transition-all bg-white"
+                                  title="Qiymət Kağızı Çap Et"
+                                >
+                                  <Tag className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleOpenEdit(item)}
+                                  className="p-1.5 sm:p-2 border border-gray-100 hover:border-gray-200 text-gray-500 hover:text-gray-900 rounded-xl cursor-pointer transition-all bg-white"
+                                  title="Düzəliş Et"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                {(item as any).hasHistory ? (
+                                  <button
+                                    onClick={() => setArchiveId(item.id)}
+                                    className="p-1.5 sm:p-2 border border-blue-100 hover:border-blue-200 hover:bg-blue-50 text-blue-600 rounded-xl cursor-pointer transition-all bg-white flex items-center gap-1 text-[10px] font-bold"
+                                    title="Arxivə Göndər (Tarixçəsi var)"
+                                  >
+                                    <Archive className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Arxivlə</span>
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => setDeleteId(item.id)}
+                                    className="p-1.5 sm:p-2 border border-red-50 hover:bg-red-50 text-red-500 rounded-xl cursor-pointer transition-all bg-white"
+                                    title="Sil"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

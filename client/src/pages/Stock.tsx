@@ -576,20 +576,20 @@ export default function Stock() {
           </div>
 
           {/* Stock levels table */}
-          <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-xs glass-card">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm border-collapse min-w-[650px]">
+          <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-xs glass-card w-full">
+            <div className="overflow-x-auto scrollbar-thin">
+              <table className="w-full text-left text-sm border-collapse">
                 <thead>
-                  <tr className="border-b border-gray-100 bg-gray-50/50 text-xs font-bold text-gray-400 uppercase tracking-wider">
-                    <th className="p-4 pl-6">Məhsul</th>
-                    <th className="p-4">Kateqoriya</th>
-                    <th className="p-4 text-center">Son Alış Tarixi</th>
-                    <th className="p-4 text-right">Cari Miqdar</th>
-                    <th className="p-4 text-right">Son Alış Qiyməti</th>
-                    <th className="p-4 text-right">Ümumi Dəyər</th>
-                    <th className="p-4 text-right">Son Satış Qiyməti</th>
-                    <th className="p-4 text-right">Mənfəət Marjası</th>
-                    <th className="p-4 pl-8">Əməliyyat</th>
+                  <tr className="border-b border-gray-100 bg-gray-50/50 text-[11px] sm:text-xs font-bold text-gray-400 uppercase tracking-wider">
+                    <th className="py-3 px-3 sm:px-4 pl-4 sm:pl-6">Məhsul</th>
+                    <th className="py-3 px-3 sm:px-4 hidden md:table-cell">Kateqoriya</th>
+                    <th className="py-3 px-3 sm:px-4 text-center hidden xl:table-cell">Son Alış Tarixi</th>
+                    <th className="py-3 px-3 sm:px-4 text-right">Cari Miqdar</th>
+                    <th className="py-3 px-3 sm:px-4 text-right hidden sm:table-cell">Son Alış Qiyməti</th>
+                    <th className="py-3 px-3 sm:px-4 text-right hidden lg:table-cell">Ümumi Dəyər</th>
+                    <th className="py-3 px-3 sm:px-4 text-right hidden sm:table-cell">Son Satış Qiyməti</th>
+                    <th className="py-3 px-3 sm:px-4 text-right hidden 2xl:table-cell">Mənfəət Marjası</th>
+                    <th className="py-3 px-3 sm:px-4 pl-4 sm:pl-8 text-right sm:text-left">Əməliyyat</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -613,8 +613,8 @@ export default function Stock() {
                           key={item.productId} 
                           className={`border-b border-gray-55 hover:bg-gray-50/30 transition-all text-xs ${isSN ? "bg-blue-50/10" : ""}`}
                         >
-                          <td className={`p-4 font-bold text-gray-900 ${isSN ? "pl-4 border-l-4 border-blue-500" : "pl-6"}`}>
-                            <div className="flex flex-col gap-1 py-1">
+                          <td className={`py-2.5 sm:py-3 px-3 sm:px-4 font-bold text-gray-900 ${isSN ? "pl-4 border-l-4 border-blue-500" : "pl-4 sm:pl-6"}`}>
+                            <div className="flex flex-col gap-1 py-0.5">
                               {isSN ? (
                                 <button
                                   onClick={() => setSelectedSerialProduct(item)}
@@ -628,12 +628,17 @@ export default function Stock() {
                               
                               <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
                                 {item.barcode && (
-                                  <span className="bg-gray-100 text-gray-600 border border-gray-200 px-2 py-0.5 rounded text-[10px] font-mono font-bold flex items-center gap-1">
+                                  <span className="bg-gray-100 text-gray-600 border border-gray-200 px-1.5 py-0.2 rounded text-[9px] sm:text-[10px] font-mono font-bold flex items-center gap-1">
                                     🖨️ {item.barcode}
                                   </span>
                                 )}
+                                {item.category && (
+                                  <span className="md:hidden bg-gray-100 text-gray-600 px-1.5 py-0.2 rounded text-[9px] font-bold">
+                                    {item.category}
+                                  </span>
+                                )}
                                 {isSN && (
-                                  <span className="bg-blue-50 text-blue-600 border border-blue-100 px-2 py-0.5 rounded text-[10px] font-bold">
+                                  <span className="bg-blue-50 text-blue-600 border border-blue-100 px-1.5 py-0.2 rounded text-[9px] sm:text-[10px] font-bold">
                                     🏷️ Seriallı (IMEI)
                                   </span>
                                 )}
@@ -642,14 +647,14 @@ export default function Stock() {
                               {isSN && item.activeSerials && item.activeSerials.length > 0 && (
                                 <button
                                   onClick={() => setSelectedSerialProduct(item)}
-                                  className="text-[10px] font-bold text-amber-700 hover:text-amber-800 bg-amber-50 border border-amber-200/50 hover:bg-amber-100/30 px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 mt-1.5 w-max"
+                                  className="text-[10px] font-bold text-amber-700 hover:text-amber-800 bg-amber-50 border border-amber-200/50 hover:bg-amber-100/30 px-2 py-0.5 rounded-lg transition-all cursor-pointer flex items-center gap-1 mt-1 w-max"
                                 >
                                   🔍 {item.activeSerials.length} IMEI / Serial Göstər
                                 </button>
                               )}
                             </div>
                           </td>
-                          <td className="p-4 font-medium text-gray-600">
+                          <td className="py-2.5 sm:py-3 px-3 sm:px-4 font-medium text-gray-600 hidden md:table-cell">
                             {item.category ? (
                               <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md text-[10px] font-bold">
                                 {item.category}
@@ -658,22 +663,22 @@ export default function Stock() {
                               "—"
                             )}
                           </td>
-                          <td className="p-4 text-center font-mono font-medium text-gray-500">
+                          <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-center font-mono font-medium text-gray-500 hidden xl:table-cell">
                             {item.lastPurchaseDate ? new Date(item.lastPurchaseDate).toLocaleDateString("az-AZ") : "—"}
                           </td>
-                          <td className="p-4 text-right font-bold text-gray-900 font-mono">
+                          <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-right font-bold text-gray-900 font-mono">
                             {item.currentQuantity} <span className="text-[10px] text-gray-400 font-sans font-medium ml-0.5">{item.unit}</span>
                           </td>
-                          <td className="p-4 text-right font-semibold text-gray-600 font-mono">
+                          <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-right font-semibold text-gray-600 font-mono hidden sm:table-cell">
                             {item.lastPurchasePrice > 0 ? `${item.lastPurchasePrice.toFixed(2)} ₼` : "—"}
                           </td>
-                          <td className="p-4 text-right font-bold text-gray-955 font-mono">
+                          <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-right font-bold text-gray-955 font-mono hidden lg:table-cell">
                             {item.totalValue > 0 ? `${item.totalValue.toFixed(2)} ₼` : "0.00 ₼"}
                           </td>
-                          <td className="p-4 text-right font-semibold text-gray-600 font-mono">
+                          <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-right font-semibold text-gray-600 font-mono hidden sm:table-cell">
                             {item.lastSalePrice > 0 ? `${item.lastSalePrice.toFixed(2)} ₼` : "—"}
                           </td>
-                          <td className="p-4 text-right">
+                          <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-right hidden 2xl:table-cell">
                             {(() => {
                               const cost = item.lastPurchasePrice;
                               const price = item.lastSalePrice;
@@ -697,7 +702,7 @@ export default function Stock() {
                               return <span className="text-gray-300">—</span>;
                             })()}
                           </td>
-                          <td className="p-4">
+                          <td className="py-2.5 sm:py-3 px-3 sm:px-4">
                             <div className="flex items-center gap-1.5 flex-wrap justify-end sm:justify-start">
                               {item.currentQuantity > 0 && settings?.multiWarehouseEnabled === 1 ? (
                                 <button

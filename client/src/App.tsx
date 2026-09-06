@@ -352,7 +352,7 @@ function AppLayout({ children, user, currentUser, onLogout }: { children: React.
   const navGroups = baseGroups.filter((group) => group.items.length > 0);
 
   return (
-    <div className="relative min-h-screen w-full flex flex-col pb-12 select-none">
+    <div className="relative min-h-screen w-full max-w-full flex flex-col pb-12 select-none overflow-x-hidden">
       {/* 0. Demo Session Alert Banner */}
       {sessionStorage.getItem("birsaas_demo_active") === "true" && (
         <div className="w-full bg-emerald-500 hover:bg-emerald-600 text-white text-[11px] font-black tracking-wide py-2.5 px-4 text-center select-none flex items-center justify-center gap-2 animate-pulse no-print shadow-md shadow-emerald-500/10 z-100">
@@ -779,8 +779,8 @@ function AppLayout({ children, user, currentUser, onLogout }: { children: React.
       )}
 
       {/* 2. Main content container */}
-      <main className="flex-1 w-full max-w-[1600px] mx-auto px-4 sm:px-6 mt-8 flex flex-col">
-        <div className="flex-1 w-full animate-in fade-in-50 duration-300">
+      <main className="flex-1 w-full min-w-0 max-w-[1600px] mx-auto px-3 sm:px-6 mt-6 sm:mt-8 flex flex-col">
+        <div className="flex-1 w-full min-w-0 animate-in fade-in-50 duration-300">
           {children}
         </div>
       </main>

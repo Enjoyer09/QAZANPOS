@@ -738,20 +738,20 @@ export default function SalesHistory() {
           )}
 
           {/* Sales History Table */}
-          <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-xs glass-card">
+          <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-xs glass-card w-full">
             <div ref={scrollRef} className="overflow-x-auto scrollbar-thin">
-              <table className="w-full text-left text-sm border-collapse min-w-[800px]">
+              <table className="w-full text-left text-sm border-collapse">
                 <thead>
-                  <tr className="border-b border-gray-100 bg-gray-50/50 text-xs font-bold text-gray-400 uppercase tracking-wider">
-                    <th className="p-4 pl-6 text-center w-16">Qaimə №</th>
-                    <th className="p-4">Müştəri</th>
-                    <th className="p-4">Tarix</th>
-                    <th className="p-4 text-center">Satıcı</th>
-                    <th className="p-4 text-center">Ödəniş Üsulu</th>
-                    <th className="p-4 text-right">Məbləğ</th>
-                    {isAdmin && <th className="p-4 text-right">Mənfəət</th>}
-                    <th className="p-4 text-center">Vəziyyət</th>
-                    <th className="p-4 text-right pr-6 w-20"></th>
+                  <tr className="border-b border-gray-100 bg-gray-50/50 text-[11px] sm:text-xs font-bold text-gray-400 uppercase tracking-wider">
+                    <th className="py-3 px-3 sm:px-4 pl-4 sm:pl-6 text-center w-14 sm:w-16">Qaimə №</th>
+                    <th className="py-3 px-3 sm:px-4 min-w-[150px]">Müştəri</th>
+                    <th className="py-3 px-3 sm:px-4 hidden sm:table-cell">Tarix</th>
+                    <th className="py-3 px-3 sm:px-4 text-center hidden lg:table-cell">Satıcı</th>
+                    <th className="py-3 px-3 sm:px-4 text-center hidden md:table-cell">Ödəniş Üsulu</th>
+                    <th className="py-3 px-3 sm:px-4 text-right">Məbləğ</th>
+                    {isAdmin && <th className="py-3 px-3 sm:px-4 text-right hidden xl:table-cell">Mənfəət</th>}
+                    <th className="py-3 px-3 sm:px-4 text-center">Vəziyyət</th>
+                    <th className="py-3 px-3 sm:px-4 text-right pr-4 sm:pr-6 w-16 sm:w-20"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -777,11 +777,16 @@ export default function SalesHistory() {
                       const profit = netAmount - netCost;
                       return (
                         <tr key={sale.id} className="border-b border-gray-50 hover:bg-gray-50/30 transition-all text-xs">
-                          <td className="p-4 text-center font-mono text-gray-900 font-bold">
+                          <td className="py-3 px-3 sm:px-4 text-center font-mono text-gray-900 font-bold">
                             #{sale.id.toString().padStart(5, "0")}
                           </td>
-                          <td className="p-4">
+                          <td className="py-2.5 sm:py-3 px-3 sm:px-4 min-w-[150px]">
                             <span className="font-bold text-gray-900 block">{sale.customerName || "Nəğd Satış"}</span>
+                            <div className="sm:hidden text-[10px] text-gray-400 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                              <span>{new Date(sale.saleDate).toLocaleDateString("az-AZ")}</span>
+                              <span>•</span>
+                              <span className="font-semibold text-gray-600">{sale.paymentType}</span>
+                            </div>
                             {sale.customerPhone && (
                               <span className="text-[10px] text-gray-400 mt-0.5 block">{sale.customerPhone}</span>
                             )}
@@ -795,16 +800,16 @@ export default function SalesHistory() {
                               </div>
                             )}
                           </td>
-                          <td className="p-4 text-gray-500 font-medium">
+                          <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-gray-500 font-medium hidden sm:table-cell">
                             {new Date(sale.saleDate).toLocaleDateString("az-AZ")} |{" "}
                             {new Date(sale.saleDate).toLocaleTimeString("az-AZ", { hour: "2-digit", minute: "2-digit" })}
                           </td>
-                          <td className="p-4 text-center">
+                          <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-center hidden lg:table-cell">
                             <span className="px-2.5 py-1 bg-gray-100 rounded-lg text-gray-700 text-[10.5px] font-black">
                               {sale.sellerName || "Sistem"}
                             </span>
                           </td>
-                          <td className="p-4 text-center font-semibold">
+                          <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-center font-semibold hidden md:table-cell">
                             <span
                               className={`px-2 py-0.5 border rounded-full text-[9px] font-bold ${
                                 sale.paymentType === "Nisyə" && sale.paymentStatus === "paid"
@@ -822,7 +827,7 @@ export default function SalesHistory() {
                               </span>
                             )}
                           </td>
-                          <td className="p-4 text-right font-mono">
+                          <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-right font-mono">
                             <span className="font-bold text-gray-955 block">{Number(netAmount).toFixed(2)} ₼</span>
                             {returned > 0 && (
                               <span className="text-[10px] text-amber-600 font-bold block mt-0.5" title={`İlkin: ${Number(sale.totalAmount).toFixed(2)} ₼`}>
@@ -831,12 +836,12 @@ export default function SalesHistory() {
                             )}
                           </td>
                           {isAdmin && (
-                            <td className={`p-4 text-right font-bold font-mono ${profit >= 0 ? "text-green-600" : "text-red-500"}`}>
+                            <td className={`py-2.5 sm:py-3 px-3 sm:px-4 text-right font-bold font-mono hidden xl:table-cell ${profit >= 0 ? "text-green-600" : "text-red-500"}`}>
                               {profit >= 0 ? "+" : ""}
                               {Number(profit).toFixed(2)} ₼
                             </td>
                           )}
-                          <td className="p-4 text-center">
+                          <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-center">
                             <span
                               className={`px-2.5 py-0.5 border rounded-full text-[9px] font-bold uppercase tracking-wider ${
                                 sale.paymentStatus === "paid"
@@ -849,7 +854,7 @@ export default function SalesHistory() {
                                 : (sale.paymentType === "Nisyə" ? "Nisyə" : "Ödənilməyib")}
                             </span>
                           </td>
-                          <td className="p-4 text-right pr-6">
+                          <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-right pr-4 sm:pr-6">
                             <div className="flex items-center justify-end gap-1.5">
                               <button
                                 onClick={() => setDrawerSale(sale)}
@@ -1017,19 +1022,19 @@ export default function SalesHistory() {
           </div>
 
           {/* Loss Sales Table */}
-          <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-xs glass-card">
+          <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-xs glass-card w-full">
             <div ref={warrantyScrollRef} className="overflow-x-auto scrollbar-thin">
-              <table className="w-full text-left text-sm border-collapse min-w-[800px]">
+              <table className="w-full text-left text-sm border-collapse">
                 <thead>
-                  <tr className="border-b border-gray-100 bg-gray-50/50 text-xs font-bold text-gray-400 uppercase tracking-wider">
-                    <th className="p-4 pl-6 text-center w-16">Qaimə №</th>
-                    <th className="p-4">Məhsul</th>
-                    <th className="p-4">Müştəri / Tarix</th>
-                    <th className="p-4 text-right">Maya (Alış)</th>
-                    <th className="p-4 text-right">Ödəniş</th>
-                    <th className="p-4 text-center">Miqdar</th>
-                    <th className="p-4 text-right">Endirim (Vahid)</th>
-                    <th className="p-4 text-right pr-6">Yekun</th>
+                  <tr className="border-b border-gray-100 bg-gray-50/50 text-[11px] sm:text-xs font-bold text-gray-400 uppercase tracking-wider">
+                    <th className="py-3 px-3 sm:px-4 pl-4 sm:pl-6 text-center w-14 sm:w-16">Qaimə №</th>
+                    <th className="py-3 px-3 sm:px-4 min-w-[140px]">Məhsul</th>
+                    <th className="py-3 px-3 sm:px-4">Müştəri / Tarix</th>
+                    <th className="py-3 px-3 sm:px-4 text-right hidden sm:table-cell">Maya (Alış)</th>
+                    <th className="py-3 px-3 sm:px-4 text-right">Ödəniş</th>
+                    <th className="py-3 px-3 sm:px-4 text-center">Miqdar</th>
+                    <th className="py-3 px-3 sm:px-4 text-right hidden md:table-cell">Endirim</th>
+                    <th className="py-3 px-3 sm:px-4 text-right pr-4 sm:pr-6">Yekun Zərər</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50 text-xs font-bold text-gray-600">
@@ -1043,46 +1048,46 @@ export default function SalesHistory() {
                     lossItems.map((item: any, idx: number) => (
                       <tr key={`${item.saleId}-${item.productId}-${idx}`} className="hover:bg-red-50/10 transition-all border-b border-gray-50">
                         {/* Sale ID */}
-                        <td className="p-4 text-center font-mono text-gray-900 font-bold">
+                        <td className="py-3 px-3 sm:px-4 text-center font-mono text-gray-900 font-bold">
                           #{item.saleId.toString().padStart(5, "0")}
                         </td>
 
                         {/* Product Name */}
-                        <td className="p-4">
-                          <span className="font-bold text-gray-900 block">{item.productName}</span>
+                        <td className="py-2.5 sm:py-3 px-3 sm:px-4 min-w-[140px]">
+                          <span className="font-bold text-gray-900 block truncate">{item.productName}</span>
                           <span className="text-[10px] text-gray-400 block mt-0.5">Vahid: {item.unit}</span>
                         </td>
 
                         {/* Customer & Date */}
-                        <td className="p-4">
-                          <span className="font-bold text-gray-900 block">{item.customerName}</span>
+                        <td className="py-2.5 sm:py-3 px-3 sm:px-4">
+                          <span className="font-bold text-gray-900 block truncate">{item.customerName}</span>
                           <span className="text-[10px] text-gray-400 block mt-0.5">
                             {new Date(item.saleDate).toLocaleDateString("az-AZ")} | {new Date(item.saleDate).toLocaleTimeString("az-AZ", { hour: "2-digit", minute: "2-digit" })}
                           </span>
                         </td>
 
                         {/* Cost Price */}
-                        <td className="p-4 text-right font-mono text-gray-500">
+                        <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-right font-mono text-gray-500 hidden sm:table-cell">
                           {item.costPrice.toFixed(2)} ₼
                         </td>
 
-                        {/* Sale Price (Payment) -> In red with minus sign! */}
-                        <td className="p-4 text-right font-mono text-red-600 font-bold">
+                        {/* Sale Price (Payment) */}
+                        <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-right font-mono text-red-600 font-bold">
                           -{item.salePrice.toFixed(2)} ₼
                         </td>
 
                         {/* Quantity */}
-                        <td className="p-4 text-center font-bold text-gray-700">
+                        <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-center font-bold text-gray-700">
                           {item.quantity}
                         </td>
 
                         {/* Loss/Discount Per Unit */}
-                        <td className="p-4 text-right font-mono text-gray-500">
+                        <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-right font-mono text-gray-500 hidden md:table-cell">
                           {item.lossPerUnit.toFixed(2)} ₼
                         </td>
 
-                        {/* Total Loss (Yekun) -> In red with minus sign! */}
-                        <td className="p-4 text-right pr-6 font-mono text-red-600 font-black">
+                        {/* Total Loss (Yekun) */}
+                        <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-right pr-4 sm:pr-6 font-mono text-red-600 font-black">
                           -{item.totalLoss.toFixed(2)} ₼
                         </td>
                       </tr>

@@ -335,18 +335,18 @@ export default function Customers() {
       </div>
 
       {/* Customers List Table */}
-      <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-xs glass-card">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm border-collapse min-w-[700px]">
+      <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-xs glass-card w-full">
+        <div className="overflow-x-auto scrollbar-thin">
+          <table className="w-full text-left text-sm border-collapse">
             <thead>
-              <tr className="border-b border-gray-100 bg-gray-50/50 text-xs font-bold text-gray-400 uppercase tracking-wider">
-                <th className="p-4 w-12 text-center">#</th>
-                <th className="p-4">Müştəri</th>
-                <th className="p-4">Telefon</th>
-                <th className="p-4">E-poçt</th>
-                <th className="p-4">Ünvan</th>
-                <th className="p-4 text-center">Loyallıq Balı</th>
-                <th className="p-4 text-right pr-6 w-20"></th>
+              <tr className="border-b border-gray-100 bg-gray-50/50 text-[11px] sm:text-xs font-bold text-gray-400 uppercase tracking-wider">
+                <th className="py-3 px-3 sm:px-4 w-10 text-center hidden sm:table-cell">#</th>
+                <th className="py-3 px-3 sm:px-4 min-w-[150px]">Müştəri</th>
+                <th className="py-3 px-3 sm:px-4 hidden sm:table-cell">Telefon</th>
+                <th className="py-3 px-3 sm:px-4 hidden md:table-cell">E-poçt</th>
+                <th className="py-3 px-3 sm:px-4 hidden lg:table-cell">Ünvan</th>
+                <th className="py-3 px-3 sm:px-4 text-center">Loyallıq Balı</th>
+                <th className="py-3 px-3 sm:px-4 text-right pr-4 sm:pr-6 w-16"></th>
               </tr>
             </thead>
             <tbody>
@@ -371,19 +371,24 @@ export default function Customers() {
                       onClick={() => { setSelectedCustomerId(item.id); setDrawerTab("overview"); }}
                       className={`border-b border-gray-50 hover:bg-primary/5 cursor-pointer transition-all text-xs ${isSelected ? 'bg-primary/5 font-semibold' : ''}`}
                     >
-                      <td className="p-4 text-center font-mono text-gray-400">{idx + 1}</td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-8 h-8 rounded-full bg-gradient-to-tr ${gradient} flex items-center justify-center text-white font-extrabold text-[10px] shadow-sm`}>
+                      <td className="py-3 px-3 sm:px-4 text-center font-mono text-gray-400 hidden sm:table-cell">{idx + 1}</td>
+                      <td className="py-2.5 sm:py-3 px-3 sm:px-4 min-w-[150px]">
+                        <div className="flex items-center gap-2.5 sm:gap-3">
+                          <div className={`w-8 h-8 rounded-full bg-gradient-to-tr ${gradient} flex items-center justify-center text-white font-extrabold text-[10px] shadow-sm shrink-0`}>
                             {initials}
                           </div>
-                          <div>
-                            <div className="font-bold text-gray-900 leading-tight">{item.name}</div>
+                          <div className="min-w-0 flex-1">
+                            <div className="font-bold text-gray-900 leading-tight truncate">{item.name}</div>
+                            {item.phone && (
+                              <div className="sm:hidden text-[10px] text-gray-500 font-mono flex items-center gap-1 mt-0.5">
+                                <Phone className="w-3 h-3 text-gray-400" /> {item.phone}
+                              </div>
+                            )}
                             {item.notes && <div className="text-[10px] text-gray-400 truncate max-w-[150px] font-medium mt-0.5">{item.notes}</div>}
                           </div>
                         </div>
                       </td>
-                      <td className="p-4 font-semibold text-gray-600 font-mono">
+                      <td className="py-2.5 sm:py-3 px-3 sm:px-4 font-semibold text-gray-600 font-mono hidden sm:table-cell">
                         {item.phone ? (
                           <span className="flex items-center gap-1">
                             <Phone className="w-3.5 h-3.5 text-gray-400 shrink-0" /> {item.phone}
@@ -392,7 +397,7 @@ export default function Customers() {
                           <span className="text-gray-300">—</span>
                         )}
                       </td>
-                      <td className="p-4 text-gray-600 font-medium font-mono">
+                      <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-gray-600 font-medium font-mono hidden md:table-cell">
                         {item.email ? (
                           <span className="flex items-center gap-1">
                             <Mail className="w-3.5 h-3.5 text-gray-400 shrink-0" /> {item.email}
@@ -401,7 +406,7 @@ export default function Customers() {
                           <span className="text-gray-300">—</span>
                         )}
                       </td>
-                      <td className="p-4 text-gray-600 font-medium">
+                      <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-gray-600 font-medium hidden lg:table-cell">
                         {item.address ? (
                           <span className="flex items-center gap-1">
                             <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0" /> {item.address}
@@ -410,7 +415,7 @@ export default function Customers() {
                           <span className="text-gray-300">—</span>
                         )}
                       </td>
-                      <td className="p-4 text-center">
+                      <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-center">
                         {pts > 0 ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 font-bold text-[10px]">
                             <Gift className="w-3 h-3 text-amber-500" />

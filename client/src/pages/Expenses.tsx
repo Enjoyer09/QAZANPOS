@@ -562,16 +562,16 @@ export default function Expenses() {
                 className="px-3 py-1.5 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 w-full sm:w-60"
               />
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm border-collapse min-w-[600px]">
+            <div className="overflow-x-auto scrollbar-thin w-full">
+              <table className="w-full text-left text-sm border-collapse">
                 <thead>
-                  <tr className="border-b border-gray-100 text-xs font-bold text-gray-400 uppercase tracking-wider">
-                    <th className="py-2.5 px-2">Kateqoriya</th>
-                    <th className="py-2.5 px-2">Ödəniş Mənbəyi</th>
-                    <th className="py-2.5 px-2">Açıqlama</th>
-                    <th className="py-2.5 px-2">Tarix</th>
-                    <th className="py-2.5 px-2 text-right">Məbləğ</th>
-                    <th className="py-2.5 px-2 w-12"></th>
+                  <tr className="border-b border-gray-100 bg-gray-50/50 text-[11px] sm:text-xs font-bold text-gray-400 uppercase tracking-wider">
+                    <th className="py-3 px-3 sm:px-4">Kateqoriya</th>
+                    <th className="py-3 px-3 sm:px-4">Ödəniş Mənbəyi</th>
+                    <th className="py-3 px-3 sm:px-4 hidden md:table-cell">Açıqlama</th>
+                    <th className="py-3 px-3 sm:px-4 hidden sm:table-cell">Tarix</th>
+                    <th className="py-3 px-3 sm:px-4 text-right">Məbləğ</th>
+                    <th className="py-3 px-3 sm:px-4 w-12 text-right pr-4"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -586,17 +586,20 @@ export default function Expenses() {
                   ) : (
                     filteredList.map((item) => (
                       <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/30 transition-all text-xs">
-                        <td className="py-4 px-2">
+                        <td className="py-3 px-3 sm:px-4">
                           <span className={`px-2.5 py-0.5 border rounded-full text-[9px] font-bold uppercase tracking-wider ${categoryBadges[item.category] || "bg-gray-50 text-gray-500"}`}>
                             {item.category}
                           </span>
+                          <div className="sm:hidden text-[10px] text-gray-400 mt-1">
+                            {new Date(item.date).toLocaleDateString("az-AZ")}
+                          </div>
                         </td>
-                        <td className="py-4 px-2">
+                        <td className="py-3 px-3 sm:px-4">
                           <span className={`px-2.5 py-0.5 border rounded-full text-[9px] font-bold uppercase tracking-wider ${paymentTypeBadges[item.paymentType || "cash"]}`}>
                             {paymentTypeLabels[item.paymentType || "cash"]}
                           </span>
                         </td>
-                        <td className="py-4 px-2 text-gray-500 font-medium max-w-xs truncate">
+                        <td className="py-3 px-3 sm:px-4 text-gray-500 font-medium max-w-xs truncate hidden md:table-cell">
                           {item.description ? (
                             <span className="flex items-center gap-1">
                               <ClipboardList className="w-3.5 h-3.5 text-gray-300 shrink-0" /> {item.description}
@@ -605,13 +608,13 @@ export default function Expenses() {
                             "—"
                           )}
                         </td>
-                        <td className="py-4 px-2 text-gray-400">
+                        <td className="py-3 px-3 sm:px-4 text-gray-400 hidden sm:table-cell">
                           {new Date(item.date).toLocaleDateString("az-AZ")}
                         </td>
-                        <td className="py-4 px-2 text-right font-black text-red-500 font-mono text-sm">
-                          {item.amount.toFixed(2)} ₼
+                        <td className="py-3 px-3 sm:px-4 text-right font-mono font-bold text-gray-900">
+                          {parseFloat(String(item.amount)).toFixed(2)} ₼
                         </td>
-                        <td className="py-4 px-2 text-center">
+                        <td className="py-3 px-3 sm:px-4 text-right pr-4">
                           <button
                             onClick={() => deleteMutation.mutate(item.id)}
                             disabled={deleteMutation.isPending}
