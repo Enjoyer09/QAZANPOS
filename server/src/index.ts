@@ -21,6 +21,13 @@ app.use(express.json());
 // API routes
 app.use("/api", router);
 
+// Serve uploaded files statically (for local fallback when Cloudflare R2 is not configured)
+const uploadsPath = path.resolve(__dirname, "../uploads");
+if (!fs.existsSync(uploadsPath)) {
+  fs.mkdirSync(uploadsPath, { recursive: true });
+}
+app.use("/uploads", express.static(uploadsPath));
+
 // Serve static client assets in production
 const clientBuildPath = path.resolve(__dirname, "../../client/dist");
 app.use(express.static(clientBuildPath));
@@ -45,6 +52,10 @@ async function ensureDefaultTenantsAndUsers() {
     // Auto-migrate: ensure settings has multi_warehouse_enabled column
     console.log("Self-Healing Database: Ensuring multi_warehouse_enabled column exists in settings...");
     await db.execute(sql`ALTER TABLE settings ADD COLUMN IF NOT EXISTS multi_warehouse_enabled integer NOT NULL DEFAULT 1;`);
+
+    // Auto-migrate: ensure products has image_url column
+    console.log("Self-Healing Database: Ensuring image_url column exists in products...");
+    await db.execute(sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT;`);
 
     // Auto-migrate: ensure inventory_ledger table exists
     console.log("Self-Healing Database: Ensuring inventory_ledger table exists...");

@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Edit2, Trash2, X, Tag, Lock, Archive, RotateCcw, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Edit2, Trash2, X, Tag, Lock, Archive, RotateCcw, ChevronLeft, ChevronRight, Image as ImageIcon, Upload, Link as LinkIcon, Sparkles, Loader2 } from "lucide-react";
 import { TableSkeleton } from "../components/Skeleton.tsx";
 import { useToast } from "../components/Toast.tsx";
 import { generateValidEAN13 } from "../components/Barcode.tsx";
 import LabelPrintModal from "../components/LabelPrintModal.tsx";
+import { compressImage } from "../lib/imageCompressor.ts";
 
 interface Product {
   id: number;
@@ -19,6 +20,7 @@ interface Product {
   hasHistory?: boolean;
   vendorId?: number | null;
   minStockLimit?: number | null;
+  imageUrl?: string | null;
 }
 
 const emptyProduct = {
@@ -32,6 +34,7 @@ const emptyProduct = {
   warrantyMonths: "",
   vendorId: "",
   minStockLimit: "",
+  imageUrl: "",
 };
 
 export default function Products() {
@@ -67,6 +70,10 @@ export default function Products() {
   const [selectedProductForLabel, setSelectedProductForLabel] = useState<Product | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(20);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [uploadCompressionInfo, setUploadCompressionInfo] = useState<string | null>(null);
+  const [imageInputMode, setImageInputMode] = useState<"upload" | "url">("upload");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -257,14 +264,66 @@ export default function Products() {
     },
   });
 
+  const handleImageFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsUploadingImage(true);
+      setUploadCompressionInfo("Şəkil sıxılır (WebP)...");
+
+      // 1. Client-side canvas compression (to WebP)
+      const compressed = await compressImage(file);
+      const origKb = (compressed.originalSize / 1024).toFixed(0);
+      const compKb = (compressed.compressedSize / 1024).toFixed(0);
+      setUploadCompressionInfo(`${origKb} KB ➔ ${compKb} KB (-${compressed.compressionRatio}%)`);
+
+      // 2. Upload to /api/upload/product-image
+      const uploadFormData = new FormData();
+      uploadFormData.append("image", compressed.file);
+
+      const res = await fetch("/api/upload/product-image", {
+        method: "POST",
+        body: uploadFormData,
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || errData.message || "Şəkil serverə yüklənə bilmədi");
+      }
+
+      const resData = await res.json();
+      setFormData((prev) => ({ ...prev, imageUrl: resData.url }));
+      toast({
+        title: "Şəkil yükləndi!",
+        description: `Ölçü ${compressed.compressionRatio}% sıxıldı və saxlandı.`,
+        variant: "success",
+      });
+    } catch (err: any) {
+      console.error("Image upload failed:", err);
+      toast({
+        title: "Şəkil yüklənmədi",
+        description: err.message || "Xəta baş verdi",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploadingImage(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   const handleOpenNew = () => {
     setEditingId(null);
     setFormData(emptyProduct);
+    setUploadCompressionInfo(null);
+    setImageInputMode("upload");
     setIsOpen(true);
   };
 
   const handleOpenEdit = (product: Product) => {
     setEditingId(product.id);
+    setUploadCompressionInfo(null);
+    setImageInputMode(product.imageUrl && product.imageUrl.startsWith("http") && !product.imageUrl.includes("/uploads/") ? "url" : "upload");
     setFormData({
       name: product.name,
       category: product.category || "",
@@ -276,6 +335,7 @@ export default function Products() {
       warrantyMonths: product.warrantyMonths ? String(product.warrantyMonths) : "",
       vendorId: product.vendorId ? String(product.vendorId) : "",
       minStockLimit: product.minStockLimit !== null ? String(product.minStockLimit) : "",
+      imageUrl: product.imageUrl || "",
     });
     setIsOpen(true);
   };
@@ -284,6 +344,7 @@ export default function Products() {
     setIsOpen(false);
     setEditingId(null);
     setFormData(emptyProduct);
+    setUploadCompressionInfo(null);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -499,12 +560,30 @@ export default function Products() {
                       <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/30 transition-all text-sm">
                         <td className="p-4 text-center font-mono text-gray-500 font-bold">{itemIndex}</td>
                       <td className="p-4 font-bold text-gray-900">
-                        <div>{item.name}</div>
-                        {item.warrantyMonths ? (
-                          <span className="inline-block bg-blue-50 text-blue-600 border border-blue-100 px-1.5 py-0.5 rounded-md text-[10px] font-black mt-1 select-none animate-in fade-in duration-200">
-                            🛡️ {item.warrantyMonths} ay zəmanət
-                          </span>
-                        ) : null}
+                        <div className="flex items-center gap-3">
+                          {item.imageUrl ? (
+                            <img
+                              src={item.imageUrl}
+                              alt={item.name}
+                              className="w-9 h-9 object-cover rounded-xl border border-gray-100 shrink-0 bg-gray-50 shadow-2xs"
+                              onError={(e) => {
+                                (e.target as HTMLElement).style.display = "none";
+                              }}
+                            />
+                          ) : (
+                            <div className="w-9 h-9 rounded-xl bg-gray-100/70 border border-gray-200/50 flex items-center justify-center text-gray-400 shrink-0">
+                              <ImageIcon className="w-4 h-4 opacity-50" />
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <div className="truncate">{item.name}</div>
+                            {item.warrantyMonths ? (
+                              <span className="inline-block bg-blue-50 text-blue-600 border border-blue-100 px-1.5 py-0.5 rounded-md text-[10px] font-black mt-1 select-none animate-in fade-in duration-200">
+                                🛡️ {item.warrantyMonths} ay zəmanət
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
                       </td>
                       <td className="p-4 font-mono text-xs text-gray-600 font-bold">{item.barcode || "—"}</td>
                       <td className="p-4 font-medium text-gray-600">
@@ -683,6 +762,123 @@ export default function Products() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4 text-xs font-semibold">
+              {/* ŞƏKİL YÜKLƏMƏ BÖLMƏSİ */}
+              <div className="space-y-2 p-3 bg-gray-50/70 border border-gray-200/80 rounded-2xl">
+                <div className="flex items-center justify-between">
+                  <label className="text-gray-600 uppercase tracking-wider block text-[10px] font-extrabold flex items-center gap-1.5">
+                    <ImageIcon className="w-3.5 h-3.5 text-primary" /> Məhsul Şəkli (Kataloq & Sayt)
+                  </label>
+                  <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-gray-200 text-[10px]">
+                    <button
+                      type="button"
+                      onClick={() => setImageInputMode("upload")}
+                      className={`px-2 py-0.5 rounded-md font-bold transition-all cursor-pointer ${
+                        imageInputMode === "upload" ? "bg-primary text-white shadow-xs" : "text-gray-500 hover:text-gray-800"
+                      }`}
+                    >
+                      Yüklə ⚡
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setImageInputMode("url")}
+                      className={`px-2 py-0.5 rounded-md font-bold transition-all cursor-pointer ${
+                        imageInputMode === "url" ? "bg-primary text-white shadow-xs" : "text-gray-500 hover:text-gray-800"
+                      }`}
+                    >
+                      URL 🔗
+                    </button>
+                  </div>
+                </div>
+
+                {formData.imageUrl ? (
+                  <div className="flex items-center gap-3 p-2 bg-white rounded-xl border border-gray-200">
+                    <img
+                      src={formData.imageUrl}
+                      alt="Önbaxış"
+                      className="w-14 h-14 object-cover rounded-lg border border-gray-100 shrink-0 bg-gray-50"
+                      onError={(e) => {
+                        (e.target as HTMLElement).style.opacity = "0.3";
+                      }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11px] font-bold text-gray-900 truncate">
+                        {formData.imageUrl.split("/").pop()}
+                      </p>
+                      {uploadCompressionInfo && (
+                        <p className="text-[10px] text-green-600 font-bold flex items-center gap-1 mt-0.5">
+                          <Sparkles className="w-3 h-3" /> {uploadCompressionInfo}
+                        </p>
+                      )}
+                      <p className="text-[9px] text-gray-400 truncate mt-0.5 font-mono">{formData.imageUrl}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData((prev) => ({ ...prev, imageUrl: "" }));
+                        setUploadCompressionInfo(null);
+                      }}
+                      className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer shrink-0"
+                      title="Şəkli sil"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : imageInputMode === "upload" ? (
+                  <div>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageFileSelect}
+                      className="hidden"
+                      id="product-image-upload-input"
+                    />
+                    <label
+                      htmlFor="product-image-upload-input"
+                      className={`flex flex-col items-center justify-center p-4 border-2 border-dashed rounded-xl cursor-pointer transition-all ${
+                        isUploadingImage
+                          ? "border-primary/50 bg-primary/5"
+                          : "border-gray-200 hover:border-primary/50 hover:bg-white bg-white/50"
+                      }`}
+                    >
+                      {isUploadingImage ? (
+                        <div className="flex flex-col items-center gap-1.5 py-1">
+                          <Loader2 className="w-5 h-5 text-primary animate-spin" />
+                          <span className="text-[11px] font-bold text-primary">
+                            {uploadCompressionInfo || "Şəkil sıxılır və yüklənir..."}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center gap-1 text-center">
+                          <div className="p-2 bg-primary/10 text-primary rounded-full">
+                            <Upload className="w-4 h-4" />
+                          </div>
+                          <span className="text-[11px] font-bold text-gray-700">
+                            Şəkil seçin və ya bura atın
+                          </span>
+                          <span className="text-[9px] text-gray-400 font-normal">
+                            Avtomatik WebP sıxılma • Max 10MB • Cloudflare R2 / CDN
+                          </span>
+                        </div>
+                      )}
+                    </label>
+                  </div>
+                ) : (
+                  <div>
+                    <input
+                      type="url"
+                      placeholder="https://example.com/mehsul.jpg"
+                      value={formData.imageUrl}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, imageUrl: e.target.value }))}
+                      className="w-full px-3 py-2 text-xs border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-white font-mono"
+                    />
+                    <span className="text-[9px] text-gray-400 block mt-1">
+                      İnternetdəki hazır şəkil linkini daxil edin.
+                    </span>
+                  </div>
+                )}
+              </div>
+
               <div className="space-y-1.5">
                 <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Məhsul adı *</label>
                 <input

@@ -30,7 +30,7 @@ export default function productRoutes(): Router {
       if (!await checkUserPermission(req, "staffCanManageCatalog")) {
         return res.status(403).json({ message: "Bu əməliyyat üçün səlahiyyətiniz yoxdur." });
       }
-      const { name, category, unit, description, barcode, trackingType, serialNumber, warrantyMonths, vendorId } = req.body;
+      const { name, category, unit, description, barcode, trackingType, serialNumber, warrantyMonths, vendorId, imageUrl } = req.body;
       if (!name) return res.status(400).json({ message: "Ad tələb olunur" });
 
       const normalizedNewName = normalizeName(name);
@@ -78,6 +78,7 @@ export default function productRoutes(): Router {
           trackingType: trackingType || "none",
           warrantyMonths: warrantyMonths ? parseInt(String(warrantyMonths)) : null,
           vendorId: vendorId ? parseInt(String(vendorId)) : null,
+          imageUrl: imageUrl || null,
         }).returning();
         const prod = productRows[0];
 
@@ -110,7 +111,7 @@ export default function productRoutes(): Router {
         return res.status(403).json({ message: "Bu əməliyyat üçün səlahiyyətiniz yoxdur." });
       }
       const id = parseInt(req.params.id);
-      const { name, category, unit, description, barcode, trackingType, warrantyMonths, isArchived, vendorId } = req.body;
+      const { name, category, unit, description, barcode, trackingType, warrantyMonths, isArchived, vendorId, imageUrl } = req.body;
 
       const currentProduct = await db.query.products.findFirst({ where: and(eq(schema.products.id, id), eq(schema.products.tenantId, req.tenantId)) });
       if (!currentProduct) return res.status(404).json({ message: "Məhsul tapılmadı" });
@@ -148,6 +149,7 @@ export default function productRoutes(): Router {
         warrantyMonths: warrantyMonths ? parseInt(String(warrantyMonths)) : null,
         isArchived: isArchived !== undefined ? parseInt(String(isArchived)) : undefined,
         vendorId: vendorId !== undefined ? (vendorId ? parseInt(String(vendorId)) : null) : undefined,
+        imageUrl: imageUrl !== undefined ? (imageUrl || null) : undefined,
       }).where(and(eq(schema.products.id, id), eq(schema.products.tenantId, req.tenantId))).returning();
 
       if (updated.length === 0) return res.status(404).json({ message: "Məhsul tapılmadı" });

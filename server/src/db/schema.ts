@@ -105,6 +105,7 @@ export const products = pgTable("products", {
   isArchived: integer("is_archived").notNull().default(0), // 0 = Active, 1 = Archived
   vendorId: integer("vendor_id").references(() => vendors.id, { onDelete: "set null" }),
   minStockLimit: doublePrecision("min_stock_limit").notNull().default(5.0),
+  imageUrl: text("image_url"),
 }, (table) => ({
   productsTenantBarcodeIdx: uniqueIndex("products_tenant_barcode_idx").on(table.tenantId, table.barcode)
 }));

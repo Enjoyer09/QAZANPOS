@@ -211,6 +211,7 @@ export default function publicApiRoutes(): Router {
           unit: p.unit || "ədəd",
           barcode: p.barcode || null,
           description: p.description || null,
+          imageUrl: p.imageUrl || null,
           inStock: currentStock > 0,
           stockQuantity: Math.max(0, currentStock),
         };
@@ -301,6 +302,7 @@ export default function publicApiRoutes(): Router {
         unit: product.unit || "ədəd",
         barcode: product.barcode || null,
         description: product.description || null,
+        imageUrl: product.imageUrl || null,
         inStock: currentStock > 0,
         stockQuantity: Math.max(0, currentStock),
       });

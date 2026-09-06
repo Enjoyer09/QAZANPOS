@@ -2142,6 +2142,7 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
         unit: p.unit || "ədəd",
         barcode: p.barcode || null,
         description: p.description || null,
+        imageUrl: p.imageUrl || null,
         inStock: (p.currentQuantity || 0) > 0,
         stockQuantity: Math.max(0, p.currentQuantity || 0),
       }));
@@ -2207,6 +2208,18 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
       status: "qəbul_edildi",
       createdAt: new Date().toISOString(),
       message: "Sifariş uğurla QAZANPOS sisteminə daxil edildi! (Demo rejimi)",
+    }, 201);
+  }
+
+  // 23. Product Image Upload Mock
+  if (path === "/api/upload/product-image" && method === "POST") {
+    const demoUrl = "https://images.unsplash.com/photo-1584269600464-37b1b58a9fe7?auto=format&fit=crop&w=400&q=80";
+    return jsonResponse({
+      success: true,
+      url: demoUrl,
+      storageType: "local",
+      size: 1024,
+      message: "Şəkil uğurla yükləndi! (Demo rejimi)",
     }, 201);
   }
 

@@ -13,6 +13,7 @@ import activityLogRoutes from "./activity-logs.js";
 import superRoutes from "./super.js";
 import apiKeysRoutes from "./apiKeys.js";
 import publicApiRoutes from "./publicApi.js";
+import uploadRoutes from "./upload.js";
 
 const router = Router();
 
@@ -38,6 +39,7 @@ router.use(activityLogRoutes());
 router.use(superRoutes());
 router.use(apiKeysRoutes());
 router.use(publicApiRoutes());
+router.use(uploadRoutes());
 
 export default router;
 
