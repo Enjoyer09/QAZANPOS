@@ -3,7 +3,7 @@ import rateLimit from "express-rate-limit";
 import { db } from "../db/index.js";
 import * as schema from "../db/schema.js";
 import { eq, and, sql, desc, inArray } from "drizzle-orm";
-import { fetchTenantStockMetrics, recordLedgerMovement } from "./helpers.js";
+import { fetchTenantStockMetrics } from "./helpers.js";
 
 interface PublicApiRequest extends Request {
   tenantId: number;
@@ -24,21 +24,31 @@ interface ProcessedOrderItem {
 export default function publicApiRoutes(): Router {
   const router = Router();
 
-  // ─── Rate Limiter ─────────────────────────────────────────────────────────
-  // [FIX-WARN1] 120 sorgu/deqiqe — DDoS-a qarsi qoruyur
+  // ─── Rate Limiter ──────────────────────────────────────────────────────────
+  // [FIX-WARN1] 120 sorğu/dəqiqə per API açarı (IP deyil!)
+  // [FIX-NEW2] keyGenerator API açarına görə — reverse proxy arxasında IP paylaşımı problemi yoxdur
   const publicApiLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 120,
     standardHeaders: true,
     legacyHeaders: false,
+    keyGenerator: (req: Request): string => {
+      // API açarı varsa onu istifadə et, yoxsa IP
+      const apiKey =
+        (req.headers["x-api-key"] as string) ||
+        (req.headers["x-auth-key"] as string) ||
+        (req.query.apiKey as string) ||
+        req.ip ||
+        "unknown";
+      return apiKey;
+    },
     message: {
       error: "Too Many Requests",
       message: "Çox sayda sorğu göndərdiniz. 1 dəqiqə sonra yenidən cəhd edin.",
     },
   });
 
-  // ─── Permissions Helper ───────────────────────────────────────────────────
-  // [FIX-WARN2] Permissions artiq hem saxlanilir hem yoxlanilir
+  // ─── Permissions Helper ────────────────────────────────────────────────────
   const hasPermission = (req: PublicApiRequest, required: string): boolean => {
     if (!req.apiKeyPermissions) return false;
     const perms = req.apiKeyPermissions.split(",").map((p) => p.trim());
@@ -46,8 +56,8 @@ export default function publicApiRoutes(): Router {
   };
 
   // ─── API Key Authentication Middleware ────────────────────────────────────
-  // [FIX-BUG1] resolveTenant skip edilir, bu middleware ozü tenant tapir
-  // [FIX-BUG2] ?tenant=slug fallback cixarildi — API acari mecburidir
+  // [FIX-BUG1] resolveTenant skip edilir, bu middleware özü tenant tapır
+  // [FIX-BUG2] ?tenant=slug fallback çıxarıldı — API açarı məcburidir
   const authenticatePublicApiKey = async (
     req: PublicApiRequest,
     res: Response,
@@ -96,7 +106,7 @@ export default function publicApiRoutes(): Router {
       req.tenantName = tenant.name;
       req.apiKeyPermissions = keyRecord.permissions;
 
-      // Async update lastUsedAt — cavab gecikmez
+      // Async lastUsedAt yeniləmə — cavab gecikmər
       db.update(schema.apiKeys)
         .set({ lastUsedAt: new Date().toISOString() })
         .where(eq(schema.apiKeys.id, keyRecord.id))
@@ -109,12 +119,12 @@ export default function publicApiRoutes(): Router {
     }
   };
 
-  // Apply rate limiter + auth to all routes
+  // Apply rate limiter + auth to all routes in this module
   router.use(publicApiLimiter);
   router.use(authenticatePublicApiKey);
 
   // --------------------------------------------------------------------------
-  // 1. GET /public/catalog
+  // 1. GET /public/catalog — Paginated catalog with live stock & search
   // --------------------------------------------------------------------------
   router.get("/public/catalog", async (req: PublicApiRequest, res: Response) => {
     try {
@@ -130,6 +140,7 @@ export default function publicApiRoutes(): Router {
 
       const { allProducts, metrics } = await fetchTenantStockMetrics(tenantId);
 
+      // Batch latest selling prices — 1 sorğu
       const maxSaleIds = db.select({
         productId: schema.saleItems.productId,
         maxId: sql`max(${schema.saleItems.id})`.as("max_id"),
@@ -204,7 +215,14 @@ export default function publicApiRoutes(): Router {
 
       res.json({
         store: { name: req.tenantName, slug: req.tenantSlug },
-        pagination: { total: totalItems, page, limit, totalPages, hasNextPage: page < totalPages, hasPrevPage: page > 1 },
+        pagination: {
+          total: totalItems,
+          page,
+          limit,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1,
+        },
         items,
       });
     } catch (error: any) {
@@ -213,7 +231,7 @@ export default function publicApiRoutes(): Router {
   });
 
   // --------------------------------------------------------------------------
-  // 2. GET /public/categories
+  // 2. GET /public/categories — Category list with product counts
   // --------------------------------------------------------------------------
   router.get("/public/categories", async (req: PublicApiRequest, res: Response) => {
     try {
@@ -240,7 +258,7 @@ export default function publicApiRoutes(): Router {
   });
 
   // --------------------------------------------------------------------------
-  // 3. GET /public/products/:id
+  // 3. GET /public/products/:id — Single product details
   // --------------------------------------------------------------------------
   router.get("/public/products/:id", async (req: PublicApiRequest, res: Response) => {
     try {
@@ -289,11 +307,11 @@ export default function publicApiRoutes(): Router {
   });
 
   // --------------------------------------------------------------------------
-  // 4. POST /public/orders
+  // 4. POST /public/orders — Online order ingestion from website
   // --------------------------------------------------------------------------
   router.post("/public/orders", async (req: PublicApiRequest, res: Response) => {
     try {
-      // [FIX-WARN2] Permissions check
+      // Permissions check
       if (!hasPermission(req, "write:orders")) {
         return res.status(403).json({
           error: "Forbidden",
@@ -308,7 +326,7 @@ export default function publicApiRoutes(): Router {
         return res.status(400).json({ error: "Sifarişdə ən az 1 məhsul olmalıdır" });
       }
 
-      // [FIX-BUG5] Item limit
+      // Item limit — DoS qoruması
       if (items.length > 50) {
         return res.status(400).json({ error: "Sifarişdə maksimum 50 məhsul ola bilər" });
       }
@@ -322,10 +340,14 @@ export default function publicApiRoutes(): Router {
         const pid = parseInt(item.productId);
         const qty = parseFloat(item.quantity);
         if (isNaN(pid) || pid <= 0 || isNaN(qty) || qty <= 0) {
-          return res.status(400).json({ error: `Yanlış məhsul ID və ya miqdar: ${JSON.stringify(item)}` });
+          return res.status(400).json({
+            error: `Yanlış məhsul ID və ya miqdar: ${JSON.stringify(item)}`,
+          });
         }
         if (item.salePrice !== undefined && parseFloat(item.salePrice) < 0) {
-          return res.status(400).json({ error: `Mənfi qiymət qəbul edilmir: ${JSON.stringify(item)}` });
+          return res.status(400).json({
+            error: `Mənfi qiymət qəbul edilmir: ${JSON.stringify(item)}`,
+          });
         }
       }
 
@@ -350,7 +372,7 @@ export default function publicApiRoutes(): Router {
         customerRecord = newCust;
       }
 
-      // 2. Resolve default warehouse — [FIX-WARN3] fail explicitly
+      // 2. Resolve default warehouse — explicit fail, no wrong-tenant fallback
       const defaultWarehouse = await db.query.warehouses.findFirst({
         where: and(eq(schema.warehouses.tenantId, tenantId), eq(schema.warehouses.isDefault, 1)),
       });
@@ -362,7 +384,7 @@ export default function publicApiRoutes(): Router {
       }
       const warehouseId = defaultWarehouse.id;
 
-      // 3. [FIX-BUG4] Batch product lookup — 1 sorgu
+      // 3. Batch product lookup — N+1 əvəzinə 1 sorğu
       const productIds = items.map((i: any) => parseInt(i.productId));
 
       const productsInDb = await db.query.products.findMany({
@@ -374,7 +396,7 @@ export default function publicApiRoutes(): Router {
       });
       const productsMap = new Map(productsInDb.map((p) => [p.id, p]));
 
-      // 4. [FIX-BUG4] Batch latest sale prices — 1 sorgu
+      // 4. Batch latest sale prices — 1 sorğu
       const maxSalePriceIds = db.select({
         productId: schema.saleItems.productId,
         maxId: sql`max(${schema.saleItems.id})`.as("max_id"),
@@ -394,7 +416,7 @@ export default function publicApiRoutes(): Router {
       // 5. Stock metrics
       const { metrics } = await fetchTenantStockMetrics(tenantId);
 
-      // 6. Process items + [FIX-BUG3] Stock availability check
+      // 6. Process items + stock availability check (collect ALL errors before rejecting)
       let calculatedTotal = 0;
       let calculatedCost = 0;
       const processedItems: ProcessedOrderItem[] = [];
@@ -406,14 +428,18 @@ export default function publicApiRoutes(): Router {
 
         const prod = productsMap.get(pid);
         if (!prod) {
-          return res.status(400).json({ error: `ID: ${pid} nömrəli məhsul tapılmadı və ya arxivlənib` });
+          return res.status(400).json({
+            error: `ID: ${pid} nömrəli məhsul tapılmadı və ya arxivlənib`,
+          });
         }
 
         const m = metrics.get(prod.id);
         const currentStock = m ? m.currentQuantity : 0;
 
         if (currentStock < qty) {
-          stockErrors.push(`"${prod.name}": stokda ${currentStock.toFixed(2)} var, ${qty} sifariş edildi`);
+          stockErrors.push(
+            `"${prod.name}": stokda ${currentStock.toFixed(2)} var, ${qty} sifariş edildi`
+          );
         }
 
         const defaultPrice = salePricesMap.get(prod.id) ?? (m?.nextUnitCost || 0);
@@ -439,7 +465,10 @@ export default function publicApiRoutes(): Router {
         });
       }
 
-      // 7. Save sale + ledger in a single transaction
+      // 7. Save sale + ledger in a single atomic transaction
+      // [FIX-NEW1] Ledger birbaşa tx.insert ilə yazılır — recordLedgerMovement helper
+      // xətanı udur (catch+log without re-throw), bu isə tranzaksiyanı pozur.
+      // Birbaşa tx.insert() xəta olsa tranzaksiyanı ROLLBACK edir.
       const orderResult = await db.transaction(async (tx) => {
         const [sale] = await tx.insert(schema.sales).values({
           tenantId,
@@ -449,13 +478,14 @@ export default function publicApiRoutes(): Router {
           totalAmount: calculatedTotal,
           totalCost: calculatedCost,
           paymentType: paymentType || "Vebsayt Sifarişi",
-          paymentStatus: "unpaid",
+          paymentStatus: "unpaid", // Online order — ödəniş sonradan təsdiqlənir
           salesChannel: "Vebsayt",
           saleDate: new Date().toISOString(),
           notes: notes ? `[Vebsayt Sifarişi] ${notes}` : "[Vebsayt Sifarişi]",
         }).returning();
 
         for (const it of processedItems) {
+          // Sifariş itemini yaz
           await tx.insert(schema.saleItems).values({
             tenantId,
             saleId: sale.id,
@@ -465,11 +495,12 @@ export default function publicApiRoutes(): Router {
             purchasePrice: it.purchasePrice,
           });
 
-          await recordLedgerMovement(tx, {
+          // [FIX-NEW1] Inventory ledger — birbaşa tx.insert, xəta tranzaksiyanı rollback edir
+          await tx.insert(schema.inventoryLedger).values({
             tenantId,
             productId: it.productId,
             warehouseId,
-            quantity: -it.quantity,
+            quantity: -it.quantity,          // mənfi — stokdan çıxma
             movementType: "sale",
             referenceType: "sale",
             referenceId: sale.id,
@@ -477,9 +508,11 @@ export default function publicApiRoutes(): Router {
             username: `Vebsayt (${req.apiKeyName || "API"})`,
             unitPrice: it.salePrice,
             notes: `Vebsayt Sifarişi #${sale.id}`,
+            createdAt: new Date().toISOString(),
           });
         }
 
+        // Aktivlik jurnalı
         await tx.insert(schema.activityLogs).values({
           tenantId,
           username: "Vebsayt Botu",

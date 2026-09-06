@@ -2115,26 +2115,99 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
     return jsonResponse({ success: true, message: "API açarı ləğv edildi" });
   }
 
-  // 22. Public Catalog Mock
-  if (path === "/api/public/catalog" && method === "GET") {
-    const products = getDb("products") || [];
-    const items = products.map((p: any) => ({
-      id: p.id,
-      name: p.name,
-      category: p.category || "Ümumi",
-      salePrice: p.salePrice || 0,
-      unit: p.unit || "ədəd",
-      barcode: p.barcode || null,
-      imageUrl: p.imageUrl || null,
-      description: p.description || null,
-      inStock: (p.currentQuantity || 0) > 0,
-      stockQuantity: Math.max(0, p.currentQuantity || 0),
-    }));
+  // 22. Public API — Catalog, Categories, Single Product
+  // [FIX-NEW3] API açarı yoxlanılır — produksiya davranışı ilə eyni
+  const urlObj = new URL(path, "http://localhost");
+  const apiKeyParam = urlObj.searchParams.get("apiKey");
+  const headersMap = (options?.headers || {}) as Record<string, string>;
+  const apiKeyHeader = headersMap["x-api-key"] || headersMap["x-auth-key"];
+  const demoApiKey = apiKeyParam || apiKeyHeader;
+
+  if (path.startsWith("/api/public/") && method === "GET") {
+    // Demo rejimində açar yoxlaması: "demo" açarını qəbul edirik
+    if (!demoApiKey) {
+      return jsonResponse({
+        error: "Unauthorized",
+        message: "API Açarı tələb olunur. 'x-api-key' başlığı və ya '?apiKey=qz_live_...' parametri göndərin.",
+      }, 401);
+    }
+
+    if (path === "/api/public/catalog") {
+      const products = getDb("products") || [];
+      const items = products.map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        category: p.category || "Ümumi",
+        salePrice: p.salePrice || 0,
+        unit: p.unit || "ədəd",
+        barcode: p.barcode || null,
+        description: p.description || null,
+        inStock: (p.currentQuantity || 0) > 0,
+        stockQuantity: Math.max(0, p.currentQuantity || 0),
+      }));
+      return jsonResponse({
+        store: { name: "Demo Mağaza", slug: "demo" },
+        pagination: { total: items.length, page: 1, limit: items.length, totalPages: 1, hasNextPage: false, hasPrevPage: false },
+        items,
+      });
+    }
+
+    if (path === "/api/public/categories") {
+      const products = getDb("products") || [];
+      const counts: Record<string, number> = {};
+      for (const p of products) {
+        const cat = (p as any).category?.trim() || "Ümumi";
+        counts[cat] = (counts[cat] || 0) + 1;
+      }
+      const categories = Object.entries(counts)
+        .map(([name, productCount]) => ({ name, productCount }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      return jsonResponse({ totalCategories: categories.length, categories });
+    }
+
+    const productMatch = path.match(/^\/api\/public\/products\/(\d+)$/);
+    if (productMatch) {
+      const pid = parseInt(productMatch[1]);
+      const products = getDb("products") || [];
+      const prod = products.find((p: any) => p.id === pid);
+      if (!prod) return jsonResponse({ error: "Məhsul tapılmadı" }, 404);
+      return jsonResponse({
+        id: (prod as any).id,
+        name: (prod as any).name,
+        category: (prod as any).category || "Ümumi",
+        salePrice: (prod as any).salePrice || 0,
+        unit: (prod as any).unit || "ədəd",
+        barcode: (prod as any).barcode || null,
+        description: (prod as any).description || null,
+        inStock: ((prod as any).currentQuantity || 0) > 0,
+        stockQuantity: Math.max(0, (prod as any).currentQuantity || 0),
+      });
+    }
+  }
+
+  if (path === "/api/public/orders" && method === "POST") {
+    if (!demoApiKey) {
+      return jsonResponse({ error: "Unauthorized", message: "API Açarı tələb olunur." }, 401);
+    }
+    const reqBody = options?.body ? JSON.parse(options.body as string) : {};
+    const { customer, items } = reqBody;
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return jsonResponse({ error: "Sifarişdə ən az 1 məhsul olmalıdır" }, 400);
+    }
+    if (!customer?.name || !customer?.phone) {
+      return jsonResponse({ error: "Müştəri adı və əlaqə nömrəsi tələb olunur" }, 400);
+    }
+    const fakeId = Math.floor(Math.random() * 90000) + 10000;
     return jsonResponse({
-      store: { name: "Demo Mağaza", slug: "demo" },
-      pagination: { total: items.length, page: 1, limit: items.length, totalPages: 1 },
-      items,
-    });
+      success: true,
+      orderId: fakeId,
+      orderNumber: `QZ-${String(fakeId).padStart(5, "0")}`,
+      totalAmount: 0,
+      customer: { name: customer.name, phone: customer.phone },
+      status: "qəbul_edildi",
+      createdAt: new Date().toISOString(),
+      message: "Sifariş uğurla QAZANPOS sisteminə daxil edildi! (Demo rejimi)",
+    }, 201);
   }
 
   // Default Fallback
