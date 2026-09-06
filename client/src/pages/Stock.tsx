@@ -589,7 +589,7 @@ export default function Stock() {
                     <th className="py-3 px-3 sm:px-4 text-right hidden lg:table-cell">Ümumi Dəyər</th>
                     <th className="py-3 px-3 sm:px-4 text-right hidden sm:table-cell">Son Satış Qiyməti</th>
                     <th className="py-3 px-3 sm:px-4 text-right hidden 2xl:table-cell">Mənfəət Marjası</th>
-                    <th className="py-3 px-3 sm:px-4 text-right sm:text-left sticky right-0 bg-gray-50/95 backdrop-blur-xs shadow-[-6px_0_12px_rgba(0,0,0,0.05)] z-10 whitespace-nowrap min-w-[120px]">Əməliyyat</th>
+                    <th className="py-3 px-3 sm:px-4 text-right sm:text-left">Əməliyyat</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -702,7 +702,7 @@ export default function Stock() {
                               return <span className="text-gray-300">—</span>;
                             })()}
                           </td>
-                          <td className="py-2.5 sm:py-3 px-3 sm:px-4 sticky right-0 bg-white/95 group-hover:bg-gray-50/80 backdrop-blur-xs shadow-[-6px_0_12px_rgba(0,0,0,0.05)] z-10 whitespace-nowrap">
+                          <td className="py-2.5 sm:py-3 px-3 sm:px-4">
                             <div className="flex items-center gap-1.5 flex-wrap justify-end sm:justify-start">
                               {item.currentQuantity > 0 && settings?.multiWarehouseEnabled === 1 ? (
                                 <button

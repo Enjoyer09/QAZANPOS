@@ -571,7 +571,7 @@ export default function Expenses() {
                     <th className="py-3 px-3 sm:px-4 hidden md:table-cell">Açıqlama</th>
                     <th className="py-3 px-3 sm:px-4 hidden sm:table-cell">Tarix</th>
                     <th className="py-3 px-3 sm:px-4 text-right">Məbləğ</th>
-                    <th className="py-3 px-3 sm:px-4 w-12 text-right pr-4 sticky right-0 bg-gray-50/95 backdrop-blur-xs shadow-[-6px_0_12px_rgba(0,0,0,0.05)] z-10 whitespace-nowrap"></th>
+                    <th className="py-3 px-3 sm:px-4 w-12 text-right pr-4"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -614,7 +614,7 @@ export default function Expenses() {
                         <td className="py-3 px-3 sm:px-4 text-right font-mono font-bold text-gray-900">
                           {parseFloat(String(item.amount)).toFixed(2)} ₼
                         </td>
-                        <td className="py-3 px-3 sm:px-4 text-right pr-4 sticky right-0 bg-white/95 group-hover:bg-gray-50/80 backdrop-blur-xs shadow-[-6px_0_12px_rgba(0,0,0,0.05)] z-10 whitespace-nowrap">
+                        <td className="py-3 px-3 sm:px-4 text-right pr-4">
                           <button
                             onClick={() => deleteMutation.mutate(item.id)}
                             disabled={deleteMutation.isPending}

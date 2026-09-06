@@ -657,7 +657,7 @@ export default function Products() {
                   <th className="py-3 px-2.5 sm:px-3.5 hidden md:table-cell">Kateqoriya</th>
                   <th className="py-3 px-2.5 sm:px-3.5 hidden lg:table-cell">Ölçü Vahidi</th>
                   <th className="py-3 px-2.5 sm:px-3.5 hidden xl:table-cell">Tədarükçü</th>
-                  <th className="py-3 px-3 sm:px-4 text-right pr-4 sm:pr-6 sticky right-0 bg-gray-50/95 backdrop-blur-xs shadow-[-6px_0_12px_rgba(0,0,0,0.05)] z-10 min-w-[120px] sm:min-w-[150px] whitespace-nowrap">
+                  <th className="py-3 px-2.5 sm:px-4 text-right pr-3 sm:pr-6 whitespace-nowrap">
                     Əməliyyatlar
                   </th>
                 </tr>
@@ -742,7 +742,7 @@ export default function Products() {
                             "—"
                           )}
                         </td>
-                        <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-right pr-4 sm:pr-6 sticky right-0 bg-white/95 group-hover:bg-gray-50/80 backdrop-blur-xs shadow-[-6px_0_12px_rgba(0,0,0,0.05)] z-10 whitespace-nowrap">
+                        <td className="py-2.5 sm:py-3 px-2.5 sm:px-4 text-right pr-3 sm:pr-6 whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1 sm:gap-1.5">
                             {item.isArchived === 1 ? (
                               <button

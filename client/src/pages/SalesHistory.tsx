@@ -746,12 +746,12 @@ export default function SalesHistory() {
                     <th className="py-3 px-3 sm:px-4 pl-4 sm:pl-6 text-center w-14 sm:w-16">Qaimə №</th>
                     <th className="py-3 px-3 sm:px-4 min-w-[150px]">Müştəri</th>
                     <th className="py-3 px-3 sm:px-4 hidden sm:table-cell">Tarix</th>
-                    <th className="py-3 px-3 sm:px-4 text-center hidden lg:table-cell">Satıcı</th>
+                    <th className="py-3 px-3 sm:px-4 text-center hidden xl:table-cell">Satıcı</th>
                     <th className="py-3 px-3 sm:px-4 text-center hidden md:table-cell">Ödəniş Üsulu</th>
                     <th className="py-3 px-3 sm:px-4 text-right">Məbləğ</th>
-                    {isAdmin && <th className="py-3 px-3 sm:px-4 text-right hidden xl:table-cell">Mənfəət</th>}
+                    {isAdmin && <th className="py-3 px-3 sm:px-4 text-right hidden 2xl:table-cell">Mənfəət</th>}
                     <th className="py-3 px-3 sm:px-4 text-center">Vəziyyət</th>
-                    <th className="py-3 px-3 sm:px-4 text-right pr-4 sm:pr-6 w-16 sm:w-20 sticky right-0 bg-gray-50/95 backdrop-blur-xs shadow-[-6px_0_12px_rgba(0,0,0,0.05)] z-10 whitespace-nowrap"></th>
+                    <th className="py-3 px-2 sm:px-4 text-right pr-3 sm:pr-6"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -804,7 +804,7 @@ export default function SalesHistory() {
                             {new Date(sale.saleDate).toLocaleDateString("az-AZ")} |{" "}
                             {new Date(sale.saleDate).toLocaleTimeString("az-AZ", { hour: "2-digit", minute: "2-digit" })}
                           </td>
-                          <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-center hidden lg:table-cell">
+                          <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-center hidden xl:table-cell">
                             <span className="px-2.5 py-1 bg-gray-100 rounded-lg text-gray-700 text-[10.5px] font-black">
                               {sale.sellerName || "Sistem"}
                             </span>
@@ -829,6 +829,11 @@ export default function SalesHistory() {
                           </td>
                           <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-right font-mono">
                             <span className="font-bold text-gray-955 block">{Number(netAmount).toFixed(2)} ₼</span>
+                            {isAdmin && (
+                              <span className={`text-[10px] font-bold block mt-0.5 2xl:hidden ${profit >= 0 ? "text-green-600" : "text-red-500"}`}>
+                                {profit >= 0 ? "+" : ""}{Number(profit).toFixed(2)} ₼
+                              </span>
+                            )}
                             {returned > 0 && (
                               <span className="text-[10px] text-amber-600 font-bold block mt-0.5" title={`İlkin: ${Number(sale.totalAmount).toFixed(2)} ₼`}>
                                 Qaytarılıb: -{Number(returned).toFixed(2)} ₼
@@ -836,7 +841,7 @@ export default function SalesHistory() {
                             )}
                           </td>
                           {isAdmin && (
-                            <td className={`py-2.5 sm:py-3 px-3 sm:px-4 text-right font-bold font-mono hidden xl:table-cell ${profit >= 0 ? "text-green-600" : "text-red-500"}`}>
+                            <td className={`py-2.5 sm:py-3 px-3 sm:px-4 text-right font-bold font-mono hidden 2xl:table-cell ${profit >= 0 ? "text-green-600" : "text-red-500"}`}>
                               {profit >= 0 ? "+" : ""}
                               {Number(profit).toFixed(2)} ₼
                             </td>
@@ -854,11 +859,11 @@ export default function SalesHistory() {
                                 : (sale.paymentType === "Nisyə" ? "Nisyə" : "Ödənilməyib")}
                             </span>
                           </td>
-                          <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-right pr-4 sm:pr-6 sticky right-0 bg-white/95 group-hover:bg-gray-50/80 backdrop-blur-xs shadow-[-6px_0_12px_rgba(0,0,0,0.05)] z-10 whitespace-nowrap">
-                            <div className="flex items-center justify-end gap-1.5">
+                          <td className="py-2.5 sm:py-3 px-2 sm:px-4 text-right pr-3 sm:pr-6 whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-1 sm:gap-1.5">
                               <button
                                 onClick={() => setDrawerSale(sale)}
-                                className="p-2 border border-gray-100 hover:border-gray-200 text-gray-500 hover:text-primary rounded-xl cursor-pointer bg-white transition-all shadow-2xs"
+                                className="p-1.5 sm:p-2 border border-gray-100 hover:border-gray-200 text-gray-500 hover:text-primary rounded-xl cursor-pointer bg-white transition-all shadow-2xs"
                                 title="Sürətli Çek Baxışı"
                               >
                                 <Eye className="w-3.5 h-3.5" />
@@ -867,7 +872,7 @@ export default function SalesHistory() {
                               {getSaleReturnableQty(sale) > 0 && (
                                 <button
                                   onClick={() => handleInitiateReturn(sale)}
-                                  className="p-2 border border-red-100 hover:border-red-200 text-red-500 hover:text-red-700 hover:bg-red-50/30 rounded-xl cursor-pointer bg-white transition-all"
+                                  className="p-1.5 sm:p-2 border border-red-100 hover:border-red-200 text-red-500 hover:text-red-700 hover:bg-red-50/30 rounded-xl cursor-pointer bg-white transition-all shadow-2xs"
                                   title="Geri Qaytar"
                                 >
                                   <RotateCcw className="w-3.5 h-3.5" />
@@ -876,7 +881,7 @@ export default function SalesHistory() {
                               {isAdmin && (
                                 <button
                                   onClick={() => handleOpenEdit(sale)}
-                                  className="p-2 border border-indigo-100 hover:border-indigo-300 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50/40 rounded-xl cursor-pointer bg-white transition-all"
+                                  className="p-1.5 sm:p-2 border border-indigo-100 hover:border-indigo-300 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50/40 rounded-xl cursor-pointer bg-white transition-all shadow-2xs"
                                   title="Satışı Redaktə Et"
                                 >
                                   <Pencil className="w-3.5 h-3.5" />
@@ -888,7 +893,7 @@ export default function SalesHistory() {
                                     setSelectedSaleForVoid(sale);
                                     setShowVoidConfirm(true);
                                   }}
-                                  className="p-2 border border-gray-100 hover:border-red-200 text-gray-400 hover:text-red-600 hover:bg-red-50/30 rounded-xl cursor-pointer bg-white transition-all"
+                                  className="p-1.5 sm:p-2 border border-gray-100 hover:border-red-200 text-gray-400 hover:text-red-600 hover:bg-red-50/30 rounded-xl cursor-pointer bg-white transition-all shadow-2xs"
                                   title="Satışı Ləğv Et"
                                 >
                                   <XCircle className="w-3.5 h-3.5" />
