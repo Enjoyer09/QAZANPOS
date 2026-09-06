@@ -18,6 +18,7 @@
     "cors": "^2.8.5",
     "drizzle-orm": "^0.30.10",
     "express": "^4.19.2",
+    "express-rate-limit": "^8.7.0",
     "postgres": "^3.4.9",
     "resend": "^6.17.1"
   },

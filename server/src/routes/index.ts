@@ -16,8 +16,12 @@ import publicApiRoutes from "./publicApi.js";
 
 const router = Router();
 
-// Global middleware
-router.use(resolveTenant);
+// Global middleware — skip tenant resolution for public API routes
+// (those routes resolve tenant themselves via API key)
+router.use((req, res, next) => {
+  if (req.path.startsWith("/public/")) return next();
+  return resolveTenant(req as any, res, next);
+});
 router.use(authenticate);
 
 // Mount all route modules

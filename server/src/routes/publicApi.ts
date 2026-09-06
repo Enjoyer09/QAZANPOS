@@ -1,7 +1,8 @@
 import { Router, Request, Response, NextFunction } from "express";
+import rateLimit from "express-rate-limit";
 import { db } from "../db/index.js";
 import * as schema from "../db/schema.js";
-import { eq, and, sql, desc, asc, ilike, or } from "drizzle-orm";
+import { eq, and, sql, desc, inArray } from "drizzle-orm";
 import { fetchTenantStockMetrics, recordLedgerMovement } from "./helpers.js";
 
 interface PublicApiRequest extends Request {
@@ -9,8 +10,8 @@ interface PublicApiRequest extends Request {
   apiKeyName?: string;
   tenantSlug: string;
   tenantName?: string;
+  apiKeyPermissions?: string;
 }
-
 
 interface ProcessedOrderItem {
   productId: number;
@@ -23,10 +24,36 @@ interface ProcessedOrderItem {
 export default function publicApiRoutes(): Router {
   const router = Router();
 
-  // Middleware: Authenticate via API Key or Tenant Slug
-  const authenticatePublicApiKey = async (req: PublicApiRequest, res: Response, next: NextFunction) => {
+  // ─── Rate Limiter ─────────────────────────────────────────────────────────
+  // [FIX-WARN1] 120 sorgu/deqiqe — DDoS-a qarsi qoruyur
+  const publicApiLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 120,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+      error: "Too Many Requests",
+      message: "Çox sayda sorğu göndərdiniz. 1 dəqiqə sonra yenidən cəhd edin.",
+    },
+  });
+
+  // ─── Permissions Helper ───────────────────────────────────────────────────
+  // [FIX-WARN2] Permissions artiq hem saxlanilir hem yoxlanilir
+  const hasPermission = (req: PublicApiRequest, required: string): boolean => {
+    if (!req.apiKeyPermissions) return false;
+    const perms = req.apiKeyPermissions.split(",").map((p) => p.trim());
+    return perms.includes(required) || perms.includes("*");
+  };
+
+  // ─── API Key Authentication Middleware ────────────────────────────────────
+  // [FIX-BUG1] resolveTenant skip edilir, bu middleware ozü tenant tapir
+  // [FIX-BUG2] ?tenant=slug fallback cixarildi — API acari mecburidir
+  const authenticatePublicApiKey = async (
+    req: PublicApiRequest,
+    res: Response,
+    next: NextFunction
+  ) => {
     try {
-      // 1. Try to read API Key from headers or query
       const apiKeyHeader = (req.headers["x-api-key"] || req.headers["x-auth-key"]) as string | undefined;
       const authHeader = req.headers["authorization"];
       const bearerKey = authHeader?.startsWith("Bearer qz_") ? authHeader.substring(7) : undefined;
@@ -34,74 +61,60 @@ export default function publicApiRoutes(): Router {
 
       const rawKey = apiKeyHeader || bearerKey || queryKey;
 
-      if (rawKey) {
-        const keyRecord = await db.query.apiKeys.findFirst({
-          where: and(eq(schema.apiKeys.key, rawKey.trim()), eq(schema.apiKeys.isActive, 1)),
+      if (!rawKey) {
+        return res.status(401).json({
+          error: "Unauthorized",
+          message: "API Açarı tələb olunur. 'x-api-key' başlığı və ya '?apiKey=qz_live_...' parametri göndərin.",
         });
-
-        if (!keyRecord) {
-          return res.status(401).json({
-            error: "Unauthorized",
-            message: "Təqdim edilən API açarı etibarsızdır və ya ləğv edilib.",
-          });
-        }
-
-        // Check tenant status
-        const tenant = await db.query.tenants.findFirst({
-          where: eq(schema.tenants.id, keyRecord.tenantId),
-        });
-
-        if (!tenant || tenant.status === "suspended") {
-          return res.status(403).json({
-            error: "Forbidden",
-            message: "Bu mağaza hesabı aktiv deyil və ya dayandırılıb.",
-          });
-        }
-
-        req.tenantId = keyRecord.tenantId;
-        req.apiKeyName = keyRecord.name;
-        req.tenantSlug = tenant.slug;
-        req.tenantName = tenant.name;
-
-        // Async update lastUsedAt in background
-        db.update(schema.apiKeys)
-          .set({ lastUsedAt: new Date().toISOString() })
-          .where(eq(schema.apiKeys.id, keyRecord.id))
-          .catch(() => {});
-
-        return next();
       }
 
-      // 2. Fallback: Check if public read-only query param `?tenant=slug` is provided
-      const tenantSlugQuery = (req.query.tenant || req.headers["x-tenant-slug"]) as string | undefined;
-      if (tenantSlugQuery && req.method === "GET") {
-        const tenant = await db.query.tenants.findFirst({
-          where: eq(schema.tenants.slug, tenantSlugQuery.trim().toLowerCase()),
-        });
-
-        if (tenant && tenant.status !== "suspended") {
-          req.tenantId = tenant.id;
-          req.tenantSlug = tenant.slug;
-          req.tenantName = tenant.name;
-          return next();
-        }
-      }
-
-      return res.status(401).json({
-        error: "Unauthorized",
-        message: "API Açarı tələb olunur. 'x-api-key' başlığı və ya '?apiKey=qz_live_...' parametri göndərin.",
+      const keyRecord = await db.query.apiKeys.findFirst({
+        where: and(eq(schema.apiKeys.key, rawKey.trim()), eq(schema.apiKeys.isActive, 1)),
       });
+
+      if (!keyRecord) {
+        return res.status(401).json({
+          error: "Unauthorized",
+          message: "Təqdim edilən API açarı etibarsızdır və ya ləğv edilib.",
+        });
+      }
+
+      const tenant = await db.query.tenants.findFirst({
+        where: eq(schema.tenants.id, keyRecord.tenantId),
+      });
+
+      if (!tenant || tenant.status === "suspended") {
+        return res.status(403).json({
+          error: "Forbidden",
+          message: "Bu mağaza hesabı aktiv deyil və ya dayandırılıb.",
+        });
+      }
+
+      req.tenantId = keyRecord.tenantId;
+      req.apiKeyName = keyRecord.name;
+      req.tenantSlug = tenant.slug;
+      req.tenantName = tenant.name;
+      req.apiKeyPermissions = keyRecord.permissions;
+
+      // Async update lastUsedAt — cavab gecikmez
+      db.update(schema.apiKeys)
+        .set({ lastUsedAt: new Date().toISOString() })
+        .where(eq(schema.apiKeys.id, keyRecord.id))
+        .catch(() => {});
+
+      return next();
     } catch (err: any) {
       console.error("Public API Auth Error:", err);
       res.status(500).json({ error: "Internal Server Error", message: err.message });
     }
   };
 
-  // Apply Public Auth Middleware to all routes in this module
+  // Apply rate limiter + auth to all routes
+  router.use(publicApiLimiter);
   router.use(authenticatePublicApiKey);
 
   // --------------------------------------------------------------------------
-  // 1. GET /public/catalog - Paginated catalog with live stock & search
+  // 1. GET /public/catalog
   // --------------------------------------------------------------------------
   router.get("/public/catalog", async (req: PublicApiRequest, res: Response) => {
     try {
@@ -115,51 +128,52 @@ export default function publicApiRoutes(): Router {
       const inStockOnly = req.query.inStockOnly === "true" || req.query.inStockOnly === "1";
       const sortBy = (req.query.sortBy as string) || "name_asc";
 
-      // 1. Fetch live stock metrics
       const { allProducts, metrics } = await fetchTenantStockMetrics(tenantId);
 
-      // Latest selling prices
       const maxSaleIds = db.select({
         productId: schema.saleItems.productId,
-        maxId: sql`max(${schema.saleItems.id})`.as("max_id")
-      }).from(schema.saleItems).where(eq(schema.saleItems.tenantId, tenantId))
-        .groupBy(schema.saleItems.productId).as("max_sale_ids");
+        maxId: sql`max(${schema.saleItems.id})`.as("max_id"),
+      }).from(schema.saleItems)
+        .where(eq(schema.saleItems.tenantId, tenantId))
+        .groupBy(schema.saleItems.productId)
+        .as("max_sale_ids");
 
       const latestSales = await db.select({
-        productId: schema.saleItems.productId, price: schema.saleItems.salePrice
+        productId: schema.saleItems.productId,
+        price: schema.saleItems.salePrice,
       }).from(schema.saleItems).innerJoin(maxSaleIds, eq(schema.saleItems.id, maxSaleIds.maxId));
 
       const latestSalesMap = new Map<number, number>();
-      latestSales.forEach(s => latestSalesMap.set(s.productId, s.price));
+      latestSales.forEach((s) => latestSalesMap.set(s.productId, s.price));
 
-      // 2. Filter products
-      let filtered = allProducts.filter(p => p.isArchived === 0);
+      let filtered = allProducts.filter((p) => p.isArchived === 0);
 
       if (categoryFilter && categoryFilter.trim() !== "") {
-        filtered = filtered.filter(p => p.category?.toLowerCase() === categoryFilter.trim().toLowerCase());
+        filtered = filtered.filter(
+          (p) => p.category?.toLowerCase() === categoryFilter.trim().toLowerCase()
+        );
       }
 
       if (searchQuery && searchQuery.trim() !== "") {
         const term = searchQuery.trim().toLowerCase();
-        filtered = filtered.filter(p => 
-          p.name.toLowerCase().includes(term) ||
-          (p.barcode && p.barcode.toLowerCase().includes(term)) ||
-          (p.category && p.category.toLowerCase().includes(term))
+        filtered = filtered.filter(
+          (p) =>
+            p.name.toLowerCase().includes(term) ||
+            (p.barcode && p.barcode.toLowerCase().includes(term)) ||
+            (p.category && p.category.toLowerCase().includes(term))
         );
       }
 
       if (inStockOnly) {
-        filtered = filtered.filter(p => {
+        filtered = filtered.filter((p) => {
           const m = metrics.get(p.id);
           return m && m.currentQuantity > 0;
         });
       }
 
-      // Sort
       filtered.sort((a, b) => {
         const priceA = latestSalesMap.get(a.id) || metrics.get(a.id)?.nextUnitCost || 0;
         const priceB = latestSalesMap.get(b.id) || metrics.get(b.id)?.nextUnitCost || 0;
-
         if (sortBy === "price_asc") return priceA - priceB;
         if (sortBy === "price_desc") return priceB - priceA;
         if (sortBy === "name_desc") return b.name.localeCompare(a.name);
@@ -171,17 +185,15 @@ export default function publicApiRoutes(): Router {
       const totalPages = Math.ceil(totalItems / limit);
       const paginatedProducts = filtered.slice(offset, offset + limit);
 
-      // Clean, e-commerce friendly output
-      const items = paginatedProducts.map(p => {
+      const items = paginatedProducts.map((p) => {
         const m = metrics.get(p.id);
         const currentStock = m ? m.currentQuantity : 0;
         const salePrice = latestSalesMap.get(p.id) || (m ? m.nextUnitCost : 0);
-
         return {
           id: p.id,
           name: p.name,
           category: p.category || "Ümumi",
-          salePrice: salePrice,
+          salePrice,
           unit: p.unit || "ədəd",
           barcode: p.barcode || null,
           description: p.description || null,
@@ -191,18 +203,8 @@ export default function publicApiRoutes(): Router {
       });
 
       res.json({
-        store: {
-          name: req.tenantName,
-          slug: req.tenantSlug,
-        },
-        pagination: {
-          total: totalItems,
-          page,
-          limit,
-          totalPages,
-          hasNextPage: page < totalPages,
-          hasPrevPage: page > 1,
-        },
+        store: { name: req.tenantName, slug: req.tenantSlug },
+        pagination: { total: totalItems, page, limit, totalPages, hasNextPage: page < totalPages, hasPrevPage: page > 1 },
         items,
       });
     } catch (error: any) {
@@ -211,14 +213,14 @@ export default function publicApiRoutes(): Router {
   });
 
   // --------------------------------------------------------------------------
-  // 2. GET /public/categories - List categories with item counts
+  // 2. GET /public/categories
   // --------------------------------------------------------------------------
   router.get("/public/categories", async (req: PublicApiRequest, res: Response) => {
     try {
       const tenantId = req.tenantId!;
-      const productsList = await db.select({
-        category: schema.products.category,
-      }).from(schema.products)
+      const productsList = await db
+        .select({ category: schema.products.category })
+        .from(schema.products)
         .where(and(eq(schema.products.tenantId, tenantId), eq(schema.products.isArchived, 0)));
 
       const counts = new Map<string, number>();
@@ -227,22 +229,18 @@ export default function publicApiRoutes(): Router {
         counts.set(cat, (counts.get(cat) || 0) + 1);
       }
 
-      const categories = Array.from(counts.entries()).map(([name, count]) => ({
-        name,
-        productCount: count,
-      })).sort((a, b) => a.name.localeCompare(b.name));
+      const categories = Array.from(counts.entries())
+        .map(([name, count]) => ({ name, productCount: count }))
+        .sort((a, b) => a.name.localeCompare(b.name));
 
-      res.json({
-        totalCategories: categories.length,
-        categories,
-      });
+      res.json({ totalCategories: categories.length, categories });
     } catch (error: any) {
       res.status(500).json({ error: "Kateqoriyalar gətirilərkən xəta: " + error.message });
     }
   });
 
   // --------------------------------------------------------------------------
-  // 3. GET /public/products/:id - Single product details
+  // 3. GET /public/products/:id
   // --------------------------------------------------------------------------
   router.get("/public/products/:id", async (req: PublicApiRequest, res: Response) => {
     try {
@@ -258,17 +256,17 @@ export default function publicApiRoutes(): Router {
         ),
       });
 
-      if (!product) {
-        return res.status(404).json({ error: "Məhsul tapılmadı" });
-      }
+      if (!product) return res.status(404).json({ error: "Məhsul tapılmadı" });
 
       const { metrics } = await fetchTenantStockMetrics(tenantId);
       const metric = metrics.get(product.id);
       const currentStock = metric ? metric.currentQuantity : 0;
 
-      // Find latest sale price
       const latestSaleItem = await db.query.saleItems.findFirst({
-        where: and(eq(schema.saleItems.productId, product.id), eq(schema.saleItems.tenantId, tenantId)),
+        where: and(
+          eq(schema.saleItems.productId, product.id),
+          eq(schema.saleItems.tenantId, tenantId)
+        ),
         orderBy: [desc(schema.saleItems.id)],
       });
 
@@ -291,10 +289,18 @@ export default function publicApiRoutes(): Router {
   });
 
   // --------------------------------------------------------------------------
-  // 4. POST /public/orders - Online order ingestion from company website
+  // 4. POST /public/orders
   // --------------------------------------------------------------------------
   router.post("/public/orders", async (req: PublicApiRequest, res: Response) => {
     try {
+      // [FIX-WARN2] Permissions check
+      if (!hasPermission(req, "write:orders")) {
+        return res.status(403).json({
+          error: "Forbidden",
+          message: "Bu API açarının sifariş yaratmaq icazəsi yoxdur (write:orders tələb olunur).",
+        });
+      }
+
       const tenantId = req.tenantId!;
       const { customer, items, paymentType, notes, deliveryAddress } = req.body;
 
@@ -302,8 +308,25 @@ export default function publicApiRoutes(): Router {
         return res.status(400).json({ error: "Sifarişdə ən az 1 məhsul olmalıdır" });
       }
 
+      // [FIX-BUG5] Item limit
+      if (items.length > 50) {
+        return res.status(400).json({ error: "Sifarişdə maksimum 50 məhsul ola bilər" });
+      }
+
       if (!customer || !customer.name || !customer.phone) {
         return res.status(400).json({ error: "Müştəri adı və əlaqə nömrəsi tələb olunur" });
+      }
+
+      // Early shape validation
+      for (const item of items) {
+        const pid = parseInt(item.productId);
+        const qty = parseFloat(item.quantity);
+        if (isNaN(pid) || pid <= 0 || isNaN(qty) || qty <= 0) {
+          return res.status(400).json({ error: `Yanlış məhsul ID və ya miqdar: ${JSON.stringify(item)}` });
+        }
+        if (item.salePrice !== undefined && parseFloat(item.salePrice) < 0) {
+          return res.status(400).json({ error: `Mənfi qiymət qəbul edilmir: ${JSON.stringify(item)}` });
+        }
       }
 
       // 1. Find or create customer
@@ -320,52 +343,80 @@ export default function publicApiRoutes(): Router {
           name: String(customer.name).trim(),
           phone: String(customer.phone).trim(),
           email: customer.email ? String(customer.email).trim() : null,
-          address: (deliveryAddress || customer.address || null),
+          address: deliveryAddress || customer.address || null,
           createdByName: "Vebsayt",
           loyaltyPoints: 0.0,
         }).returning();
         customerRecord = newCust;
       }
 
-      // 2. Resolve default warehouse
+      // 2. Resolve default warehouse — [FIX-WARN3] fail explicitly
       const defaultWarehouse = await db.query.warehouses.findFirst({
         where: and(eq(schema.warehouses.tenantId, tenantId), eq(schema.warehouses.isDefault, 1)),
       });
-      const warehouseId = defaultWarehouse?.id || 1;
+      if (!defaultWarehouse) {
+        return res.status(422).json({
+          error: "Anbar tapılmadı",
+          message: "Bu mağazada default anbar konfiqurasiya edilməyib. Admin panelindən anbar ayarlayın.",
+        });
+      }
+      const warehouseId = defaultWarehouse.id;
 
-      // 3. Process items and calculate totals
+      // 3. [FIX-BUG4] Batch product lookup — 1 sorgu
+      const productIds = items.map((i: any) => parseInt(i.productId));
+
+      const productsInDb = await db.query.products.findMany({
+        where: and(
+          eq(schema.products.tenantId, tenantId),
+          eq(schema.products.isArchived, 0),
+          inArray(schema.products.id, productIds)
+        ),
+      });
+      const productsMap = new Map(productsInDb.map((p) => [p.id, p]));
+
+      // 4. [FIX-BUG4] Batch latest sale prices — 1 sorgu
+      const maxSalePriceIds = db.select({
+        productId: schema.saleItems.productId,
+        maxId: sql`max(${schema.saleItems.id})`.as("max_id"),
+      }).from(schema.saleItems)
+        .where(and(eq(schema.saleItems.tenantId, tenantId), inArray(schema.saleItems.productId, productIds)))
+        .groupBy(schema.saleItems.productId)
+        .as("max_sale_price_ids");
+
+      const latestSaleItems = await db.select({
+        productId: schema.saleItems.productId,
+        price: schema.saleItems.salePrice,
+      }).from(schema.saleItems).innerJoin(maxSalePriceIds, eq(schema.saleItems.id, maxSalePriceIds.maxId));
+
+      const salePricesMap = new Map<number, number>();
+      latestSaleItems.forEach((s) => salePricesMap.set(s.productId, s.price));
+
+      // 5. Stock metrics
       const { metrics } = await fetchTenantStockMetrics(tenantId);
 
+      // 6. Process items + [FIX-BUG3] Stock availability check
       let calculatedTotal = 0;
       let calculatedCost = 0;
       const processedItems: ProcessedOrderItem[] = [];
+      const stockErrors: string[] = [];
 
       for (const item of items) {
         const pid = parseInt(item.productId);
         const qty = parseFloat(item.quantity);
-        if (isNaN(pid) || isNaN(qty) || qty <= 0) {
-          return res.status(400).json({ error: `Yanlış məhsul və ya miqdar: ${JSON.stringify(item)}` });
-        }
 
-        const prod = await db.query.products.findFirst({
-          where: and(
-            eq(schema.products.id, pid),
-            eq(schema.products.tenantId, tenantId),
-            eq(schema.products.isArchived, 0)
-          ),
-        });
-
+        const prod = productsMap.get(pid);
         if (!prod) {
-          return res.status(400).json({ error: `ID: ${pid} nömrəli məhsul tapılmadı` });
+          return res.status(400).json({ error: `ID: ${pid} nömrəli məhsul tapılmadı və ya arxivlənib` });
         }
 
         const m = metrics.get(prod.id);
-        const latestSaleItem = await db.query.saleItems.findFirst({
-          where: and(eq(schema.saleItems.productId, prod.id), eq(schema.saleItems.tenantId, tenantId)),
-          orderBy: [desc(schema.saleItems.id)],
-        });
+        const currentStock = m ? m.currentQuantity : 0;
 
-        const defaultPrice = latestSaleItem ? latestSaleItem.salePrice : (m?.nextUnitCost || 0);
+        if (currentStock < qty) {
+          stockErrors.push(`"${prod.name}": stokda ${currentStock.toFixed(2)} var, ${qty} sifariş edildi`);
+        }
+
+        const defaultPrice = salePricesMap.get(prod.id) ?? (m?.nextUnitCost || 0);
         const price = item.salePrice ? parseFloat(item.salePrice) : defaultPrice;
         const cost = m ? m.nextUnitCost : 0;
 
@@ -381,7 +432,14 @@ export default function publicApiRoutes(): Router {
         });
       }
 
-      // 4. Save Sale inside transaction with inventory ledger deduction
+      if (stockErrors.length > 0) {
+        return res.status(422).json({
+          error: "Stokda kifayət qədər məhsul yoxdur",
+          details: stockErrors,
+        });
+      }
+
+      // 7. Save sale + ledger in a single transaction
       const orderResult = await db.transaction(async (tx) => {
         const [sale] = await tx.insert(schema.sales).values({
           tenantId,
@@ -391,7 +449,7 @@ export default function publicApiRoutes(): Router {
           totalAmount: calculatedTotal,
           totalCost: calculatedCost,
           paymentType: paymentType || "Vebsayt Sifarişi",
-          paymentStatus: "unpaid", // Online order pending fulfillment
+          paymentStatus: "unpaid",
           salesChannel: "Vebsayt",
           saleDate: new Date().toISOString(),
           notes: notes ? `[Vebsayt Sifarişi] ${notes}` : "[Vebsayt Sifarişi]",
@@ -407,7 +465,6 @@ export default function publicApiRoutes(): Router {
             purchasePrice: it.purchasePrice,
           });
 
-          // Deduct from inventory ledger
           await recordLedgerMovement(tx, {
             tenantId,
             productId: it.productId,
@@ -423,7 +480,6 @@ export default function publicApiRoutes(): Router {
           });
         }
 
-        // Activity log for store dashboard
         await tx.insert(schema.activityLogs).values({
           tenantId,
           username: "Vebsayt Botu",
@@ -440,10 +496,7 @@ export default function publicApiRoutes(): Router {
         orderId: orderResult.id,
         orderNumber: `QZ-${String(orderResult.id).padStart(5, "0")}`,
         totalAmount: calculatedTotal,
-        customer: {
-          name: customerRecord.name,
-          phone: customerRecord.phone,
-        },
+        customer: { name: customerRecord.name, phone: customerRecord.phone },
         status: "qəbul_edildi",
         createdAt: orderResult.saleDate,
         message: "Sifariş uğurla QAZANPOS sisteminə daxil edildi!",
