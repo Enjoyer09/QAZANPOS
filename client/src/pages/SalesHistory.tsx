@@ -751,7 +751,7 @@ export default function SalesHistory() {
                     <th className="py-3 px-3 sm:px-4 text-right">Məbləğ</th>
                     {isAdmin && <th className="py-3 px-3 sm:px-4 text-right hidden xl:table-cell">Mənfəət</th>}
                     <th className="py-3 px-3 sm:px-4 text-center">Vəziyyət</th>
-                    <th className="py-3 px-3 sm:px-4 text-right pr-4 sm:pr-6 w-16 sm:w-20"></th>
+                    <th className="py-3 px-3 sm:px-4 text-right pr-4 sm:pr-6 w-16 sm:w-20 sticky right-0 bg-gray-50/95 backdrop-blur-xs shadow-[-6px_0_12px_rgba(0,0,0,0.05)] z-10 whitespace-nowrap"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -776,7 +776,7 @@ export default function SalesHistory() {
                       const netCost = Number(sale.totalCost || 0) - returnedCost;
                       const profit = netAmount - netCost;
                       return (
-                        <tr key={sale.id} className="border-b border-gray-50 hover:bg-gray-50/30 transition-all text-xs">
+                        <tr key={sale.id} className="border-b border-gray-50 hover:bg-gray-50/30 transition-all text-xs group">
                           <td className="py-3 px-3 sm:px-4 text-center font-mono text-gray-900 font-bold">
                             #{sale.id.toString().padStart(5, "0")}
                           </td>
@@ -854,7 +854,7 @@ export default function SalesHistory() {
                                 : (sale.paymentType === "Nisyə" ? "Nisyə" : "Ödənilməyib")}
                             </span>
                           </td>
-                          <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-right pr-4 sm:pr-6">
+                          <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-right pr-4 sm:pr-6 sticky right-0 bg-white/95 group-hover:bg-gray-50/80 backdrop-blur-xs shadow-[-6px_0_12px_rgba(0,0,0,0.05)] z-10 whitespace-nowrap">
                             <div className="flex items-center justify-end gap-1.5">
                               <button
                                 onClick={() => setDrawerSale(sale)}

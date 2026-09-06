@@ -571,7 +571,7 @@ export default function Expenses() {
                     <th className="py-3 px-3 sm:px-4 hidden md:table-cell">Açıqlama</th>
                     <th className="py-3 px-3 sm:px-4 hidden sm:table-cell">Tarix</th>
                     <th className="py-3 px-3 sm:px-4 text-right">Məbləğ</th>
-                    <th className="py-3 px-3 sm:px-4 w-12 text-right pr-4"></th>
+                    <th className="py-3 px-3 sm:px-4 w-12 text-right pr-4 sticky right-0 bg-gray-50/95 backdrop-blur-xs shadow-[-6px_0_12px_rgba(0,0,0,0.05)] z-10 whitespace-nowrap"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -585,7 +585,7 @@ export default function Expenses() {
                     </tr>
                   ) : (
                     filteredList.map((item) => (
-                      <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/30 transition-all text-xs">
+                      <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/30 transition-all text-xs group">
                         <td className="py-3 px-3 sm:px-4">
                           <span className={`px-2.5 py-0.5 border rounded-full text-[9px] font-bold uppercase tracking-wider ${categoryBadges[item.category] || "bg-gray-50 text-gray-500"}`}>
                             {item.category}
@@ -614,7 +614,7 @@ export default function Expenses() {
                         <td className="py-3 px-3 sm:px-4 text-right font-mono font-bold text-gray-900">
                           {parseFloat(String(item.amount)).toFixed(2)} ₼
                         </td>
-                        <td className="py-3 px-3 sm:px-4 text-right pr-4">
+                        <td className="py-3 px-3 sm:px-4 text-right pr-4 sticky right-0 bg-white/95 group-hover:bg-gray-50/80 backdrop-blur-xs shadow-[-6px_0_12px_rgba(0,0,0,0.05)] z-10 whitespace-nowrap">
                           <button
                             onClick={() => deleteMutation.mutate(item.id)}
                             disabled={deleteMutation.isPending}

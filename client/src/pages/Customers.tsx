@@ -346,7 +346,7 @@ export default function Customers() {
                 <th className="py-3 px-3 sm:px-4 hidden md:table-cell">E-poçt</th>
                 <th className="py-3 px-3 sm:px-4 hidden lg:table-cell">Ünvan</th>
                 <th className="py-3 px-3 sm:px-4 text-center">Loyallıq Balı</th>
-                <th className="py-3 px-3 sm:px-4 text-right pr-4 sm:pr-6 w-16"></th>
+                <th className="py-3 px-3 sm:px-4 text-right pr-4 sm:pr-6 w-16 sticky right-0 bg-gray-50/95 backdrop-blur-xs shadow-[-6px_0_12px_rgba(0,0,0,0.05)] z-10 whitespace-nowrap"></th>
               </tr>
             </thead>
             <tbody>
@@ -369,7 +369,7 @@ export default function Customers() {
                     <tr 
                       key={item.id} 
                       onClick={() => { setSelectedCustomerId(item.id); setDrawerTab("overview"); }}
-                      className={`border-b border-gray-50 hover:bg-primary/5 cursor-pointer transition-all text-xs ${isSelected ? 'bg-primary/5 font-semibold' : ''}`}
+                      className={`border-b border-gray-50 hover:bg-primary/5 cursor-pointer transition-all text-xs group ${isSelected ? 'bg-primary/5 font-semibold' : ''}`}
                     >
                       <td className="py-3 px-3 sm:px-4 text-center font-mono text-gray-400 hidden sm:table-cell">{idx + 1}</td>
                       <td className="py-2.5 sm:py-3 px-3 sm:px-4 min-w-[150px]">
@@ -425,7 +425,7 @@ export default function Customers() {
                           <span className="text-gray-300 font-semibold">0 bal</span>
                         )}
                       </td>
-                      <td className="p-4 text-right pr-6" onClick={(e) => e.stopPropagation()}>
+                      <td className="p-4 text-right pr-6 sticky right-0 bg-white/95 group-hover:bg-primary/5 backdrop-blur-xs shadow-[-6px_0_12px_rgba(0,0,0,0.05)] z-10 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-2">
                           <button
                             onClick={() => handleOpenEdit(item)}

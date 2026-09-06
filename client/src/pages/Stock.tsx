@@ -589,7 +589,7 @@ export default function Stock() {
                     <th className="py-3 px-3 sm:px-4 text-right hidden lg:table-cell">Ümumi Dəyər</th>
                     <th className="py-3 px-3 sm:px-4 text-right hidden sm:table-cell">Son Satış Qiyməti</th>
                     <th className="py-3 px-3 sm:px-4 text-right hidden 2xl:table-cell">Mənfəət Marjası</th>
-                    <th className="py-3 px-3 sm:px-4 pl-4 sm:pl-8 text-right sm:text-left">Əməliyyat</th>
+                    <th className="py-3 px-3 sm:px-4 text-right sm:text-left sticky right-0 bg-gray-50/95 backdrop-blur-xs shadow-[-6px_0_12px_rgba(0,0,0,0.05)] z-10 whitespace-nowrap min-w-[120px]">Əməliyyat</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -611,7 +611,7 @@ export default function Stock() {
                       return (
                         <tr 
                           key={item.productId} 
-                          className={`border-b border-gray-55 hover:bg-gray-50/30 transition-all text-xs ${isSN ? "bg-blue-50/10" : ""}`}
+                          className={`border-b border-gray-55 hover:bg-gray-50/30 transition-all text-xs group ${isSN ? "bg-blue-50/10" : ""}`}
                         >
                           <td className={`py-2.5 sm:py-3 px-3 sm:px-4 font-bold text-gray-900 ${isSN ? "pl-4 border-l-4 border-blue-500" : "pl-4 sm:pl-6"}`}>
                             <div className="flex flex-col gap-1 py-0.5">
@@ -702,7 +702,7 @@ export default function Stock() {
                               return <span className="text-gray-300">—</span>;
                             })()}
                           </td>
-                          <td className="py-2.5 sm:py-3 px-3 sm:px-4">
+                          <td className="py-2.5 sm:py-3 px-3 sm:px-4 sticky right-0 bg-white/95 group-hover:bg-gray-50/80 backdrop-blur-xs shadow-[-6px_0_12px_rgba(0,0,0,0.05)] z-10 whitespace-nowrap">
                             <div className="flex items-center gap-1.5 flex-wrap justify-end sm:justify-start">
                               {item.currentQuantity > 0 && settings?.multiWarehouseEnabled === 1 ? (
                                 <button

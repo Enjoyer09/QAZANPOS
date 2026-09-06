@@ -651,26 +651,27 @@ export default function Products() {
             <table className="w-full text-left text-sm border-collapse">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/50 text-[11px] sm:text-xs font-black text-gray-800 uppercase tracking-wider">
-                  <th className="py-3 px-3 sm:px-4 w-10 text-center">#</th>
-                  <th className="py-3 px-3 sm:px-4 min-w-[160px]">Məhsul</th>
-                  <th className="py-3 px-3 sm:px-4 hidden sm:table-cell">Barkod</th>
-                  <th className="py-3 px-3 sm:px-4 hidden md:table-cell">Kateqoriya</th>
-                  <th className="py-3 px-3 sm:px-4 hidden lg:table-cell">Ölçü Vahidi</th>
-                  <th className="py-3 px-3 sm:px-4 hidden xl:table-cell">Tədarükçü</th>
-                  <th className="py-3 px-3 sm:px-4 hidden 2xl:table-cell">Təsvir (Qeyd)</th>
-                  <th className="py-3 px-3 sm:px-4 text-right pr-4 sm:pr-6 w-24 sm:w-32">Əməliyyatlar</th>
+                  <th className="py-3 px-2.5 sm:px-3.5 w-10 text-center">#</th>
+                  <th className="py-3 px-2.5 sm:px-3.5 min-w-[150px]">Məhsul</th>
+                  <th className="py-3 px-2.5 sm:px-3.5 hidden sm:table-cell">Barkod</th>
+                  <th className="py-3 px-2.5 sm:px-3.5 hidden md:table-cell">Kateqoriya</th>
+                  <th className="py-3 px-2.5 sm:px-3.5 hidden lg:table-cell">Ölçü Vahidi</th>
+                  <th className="py-3 px-2.5 sm:px-3.5 hidden xl:table-cell">Tədarükçü</th>
+                  <th className="py-3 px-3 sm:px-4 text-right pr-4 sm:pr-6 sticky right-0 bg-gray-50/95 backdrop-blur-xs shadow-[-6px_0_12px_rgba(0,0,0,0.05)] z-10 min-w-[120px] sm:min-w-[150px] whitespace-nowrap">
+                    Əməliyyatlar
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan={8} className="p-0">
-                      <TableSkeleton rows={4} />
+                    <td colSpan={7} className="p-0">
+                      <TableSkeleton rows={4} colSpan={7} />
                     </td>
                   </tr>
                 ) : filteredList.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="p-12 sm:p-16 text-center text-xs text-gray-400">
+                    <td colSpan={7} className="p-12 sm:p-16 text-center text-xs text-gray-400">
                       {searchQuery ? "Axtarışa uyğun məhsul tapılmadı." : "Bu bölmədə məhsul yoxdur."}
                     </td>
                   </tr>
@@ -678,9 +679,9 @@ export default function Products() {
                   paginatedList.map((item, idx) => {
                     const itemIndex = pageSize === -1 ? idx + 1 : (currentPage - 1) * pageSize + idx + 1;
                     return (
-                      <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/30 transition-all text-xs sm:text-sm">
-                        <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-center font-mono text-gray-400 font-bold">{itemIndex}</td>
-                        <td className="py-2.5 sm:py-3 px-3 sm:px-4 font-bold text-gray-900 min-w-[160px]">
+                      <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/30 transition-all text-xs sm:text-sm group">
+                        <td className="py-2.5 sm:py-3 px-2.5 sm:px-3.5 text-center font-mono text-gray-400 font-bold">{itemIndex}</td>
+                        <td className="py-2.5 sm:py-3 px-2.5 sm:px-3.5 font-bold text-gray-900 min-w-[150px]">
                           <div className="flex items-center gap-2.5 sm:gap-3">
                             {item.imageUrl ? (
                               <img
@@ -698,6 +699,11 @@ export default function Products() {
                             )}
                             <div className="min-w-0 flex-1">
                               <div className="truncate font-bold text-gray-900" title={item.name}>{item.name}</div>
+                              {item.description && (
+                                <div className="text-[10px] text-gray-400 truncate max-w-[200px] font-normal" title={item.description}>
+                                  {item.description}
+                                </div>
+                              )}
                               <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
                                 {item.barcode && (
                                   <span className="sm:hidden font-mono text-[10px] text-gray-500 font-bold">
@@ -718,8 +724,8 @@ export default function Products() {
                             </div>
                           </div>
                         </td>
-                        <td className="py-2.5 sm:py-3 px-3 sm:px-4 font-mono text-xs text-gray-600 font-bold hidden sm:table-cell">{item.barcode || "—"}</td>
-                        <td className="py-2.5 sm:py-3 px-3 sm:px-4 font-medium text-gray-600 hidden md:table-cell">
+                        <td className="py-2.5 sm:py-3 px-2.5 sm:px-3.5 font-mono text-xs text-gray-600 font-bold hidden sm:table-cell">{item.barcode || "—"}</td>
+                        <td className="py-2.5 sm:py-3 px-2.5 sm:px-3.5 font-medium text-gray-600 hidden md:table-cell">
                           {item.category ? (
                             <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-md text-xs font-black">
                               {item.category}
@@ -728,16 +734,15 @@ export default function Products() {
                             "—"
                           )}
                         </td>
-                        <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-gray-700 font-bold hidden lg:table-cell">{item.unit}</td>
-                        <td className="py-2.5 sm:py-3 px-3 sm:px-4 font-bold text-gray-800 hidden xl:table-cell">
+                        <td className="py-2.5 sm:py-3 px-2.5 sm:px-3.5 text-gray-700 font-bold hidden lg:table-cell">{item.unit}</td>
+                        <td className="py-2.5 sm:py-3 px-2.5 sm:px-3.5 font-bold text-gray-800 hidden xl:table-cell">
                           {item.vendorId && vendors ? (
                             vendors.find(v => v.id === item.vendorId)?.name || "—"
                           ) : (
                             "—"
                           )}
                         </td>
-                        <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-gray-600 font-medium truncate max-w-[150px] hidden 2xl:table-cell">{item.description || "—"}</td>
-                        <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-right pr-4 sm:pr-6">
+                        <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-right pr-4 sm:pr-6 sticky right-0 bg-white/95 group-hover:bg-gray-50/80 backdrop-blur-xs shadow-[-6px_0_12px_rgba(0,0,0,0.05)] z-10 whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1 sm:gap-1.5">
                             {item.isArchived === 1 ? (
                               <button
@@ -751,14 +756,14 @@ export default function Products() {
                               <>
                                 <button
                                   onClick={() => setSelectedProductForLabel(item)}
-                                  className="p-1.5 sm:p-2 border border-amber-100 hover:border-amber-200 text-amber-600 hover:text-amber-700 rounded-xl cursor-pointer transition-all bg-white"
+                                  className="p-1.5 sm:p-2 border border-amber-100 hover:border-amber-200 text-amber-600 hover:text-amber-700 rounded-xl cursor-pointer transition-all bg-white shadow-2xs"
                                   title="Qiymət Kağızı Çap Et"
                                 >
                                   <Tag className="w-3.5 h-3.5" />
                                 </button>
                                 <button
                                   onClick={() => handleOpenEdit(item)}
-                                  className="p-1.5 sm:p-2 border border-gray-100 hover:border-gray-200 text-gray-500 hover:text-gray-900 rounded-xl cursor-pointer transition-all bg-white"
+                                  className="p-1.5 sm:p-2 border border-gray-100 hover:border-gray-200 text-gray-500 hover:text-gray-900 rounded-xl cursor-pointer transition-all bg-white shadow-2xs"
                                   title="Düzəliş Et"
                                 >
                                   <Edit2 className="w-3.5 h-3.5" />
@@ -766,7 +771,7 @@ export default function Products() {
                                 {(item as any).hasHistory ? (
                                   <button
                                     onClick={() => setArchiveId(item.id)}
-                                    className="p-1.5 sm:p-2 border border-blue-100 hover:border-blue-200 hover:bg-blue-50 text-blue-600 rounded-xl cursor-pointer transition-all bg-white flex items-center gap-1 text-[10px] font-bold"
+                                    className="p-1.5 sm:p-2 border border-blue-100 hover:border-blue-200 hover:bg-blue-50 text-blue-600 rounded-xl cursor-pointer transition-all bg-white flex items-center gap-1 text-[10px] font-bold shadow-2xs"
                                     title="Arxivə Göndər (Tarixçəsi var)"
                                   >
                                     <Archive className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Arxivlə</span>
@@ -774,7 +779,7 @@ export default function Products() {
                                 ) : (
                                   <button
                                     onClick={() => setDeleteId(item.id)}
-                                    className="p-1.5 sm:p-2 border border-red-50 hover:bg-red-50 text-red-500 rounded-xl cursor-pointer transition-all bg-white"
+                                    className="p-1.5 sm:p-2 border border-red-50 hover:bg-red-50 text-red-500 rounded-xl cursor-pointer transition-all bg-white shadow-2xs"
                                     title="Sil"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
