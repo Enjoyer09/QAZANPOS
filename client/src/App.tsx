@@ -74,7 +74,7 @@ window.fetch = async (input, init) => {
     (init.headers as Record<string, string>)["x-tenant-host"] = window.location.host;
   }
 
-  const userStr = localStorage.getItem("qazanpos_user");
+  const userStr = localStorage.getItem("qazanpos_user") || sessionStorage.getItem("qazanpos_user");
   if (userStr) {
     try {
       const user = JSON.parse(userStr);
@@ -127,9 +127,16 @@ window.fetch = async (input, init) => {
   }
   const response = await originalFetch(input, init);
   if (response.status === 401) {
-    const isAuthRequest = typeof input === "string" && (input.includes("/auth/login") || input.includes("/auth/2fa-verify") || input.includes("/auth/2fa-setup") || input.includes("/auth/2fa-activate"));
-    if (!isAuthRequest) {
+    const isExcludedRequest = typeof input === "string" && (
+      input.includes("/auth/login") ||
+      input.includes("/auth/2fa-verify") ||
+      input.includes("/auth/2fa-setup") ||
+      input.includes("/auth/2fa-activate") ||
+      input.includes("/upload/")
+    );
+    if (!isExcludedRequest) {
       localStorage.removeItem("qazanpos_user");
+      sessionStorage.removeItem("qazanpos_user");
       window.location.reload();
     }
   }

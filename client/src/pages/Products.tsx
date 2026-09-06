@@ -278,12 +278,37 @@ export default function Products() {
       const compKb = (compressed.compressedSize / 1024).toFixed(0);
       setUploadCompressionInfo(`${origKb} KB ➔ ${compKb} KB (-${compressed.compressionRatio}%)`);
 
-      // 2. Upload to /api/upload/product-image
+      // If in demo sandbox, assign compressed preview URL directly without remote upload
+      if (sessionStorage.getItem("birsaas_demo_active") === "true") {
+        setFormData((prev) => ({ ...prev, imageUrl: compressed.previewUrl }));
+        toast({
+          title: "Şəkil seçildi! (Demo rejimi)",
+          description: `Ölçü ${compressed.compressionRatio}% sıxıldı və tətbiq edildi.`,
+          variant: "success",
+        });
+        return;
+      }
+
+      // 2. Upload to /api/upload/product-image (real server)
       const uploadFormData = new FormData();
       uploadFormData.append("image", compressed.file);
 
+      const userStr = localStorage.getItem("qazanpos_user") || sessionStorage.getItem("qazanpos_user");
+      let authToken = "";
+      if (userStr) {
+        try {
+          authToken = JSON.parse(userStr)?.token || "";
+        } catch {}
+      }
+
+      const uploadHeaders: Record<string, string> = {};
+      if (authToken) {
+        uploadHeaders["Authorization"] = `Bearer ${authToken}`;
+      }
+
       const res = await fetch("/api/upload/product-image", {
         method: "POST",
+        headers: uploadHeaders,
         body: uploadFormData,
       });
 
