@@ -2054,6 +2054,90 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
     return jsonResponse(Object.values(draftMap));
   }
 
+  // 21. API Keys Management Mock
+  if (path === "/api/api-keys" && method === "GET") {
+    let keys = getDb("api_keys");
+    if (!keys || !Array.isArray(keys) || keys.length === 0) {
+      keys = [
+        {
+          id: 1,
+          name: "Rəsmi Vebsayt Kataloqu",
+          maskedKey: "qz_live_9f83a...4b12",
+          permissions: "read:catalog,write:orders",
+          isActive: 1,
+          lastUsedAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+        }
+      ];
+      saveDb("api_keys", keys);
+    }
+    return jsonResponse(keys);
+  }
+
+  if (path === "/api/api-keys" && method === "POST") {
+    const reqBody = options?.body ? JSON.parse(options.body as string) : {};
+    const { name, permissions } = reqBody;
+    const keys = getDb("api_keys") || [];
+
+    const randomHex = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    const fullKey = `qz_live_${randomHex}`;
+    const newId = keys.length > 0 ? Math.max(...keys.map((k: any) => k.id)) + 1 : 1;
+    
+    const newKeyRecord = {
+      id: newId,
+      name: name || "Yeni API Açarı",
+      maskedKey: `${fullKey.substring(0, 10)}...${fullKey.substring(fullKey.length - 4)}`,
+      permissions: permissions || "read:catalog,write:orders",
+      isActive: 1,
+      lastUsedAt: null,
+      createdAt: new Date().toISOString(),
+    };
+    keys.unshift(newKeyRecord);
+    saveDb("api_keys", keys);
+    logActivity(`Yeni API açarı yaradıldı: "${name}"`);
+
+    return jsonResponse({
+      id: newId,
+      name: newKeyRecord.name,
+      key: fullKey,
+      permissions: newKeyRecord.permissions,
+      createdAt: newKeyRecord.createdAt,
+      message: "API açarı uğurla yaradıldı!",
+    }, 201);
+  }
+
+  if (path.startsWith("/api/api-keys/") && method === "DELETE") {
+    const id = parseInt(path.split("/").pop() || "0");
+    let keys = getDb("api_keys") || [];
+    keys = keys.filter((k: any) => k.id !== id);
+    saveDb("api_keys", keys);
+    logActivity(`API açarı ləğv edildi: #${id}`);
+    return jsonResponse({ success: true, message: "API açarı ləğv edildi" });
+  }
+
+  // 22. Public Catalog Mock
+  if (path === "/api/public/catalog" && method === "GET") {
+    const products = getDb("products") || [];
+    const items = products.map((p: any) => ({
+      id: p.id,
+      name: p.name,
+      category: p.category || "Ümumi",
+      salePrice: p.salePrice || 0,
+      unit: p.unit || "ədəd",
+      barcode: p.barcode || null,
+      imageUrl: p.imageUrl || null,
+      description: p.description || null,
+      inStock: (p.currentQuantity || 0) > 0,
+      stockQuantity: Math.max(0, p.currentQuantity || 0),
+    }));
+    return jsonResponse({
+      store: { name: "Demo Mağaza", slug: "demo" },
+      pagination: { total: items.length, page: 1, limit: items.length, totalPages: 1 },
+      items,
+    });
+  }
+
   // Default Fallback
   return jsonResponse({ message: "Demo rejimində bu sorğu keçərli deyil" }, 400);
 }
+

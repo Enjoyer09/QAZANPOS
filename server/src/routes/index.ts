@@ -11,6 +11,8 @@ import dashboardRoutes from "./dashboard.js";
 import settingsRoutes from "./settings.js";
 import activityLogRoutes from "./activity-logs.js";
 import superRoutes from "./super.js";
+import apiKeysRoutes from "./apiKeys.js";
+import publicApiRoutes from "./publicApi.js";
 
 const router = Router();
 
@@ -30,5 +32,8 @@ router.use(dashboardRoutes());
 router.use(settingsRoutes());
 router.use(activityLogRoutes());
 router.use(superRoutes());
+router.use(apiKeysRoutes());
+router.use(publicApiRoutes());
 
 export default router;
+

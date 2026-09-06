@@ -66,6 +66,21 @@ async function ensureDefaultTenantsAndUsers() {
       );
     `);
 
+    console.log("Self-Healing Database: Ensuring api_keys table exists...");
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS api_keys (
+        id SERIAL PRIMARY KEY,
+        tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE DEFAULT 1,
+        name TEXT NOT NULL,
+        key TEXT NOT NULL UNIQUE,
+        permissions TEXT NOT NULL DEFAULT 'read:catalog,write:orders',
+        is_active INTEGER NOT NULL DEFAULT 1,
+        last_used_at TEXT,
+        created_at TEXT NOT NULL
+      );
+    `);
+
+
 
     // 1. Ensure Tenant 1 (demo) exists
     const demoTenant = await db.query.tenants.findFirst({

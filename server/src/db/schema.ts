@@ -960,3 +960,26 @@ export const inventoryLedgerRelations = relations(inventoryLedger, ({ one }) => 
   }),
 }));
 
+// 27. API Keys Table for Public Integration (e-Commerce, Webhooks, Mobile Apps)
+export const apiKeys = pgTable("api_keys", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" })
+    .default(1),
+  name: text("name").notNull(),
+  key: text("key").notNull().unique(),
+  permissions: text("permissions").notNull().default("read:catalog,write:orders"),
+  isActive: integer("is_active").notNull().default(1),
+  lastUsedAt: text("last_used_at"),
+  createdAt: text("created_at").notNull(),
+});
+
+export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [apiKeys.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+

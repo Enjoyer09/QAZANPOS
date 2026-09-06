@@ -83,9 +83,10 @@ export async function resolveTenant(req: AuthenticatedRequest, res: Response, ne
 
 export function authenticate(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   const publicPaths = ["/auth/login", "/auth/2fa-verify", "/settings"];
-  if (publicPaths.includes(req.path)) {
+  if (publicPaths.includes(req.path) || req.path.startsWith("/public/")) {
     return next();
   }
+
 
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
