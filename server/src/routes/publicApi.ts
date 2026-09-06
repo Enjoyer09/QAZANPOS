@@ -3,7 +3,7 @@ import rateLimit from "express-rate-limit";
 import { db } from "../db/index.js";
 import * as schema from "../db/schema.js";
 import { eq, and, sql, desc, inArray } from "drizzle-orm";
-import { fetchTenantStockMetrics } from "./helpers.js";
+import { fetchTenantStockMetrics, normalizeName } from "./helpers.js";
 
 interface PublicApiRequest extends Request {
   tenantId: number;
@@ -25,23 +25,21 @@ export default function publicApiRoutes(): Router {
   const router = Router();
 
   // ─── Rate Limiter ──────────────────────────────────────────────────────────
-  // [FIX-WARN1] 120 sorğu/dəqiqə per API açarı (IP deyil!)
-  // [FIX-NEW2] keyGenerator API açarına görə — reverse proxy arxasında IP paylaşımı problemi yoxdur
+  // 120 sorğu/dəqiqə per API açarı
   const publicApiLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 120,
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: (req: Request): string => {
-      // API açarı varsa onu istifadə et, yoxsa IP
       const apiKey =
         (req.headers["x-api-key"] as string) ||
         (req.headers["x-auth-key"] as string) ||
-        (req.query.apiKey as string) ||
-        req.ip ||
-        "unknown";
-      return apiKey;
+        (req.query.apiKey as string);
+      if (apiKey) return apiKey;
+      return req.ip || "unknown";
     },
+    validate: { keyGeneratorIpFallback: false },
     message: {
       error: "Too Many Requests",
       message: "Çox sayda sorğu göndərdiniz. 1 dəqiqə sonra yenidən cəhd edin.",
@@ -56,8 +54,6 @@ export default function publicApiRoutes(): Router {
   };
 
   // ─── API Key Authentication Middleware ────────────────────────────────────
-  // [FIX-BUG1] resolveTenant skip edilir, bu middleware özü tenant tapır
-  // [FIX-BUG2] ?tenant=slug fallback çıxarıldı — API açarı məcburidir
   const authenticatePublicApiKey = async (
     req: PublicApiRequest,
     res: Response,
@@ -106,7 +102,7 @@ export default function publicApiRoutes(): Router {
       req.tenantName = tenant.name;
       req.apiKeyPermissions = keyRecord.permissions;
 
-      // Async lastUsedAt yeniləmə — cavab gecikmər
+      // Async lastUsedAt yeniləmə
       db.update(schema.apiKeys)
         .set({ lastUsedAt: new Date().toISOString() })
         .where(eq(schema.apiKeys.id, keyRecord.id))
@@ -140,7 +136,7 @@ export default function publicApiRoutes(): Router {
 
       const { allProducts, metrics } = await fetchTenantStockMetrics(tenantId);
 
-      // Batch latest selling prices — 1 sorğu
+      // Batch latest selling prices
       const maxSaleIds = db.select({
         productId: schema.saleItems.productId,
         maxId: sql`max(${schema.saleItems.id})`.as("max_id"),
@@ -160,19 +156,26 @@ export default function publicApiRoutes(): Router {
       let filtered = allProducts.filter((p) => p.isArchived === 0);
 
       if (categoryFilter && categoryFilter.trim() !== "") {
+        const normCat = normalizeName(categoryFilter);
         filtered = filtered.filter(
-          (p) => p.category?.toLowerCase() === categoryFilter.trim().toLowerCase()
+          (p) => p.category && normalizeName(p.category) === normCat
         );
       }
 
       if (searchQuery && searchQuery.trim() !== "") {
-        const term = searchQuery.trim().toLowerCase();
-        filtered = filtered.filter(
-          (p) =>
-            p.name.toLowerCase().includes(term) ||
-            (p.barcode && p.barcode.toLowerCase().includes(term)) ||
-            (p.category && p.category.toLowerCase().includes(term))
-        );
+        const term = normalizeName(searchQuery);
+        filtered = filtered.filter((p) => {
+          const normName = normalizeName(p.name);
+          const normBarcode = p.barcode ? p.barcode.toLowerCase() : "";
+          const normCategory = p.category ? normalizeName(p.category) : "";
+          const normDesc = p.description ? normalizeName(p.description) : "";
+          return (
+            normName.includes(term) ||
+            normBarcode.includes(term) ||
+            normCategory.includes(term) ||
+            normDesc.includes(term)
+          );
+        });
       }
 
       if (inStockOnly) {
@@ -331,11 +334,16 @@ export default function publicApiRoutes(): Router {
         return res.status(400).json({ error: "Sifarişdə maksimum 50 məhsul ola bilər" });
       }
 
-      if (!customer || !customer.name || !customer.phone) {
+      const custName = customer?.name ? String(customer.name).trim() : "";
+      const custPhone = customer?.phone ? String(customer.phone).trim() : "";
+
+      if (!custName || !custPhone) {
         return res.status(400).json({ error: "Müştəri adı və əlaqə nömrəsi tələb olunur" });
       }
 
-      // Early shape validation
+      // Early shape validation & consolidate duplicate items
+      const consolidatedMap = new Map<number, { quantity: number; salePrice?: number; notes?: string }>();
+
       for (const item of items) {
         const pid = parseInt(item.productId);
         const qty = parseFloat(item.quantity);
@@ -349,23 +357,36 @@ export default function publicApiRoutes(): Router {
             error: `Mənfi qiymət qəbul edilmir: ${JSON.stringify(item)}`,
           });
         }
+
+        const existing = consolidatedMap.get(pid);
+        if (existing) {
+          existing.quantity += qty;
+          if (item.salePrice !== undefined) existing.salePrice = parseFloat(item.salePrice);
+          if (item.notes) existing.notes = (existing.notes ? existing.notes + "; " : "") + item.notes;
+        } else {
+          consolidatedMap.set(pid, {
+            quantity: qty,
+            salePrice: item.salePrice !== undefined ? parseFloat(item.salePrice) : undefined,
+            notes: item.notes,
+          });
+        }
       }
 
       // 1. Find or create customer
       let customerRecord = await db.query.customers.findFirst({
         where: and(
           eq(schema.customers.tenantId, tenantId),
-          eq(schema.customers.phone, String(customer.phone).trim())
+          eq(schema.customers.phone, custPhone)
         ),
       });
 
       if (!customerRecord) {
         const [newCust] = await db.insert(schema.customers).values({
           tenantId,
-          name: String(customer.name).trim(),
-          phone: String(customer.phone).trim(),
+          name: custName,
+          phone: custPhone,
           email: customer.email ? String(customer.email).trim() : null,
-          address: deliveryAddress || customer.address || null,
+          address: deliveryAddress ? String(deliveryAddress).trim() : (customer.address ? String(customer.address).trim() : null),
           createdByName: "Vebsayt",
           loyaltyPoints: 0.0,
         }).returning();
@@ -384,8 +405,8 @@ export default function publicApiRoutes(): Router {
       }
       const warehouseId = defaultWarehouse.id;
 
-      // 3. Batch product lookup — N+1 əvəzinə 1 sorğu
-      const productIds = items.map((i: any) => parseInt(i.productId));
+      // 3. Batch product lookup
+      const productIds = Array.from(consolidatedMap.keys());
 
       const productsInDb = await db.query.products.findMany({
         where: and(
@@ -396,7 +417,7 @@ export default function publicApiRoutes(): Router {
       });
       const productsMap = new Map(productsInDb.map((p) => [p.id, p]));
 
-      // 4. Batch latest sale prices — 1 sorğu
+      // 4. Batch latest sale prices
       const maxSalePriceIds = db.select({
         productId: schema.saleItems.productId,
         maxId: sql`max(${schema.saleItems.id})`.as("max_id"),
@@ -416,16 +437,14 @@ export default function publicApiRoutes(): Router {
       // 5. Stock metrics
       const { metrics } = await fetchTenantStockMetrics(tenantId);
 
-      // 6. Process items + stock availability check (collect ALL errors before rejecting)
+      // 6. Process items + stock availability check (with consolidated quantities)
       let calculatedTotal = 0;
       let calculatedCost = 0;
       const processedItems: ProcessedOrderItem[] = [];
       const stockErrors: string[] = [];
 
-      for (const item of items) {
-        const pid = parseInt(item.productId);
-        const qty = parseFloat(item.quantity);
-
+      for (const [pid, itemData] of consolidatedMap.entries()) {
+        const qty = itemData.quantity;
         const prod = productsMap.get(pid);
         if (!prod) {
           return res.status(400).json({
@@ -438,12 +457,12 @@ export default function publicApiRoutes(): Router {
 
         if (currentStock < qty) {
           stockErrors.push(
-            `"${prod.name}": stokda ${currentStock.toFixed(2)} var, ${qty} sifariş edildi`
+            `"${prod.name}": stokda ${currentStock.toFixed(2)} var, cəmi ${qty.toFixed(2)} sifariş edildi`
           );
         }
 
         const defaultPrice = salePricesMap.get(prod.id) ?? (m?.nextUnitCost || 0);
-        const price = item.salePrice ? parseFloat(item.salePrice) : defaultPrice;
+        const price = itemData.salePrice !== undefined ? itemData.salePrice : defaultPrice;
         const cost = m ? m.nextUnitCost : 0;
 
         calculatedTotal += qty * price;
@@ -454,7 +473,7 @@ export default function publicApiRoutes(): Router {
           quantity: qty,
           salePrice: price,
           purchasePrice: cost,
-          customNotes: item.notes || null,
+          customNotes: itemData.notes || null,
         });
       }
 
@@ -466,9 +485,6 @@ export default function publicApiRoutes(): Router {
       }
 
       // 7. Save sale + ledger in a single atomic transaction
-      // [FIX-NEW1] Ledger birbaşa tx.insert ilə yazılır — recordLedgerMovement helper
-      // xətanı udur (catch+log without re-throw), bu isə tranzaksiyanı pozur.
-      // Birbaşa tx.insert() xəta olsa tranzaksiyanı ROLLBACK edir.
       const orderResult = await db.transaction(async (tx) => {
         const [sale] = await tx.insert(schema.sales).values({
           tenantId,
@@ -478,14 +494,13 @@ export default function publicApiRoutes(): Router {
           totalAmount: calculatedTotal,
           totalCost: calculatedCost,
           paymentType: paymentType || "Vebsayt Sifarişi",
-          paymentStatus: "unpaid", // Online order — ödəniş sonradan təsdiqlənir
+          paymentStatus: "unpaid",
           salesChannel: "Vebsayt",
           saleDate: new Date().toISOString(),
           notes: notes ? `[Vebsayt Sifarişi] ${notes}` : "[Vebsayt Sifarişi]",
         }).returning();
 
         for (const it of processedItems) {
-          // Sifariş itemini yaz
           await tx.insert(schema.saleItems).values({
             tenantId,
             saleId: sale.id,
@@ -495,12 +510,11 @@ export default function publicApiRoutes(): Router {
             purchasePrice: it.purchasePrice,
           });
 
-          // [FIX-NEW1] Inventory ledger — birbaşa tx.insert, xəta tranzaksiyanı rollback edir
           await tx.insert(schema.inventoryLedger).values({
             tenantId,
             productId: it.productId,
             warehouseId,
-            quantity: -it.quantity,          // mənfi — stokdan çıxma
+            quantity: -it.quantity,
             movementType: "sale",
             referenceType: "sale",
             referenceId: sale.id,
@@ -512,7 +526,6 @@ export default function publicApiRoutes(): Router {
           });
         }
 
-        // Aktivlik jurnalı
         await tx.insert(schema.activityLogs).values({
           tenantId,
           username: "Vebsayt Botu",
