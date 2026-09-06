@@ -37,7 +37,20 @@ export async function compressImage(
       img.src = event.target?.result as string;
 
       img.onload = () => {
-        let { width, height } = img;
+        let width = img.naturalWidth || img.width;
+        let height = img.naturalHeight || img.height;
+
+        if (!width || !height || width <= 0 || height <= 0) {
+          // If browser cannot detect dimensions, fallback to original file
+          resolve({
+            file,
+            previewUrl: URL.createObjectURL(file),
+            originalSize,
+            compressedSize: originalSize,
+            compressionRatio: 0,
+          });
+          return;
+        }
 
         // Resize down proportionally if larger than maxDimension
         if (width > maxDimension || height > maxDimension) {
@@ -59,6 +72,9 @@ export async function compressImage(
           reject(new Error("Canvas context could not be created"));
           return;
         }
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
 
         // Draw image onto canvas
         ctx.drawImage(img, 0, 0, width, height);
