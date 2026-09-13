@@ -25,3 +25,8 @@ sqlite.db-wal
 # OS files
 .DS_Store
 Thumbs.db
+
+# Local agent configs and tokens
+.agents/config.json
+.agents/mcp_config.json
+.agents/plugins/*/mcp_config.json
