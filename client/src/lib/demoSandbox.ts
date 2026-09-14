@@ -1883,6 +1883,52 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
     return jsonResponse({ activeShift: active || null });
   }
 
+  if (path === "/api/shifts/active-summary") {
+    const shifts = getDb("shifts");
+    const seller = userUsername ? userUsername.trim().toLowerCase() : "satici";
+    const activeShift = shifts.find((s: any) => s.cashierName === seller && s.status === "open") || null;
+
+    if (!activeShift) {
+      return jsonResponse({
+        activeShift: null, totalSales: 0, totalRevenue: 0,
+        cashRevenue: 0, cardRevenue: 0, otherRevenue: 0, creditRevenue: 0,
+        openingCash: 0, expectedCash: 0, salesCount: 0,
+      });
+    }
+
+    // Filter sales strictly by shiftId
+    const shiftSales = getDb("sales").filter((s: any) => s.shiftId === activeShift.id);
+    let cashRevenue = 0, cardRevenue = 0, otherRevenue = 0, creditRevenue = 0, totalRevenue = 0;
+
+    for (const sale of shiftSales) {
+      const amount = (sale.totalAmount || 0) - (Number(sale.loyaltyDiscountPaid) || 0);
+      totalRevenue += sale.totalAmount || 0;
+      if (sale.paymentStatus === "credit" || sale.paymentType === "Nisyə") {
+        creditRevenue += sale.totalAmount || 0;
+      } else if (sale.paymentType === "Nəğd") {
+        cashRevenue += amount;
+      } else if (["Kart", "Kart2Kart", "Köçürmə"].includes(sale.paymentType || "")) {
+        cardRevenue += sale.totalAmount || 0;
+      } else {
+        otherRevenue += sale.totalAmount || 0;
+      }
+    }
+
+    const expectedCash = (activeShift.openingCash || 0) + cashRevenue;
+    return jsonResponse({
+      activeShift,
+      totalSales: shiftSales.length,
+      totalRevenue,
+      cashRevenue,
+      cardRevenue,
+      otherRevenue,
+      creditRevenue,
+      openingCash: activeShift.openingCash || 0,
+      expectedCash,
+      salesCount: shiftSales.length,
+    });
+  }
+
   if (path === "/api/shifts/open" && method === "POST") {
     const body = getBody();
     const shifts = getDb("shifts");

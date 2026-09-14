@@ -11,11 +11,17 @@ interface ActiveShift {
   status: string;
 }
 
-interface Balances {
-  kassa: number;
-  bank: number;
-  safe: number;
-  debt: number;
+interface ShiftSummary {
+  activeShift: ActiveShift | null;
+  totalSales: number;
+  totalRevenue: number;
+  cashRevenue: number;
+  cardRevenue: number;
+  otherRevenue: number;
+  creditRevenue: number;
+  openingCash: number;
+  expectedCash: number;
+  salesCount: number;
 }
 
 export function ShiftQuickBar() {
@@ -35,29 +41,22 @@ export function ShiftQuickBar() {
     1: 0,
   });
 
-  // Fetch active shift
-  const { data: shiftData } = useQuery<{ activeShift: ActiveShift | null }>({
-    queryKey: ["/api/shifts/active"],
+  // Fetch shift-bounded summary (shiftId-filtered, never by date)
+  const { data: summaryData } = useQuery<ShiftSummary>({
+    queryKey: ["/api/shifts/active-summary"],
     queryFn: async () => {
-      const res = await fetch("/api/shifts/active");
-      if (!res.ok) return { activeShift: null };
+      const res = await fetch("/api/shifts/active-summary");
+      if (!res.ok) return {
+        activeShift: null, totalSales: 0, totalRevenue: 0,
+        cashRevenue: 0, cardRevenue: 0, otherRevenue: 0, creditRevenue: 0,
+        openingCash: 0, expectedCash: 0, salesCount: 0,
+      };
       return res.json();
     },
     refetchInterval: 15000,
   });
 
-  // Fetch live balances
-  const { data: balances } = useQuery<Balances>({
-    queryKey: ["/api/dashboard/balances"],
-    queryFn: async () => {
-      const res = await fetch("/api/dashboard/balances");
-      if (!res.ok) return { kassa: 0, bank: 0, safe: 0, debt: 0 };
-      return res.json();
-    },
-    refetchInterval: 15000,
-  });
-
-  const activeShift = shiftData?.activeShift;
+  const activeShift = summaryData?.activeShift;
 
   // Calculate shift duration
   const [duration, setDuration] = useState("");
@@ -83,7 +82,8 @@ export function ShiftQuickBar() {
     0
   );
 
-  const kassaSystemBalance = balances?.kassa || 0;
+  // Shift-bounded expected cash (opening cash + only THIS shift's nəğd satışları)
+  const kassaSystemBalance = summaryData?.expectedCash || 0;
   const difference = totalCalculatedCash - kassaSystemBalance;
 
   const handleCloseShift = async () => {
@@ -104,6 +104,7 @@ export function ShiftQuickBar() {
         });
         setShowCountModal(false);
         queryClient.invalidateQueries({ queryKey: ["/api/shifts/active"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/shifts/active-summary"] });
         queryClient.invalidateQueries({ queryKey: ["/api/dashboard/balances"] });
       } else {
         const err = await res.json();
@@ -218,12 +219,40 @@ export function ShiftQuickBar() {
 
             {/* Reconciliation Comparison Card */}
             <div className="p-4 bg-gray-900 text-white rounded-2xl space-y-2">
+              {/* Shift Revenue Breakdown */}
+              {summaryData && summaryData.salesCount > 0 && (
+                <div className="mb-2 pb-2 border-b border-gray-800 space-y-1">
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold mb-1">Bu növbənin satışları ({summaryData.salesCount} çek)</p>
+                  {summaryData.cashRevenue > 0 && (
+                    <div className="flex justify-between text-[11px] text-gray-400">
+                      <span>💵 Nəğd:</span>
+                      <span className="font-mono text-emerald-400">{summaryData.cashRevenue.toFixed(2)} ₼</span>
+                    </div>
+                  )}
+                  {summaryData.cardRevenue > 0 && (
+                    <div className="flex justify-between text-[11px] text-gray-400">
+                      <span>💳 Kart/Köçürmə:</span>
+                      <span className="font-mono text-blue-400">{summaryData.cardRevenue.toFixed(2)} ₼</span>
+                    </div>
+                  )}
+                  {summaryData.creditRevenue > 0 && (
+                    <div className="flex justify-between text-[11px] text-gray-400">
+                      <span>📋 Nisyə:</span>
+                      <span className="font-mono text-amber-400">{summaryData.creditRevenue.toFixed(2)} ₼</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-[11px] text-gray-300 pt-0.5">
+                    <span className="font-bold">Ümumi Dövriyyə:</span>
+                    <span className="font-mono font-bold text-white">{summaryData.totalRevenue.toFixed(2)} ₼</span>
+                  </div>
+                </div>
+              )}
               <div className="flex justify-between text-xs font-medium text-gray-300">
                 <span>Sayılmış Nağd:</span>
                 <span className="font-mono font-bold text-emerald-400">{totalCalculatedCash.toFixed(2)} ₼</span>
               </div>
               <div className="flex justify-between text-xs font-medium text-gray-300">
-                <span>Sistem Kassa Balansı:</span>
+                <span>Gözlənilən Kassa (Növbə):</span>
                 <span className="font-mono font-bold text-amber-400">{kassaSystemBalance.toFixed(2)} ₼</span>
               </div>
               <div className="border-t border-gray-800 pt-2 flex justify-between items-center">

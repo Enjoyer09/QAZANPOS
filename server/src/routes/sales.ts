@@ -628,6 +628,80 @@ export default function salesRoutes(): Router {
     }
   });
 
+  // ── GET /shifts/active-summary — Shift-bounded Z-report preview ───────────
+  // Returns sales stats for the currently OPEN shift, filtered STRICTLY by shiftId.
+  // This ensures midnight sales (00:36, 00:47, etc.) belonging to the previous
+  // shift are NEVER mixed into the new shift's Z-report.
+  router.get("/shifts/active-summary", async (req: AuthenticatedRequest, res) => {
+    try {
+      const seller = (req.headers["x-user-username"] as string || "").trim().toLowerCase() || "satici";
+      const activeShift = await db.query.shifts.findFirst({
+        where: and(eq(schema.shifts.tenantId, req.tenantId), eq(schema.shifts.cashierName, seller), eq(schema.shifts.status, "open"))
+      });
+
+      if (!activeShift) {
+        return res.json({
+          activeShift: null,
+          totalSales: 0,
+          totalRevenue: 0,
+          cashRevenue: 0,
+          cardRevenue: 0,
+          otherRevenue: 0,
+          creditRevenue: 0,
+          openingCash: 0,
+          expectedCash: 0,
+          salesCount: 0,
+        });
+      }
+
+      // Fetch ONLY sales linked to this specific shiftId — never by date range
+      const shiftSales = await db.select().from(schema.sales)
+        .where(and(
+          eq(schema.sales.tenantId, req.tenantId),
+          eq(schema.sales.shiftId, activeShift.id)
+        ));
+
+      let cashRevenue = 0;
+      let cardRevenue = 0;
+      let otherRevenue = 0;
+      let creditRevenue = 0;
+      let totalRevenue = 0;
+
+      for (const sale of shiftSales) {
+        const amount = (sale.totalAmount || 0) - (Number(sale.loyaltyDiscountPaid) || 0);
+        totalRevenue += sale.totalAmount || 0;
+
+        if (sale.paymentStatus === "credit" || sale.paymentType === "Nisyə") {
+          creditRevenue += sale.totalAmount || 0;
+        } else if (sale.paymentType === "Nəğd") {
+          cashRevenue += amount;
+        } else if (["Kart", "Kart2Kart", "Köçürmə"].includes(sale.paymentType || "")) {
+          cardRevenue += sale.totalAmount || 0;
+        } else {
+          otherRevenue += sale.totalAmount || 0;
+        }
+      }
+
+      const expectedCash = activeShift.openingCash + cashRevenue;
+
+      res.json({
+        activeShift,
+        totalSales: shiftSales.length,
+        totalRevenue,
+        cashRevenue,
+        cardRevenue,
+        otherRevenue,
+        creditRevenue,
+        openingCash: activeShift.openingCash,
+        expectedCash,
+        salesCount: shiftSales.length,
+      });
+    } catch (error) {
+      console.error("Active shift summary error:", error);
+      res.status(500).json({ message: "Növbə xülasəsi hesablanarkən xəta baş verdi" });
+    }
+  });
+
   router.post("/shifts/open", async (req: AuthenticatedRequest, res) => {
     try {
       const seller = (req.headers["x-user-username"] as string || "").trim().toLowerCase() || "satici";
