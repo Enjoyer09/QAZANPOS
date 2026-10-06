@@ -13,9 +13,6 @@ jobs:
   lint:
     name: ESLint
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: client
     steps:
       - uses: actions/checkout@v4
 
@@ -24,20 +21,18 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
-          cache-dependency-path: client/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
         run: npm ci
 
       - name: Run ESLint
+        working-directory: client
         run: npx eslint src/ e2e/
 
   typecheck:
     name: TypeScript Check
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: client
     steps:
       - uses: actions/checkout@v4
 
@@ -46,20 +41,18 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
-          cache-dependency-path: client/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
         run: npm ci
 
       - name: TypeScript check
+        working-directory: client
         run: npx tsc --noEmit
 
   server-typecheck:
     name: Server TypeScript Check
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: server
     steps:
       - uses: actions/checkout@v4
 
@@ -68,20 +61,18 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
-          cache-dependency-path: server/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
         run: npm ci
 
       - name: TypeScript check
+        working-directory: server
         run: npx tsc --noEmit
 
   unit-tests:
     name: Unit Tests (Vitest)
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: client
     steps:
       - uses: actions/checkout@v4
 
@@ -90,13 +81,18 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
-          cache-dependency-path: client/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Run Vitest tests
+      - name: Run Client Vitest tests
+        working-directory: client
         run: npx vitest run --reporter=verbose
+
+      - name: Run Server Vitest tests
+        working-directory: server
+        run: npx vitest run
 
       - name: Upload test results
         if: always()
@@ -109,9 +105,6 @@ jobs:
   build:
     name: Build Check
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: client
     steps:
       - uses: actions/checkout@v4
 
@@ -120,20 +113,20 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
-          cache-dependency-path: client/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
         run: npm ci
 
+      - name: Build server
+        run: npm run build:server
+
       - name: Build client
-        run: npm run build
+        run: npm run build:client
 
   e2e-tests:
     name: E2E Tests (Playwright)
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: client
     needs: [unit-tests, build]
     steps:
       - uses: actions/checkout@v4
@@ -143,7 +136,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
-          cache-dependency-path: client/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -152,9 +145,11 @@ jobs:
         run: echo "127.0.0.1 sinaq.localhost" | sudo tee -a /etc/hosts
 
       - name: Install Playwright browsers
+        working-directory: client
         run: npx playwright install chromium --with-deps
 
       - name: Run Playwright tests
+        working-directory: client
         run: npx playwright test
 
       - name: Upload Playwright report

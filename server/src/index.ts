@@ -8,6 +8,7 @@ import { eq, desc, isNull, and, sql } from "drizzle-orm";
 import fs from "fs";
 import https from "https";
 import { hashPassword } from "./lib/auth.js";
+import { ClimahomeService } from "./lib/climahome.js";
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -499,19 +500,51 @@ async function migrateUserPasswords() {
   }
 }
 
+// Scheduled Climahome Product Sync Engine (Delta sync for enabled tenants)
+async function executeScheduledClimahomeSyncs() {
+  try {
+    const list = await db.select().from(schema.settings).where(
+      and(
+        eq(schema.settings.climahomeEnabled, 1),
+        eq(schema.settings.climahomeAutoSync, 1)
+      )
+    );
+
+    for (const setting of list) {
+      if (setting.climahomeToken) {
+        console.log(`Scheduled Climahome Sync: Running delta sync for Tenant ${setting.tenantId}...`);
+        try {
+          const res = await ClimahomeService.syncProducts(setting.tenantId, { full: false });
+          console.log(`Scheduled Climahome Sync: Tenant ${setting.tenantId} finished (${res.createdCount} new, ${res.updatedCount} updated).`);
+        } catch (err) {
+          console.error(`Scheduled Climahome Sync failed for Tenant ${setting.tenantId}:`, err);
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Scheduled Climahome sync runner error:", error);
+  }
+}
+
 app.listen(PORT, async () => {
   console.log(`Server listening on port ${PORT}`);
   await ensureDefaultTenantsAndUsers();
   await migrateUserPasswords();
   await selfHealDatabaseTotals();
 
-  // Start the background cron check for backups every 60 seconds
+  // Start the background cron check every 60 seconds
   setInterval(async () => {
     const now = new Date();
     const hour = String(now.getHours()).padStart(2, "0");
     const minute = String(now.getMinutes()).padStart(2, "0");
     const timeStr = `${hour}:${minute}`;
+
     await executeScheduledBackups(timeStr);
+
+    // Run Climahome delta auto-sync every 6 hours at minute 15 (00:15, 06:15, 12:15, 18:15)
+    if (minute === "15" && ["00", "06", "12", "18"].includes(hour)) {
+      await executeScheduledClimahomeSyncs();
+    }
   }, 60000);
 });
 
