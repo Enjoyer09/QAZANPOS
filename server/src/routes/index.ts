@@ -14,6 +14,7 @@ import superRoutes from "./super.js";
 import apiKeysRoutes from "./apiKeys.js";
 import publicApiRoutes from "./publicApi.js";
 import uploadRoutes from "./upload.js";
+import climahomeRoutes from "./climahome.js";
 
 const router = Router();
 
@@ -39,6 +40,7 @@ router.use(activityLogRoutes());
 router.use(superRoutes());
 router.use(apiKeysRoutes());
 router.use(uploadRoutes());
+router.use(climahomeRoutes());
 router.use(publicApiRoutes());
 
 export default router;

@@ -106,6 +106,8 @@ export const products = pgTable("products", {
   vendorId: integer("vendor_id").references(() => vendors.id, { onDelete: "set null" }),
   minStockLimit: doublePrecision("min_stock_limit").notNull().default(5.0),
   imageUrl: text("image_url"),
+  externalSource: text("external_source"), // e.g. "climahome"
+  externalId: text("external_id"), // e.g. Climahome product ID
 }, (table) => ({
   productsTenantBarcodeIdx: uniqueIndex("products_tenant_barcode_idx").on(table.tenantId, table.barcode)
 }));
@@ -369,6 +371,11 @@ export const settings = pgTable("settings", {
   smsTemplateSale: text("sms_template_sale"),
   requireShift: integer("require_shift").notNull().default(1), // 1 = shift required, 0 = no shift
   multiWarehouseEnabled: integer("multi_warehouse_enabled").notNull().default(1), // 1 = enabled, 0 = disabled
+  climahomeEnabled: integer("climahome_enabled").notNull().default(0), // 1 = enabled, 0 = disabled
+  climahomeBaseUrl: text("climahome_base_url").default("https://api.climahome.az/api"),
+  climahomeToken: text("climahome_token"),
+  climahomeLastSync: text("climahome_last_sync"),
+  climahomeAutoSync: integer("climahome_auto_sync").notNull().default(0),
 });
 
 // 8b. Expense Limits per Category

@@ -202,6 +202,10 @@ export default function POS() {
   const [useLoyaltyPoints, setUseLoyaltyPoints] = useState(false);
   const [loyaltyDiscountInput, setLoyaltyDiscountInput] = useState("0");
 
+  // Climahome Customer Bonus State
+  const [climahomeBonusData, setClimahomeBonusData] = useState<any | null>(null);
+  const [isCheckingClimahomeBonus, setIsCheckingClimahomeBonus] = useState(false);
+
   // Cash Payment State (change calculator)
   const [cashReceivedInput, setCashReceivedInput] = useState("");
 
@@ -239,6 +243,7 @@ export default function POS() {
     setReturnStatus("returned_to_stock");
     setUseLoyaltyPoints(false);
     setLoyaltyDiscountInput("0");
+    setClimahomeBonusData(null);
     setShiftActualCash("");
     setCashReceivedInput("");
     // closeShiftStats reset handled by setState usage above
@@ -598,6 +603,55 @@ export default function POS() {
         })
         .filter((item) => item.quantity > 0)
     );
+  };
+
+  const handleCheckClimahomeBonus = async (phoneToLookup?: string) => {
+    const targetPhone = phoneToLookup || (customerMode === "existing" ? selectedCustomer?.phone : newCustomerPhone);
+    if (!targetPhone || !targetPhone.trim()) {
+      toast({
+        title: "Telefon Nömrəsi Yoxdur",
+        description: "Climahome bonusunu yoxlamaq üçün müştərinin telefon nömrəsi olmalıdır.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsCheckingClimahomeBonus(true);
+    try {
+      const res = await fetch(`/api/climahome/bonus?phone=${encodeURIComponent(targetPhone.trim())}`);
+      const data = await res.json();
+      if (res.ok && data.success) {
+        if (data.found) {
+          setClimahomeBonusData(data);
+          toast({
+            title: "Climahome Bonusu Tapıldı! 🎁",
+            description: `${data.customer?.name || "Müştəri"}: ${data.bonus?.balance?.toFixed(2)} ₼ bonus balı mövcuddur (Cashback: %${data.bonus?.purchasePercent || 2}).`,
+            variant: "success",
+          });
+        } else {
+          setClimahomeBonusData({ notFound: true, message: data.message });
+          toast({
+            title: "Müştəri Tapılmadı",
+            description: data.message || "Climahome bonus sistemində bu nömrə ilə qeydiyyat yoxdur.",
+            variant: "destructive",
+          });
+        }
+      } else {
+        toast({
+          title: "Xəta!",
+          description: data.message || "Bonus məlumatı yoxlanılarkən xəta baş verdi.",
+          variant: "destructive",
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: "Xəta!",
+        description: err.message || "Serverlə əlaqə kəsildi.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCheckingClimahomeBonus(false);
+    }
   };
 
   const handleSaveNewCustomer = async () => {
@@ -1276,6 +1330,7 @@ export default function POS() {
             productSearchQuery={productSearchQuery}
             selectedProductId={selectedProductId}
             selectedQuantity={selectedQuantity}
+            climahomeEnabled={settings?.climahomeEnabled === 1}
             onScanInput={setScanInput}
             onProductSearchQuery={setProductSearchQuery}
             onSelectedProductId={setSelectedProductId}
@@ -1288,6 +1343,9 @@ export default function POS() {
             onOpenCustomItem={(name) => {
               setCustomItemName(name);
               setIsCustomItemOpen(true);
+            }}
+            onProductImported={() => {
+              queryClient.invalidateQueries({ queryKey: ["/api/stock/levels"] });
             }}
           />
 
@@ -1411,6 +1469,45 @@ export default function POS() {
                         )}
                       </div>
                     )}
+                    {/* Climahome Bonus Section */}
+                    {settings?.climahomeEnabled === 1 && (
+                      <div className="pt-2 border-t border-blue-100/60 mt-2 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-blue-700 font-bold flex items-center gap-1">
+                            ❄️ Climahome Bonusu:
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleCheckClimahomeBonus()}
+                            disabled={isCheckingClimahomeBonus}
+                            className="px-2 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-[10px] font-bold rounded-md cursor-pointer transition-all flex items-center gap-1"
+                          >
+                            {isCheckingClimahomeBonus ? "Yoxlanılır..." : "Yoxla 🔍"}
+                          </button>
+                        </div>
+
+                        {climahomeBonusData && climahomeBonusData.found && (
+                          <div className="p-2 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg text-[10px] space-y-1 animate-in fade-in duration-200">
+                            <div className="flex justify-between items-center">
+                              <span className="text-gray-600 font-medium">Climahome Balansı:</span>
+                              <span className="font-extrabold font-mono text-blue-700 text-xs">
+                                {climahomeBonusData.bonus?.balance?.toFixed(2)} ₼
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center text-gray-500">
+                              <span>Cashback dərəcəsi:</span>
+                              <span className="font-bold text-gray-700">%{climahomeBonusData.bonus?.purchasePercent || 2}</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {climahomeBonusData && climahomeBonusData.notFound && (
+                          <p className="text-[10px] text-amber-600 font-medium">
+                            {climahomeBonusData.message || "Climahome sistemində müştəri tapılmadı"}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1431,7 +1528,19 @@ export default function POS() {
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
-                    <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Telefon</label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Telefon</label>
+                      {settings?.climahomeEnabled === 1 && newCustomerPhone.trim() && (
+                        <button
+                          type="button"
+                          onClick={() => handleCheckClimahomeBonus(newCustomerPhone)}
+                          disabled={isCheckingClimahomeBonus}
+                          className="text-[9px] text-blue-600 font-bold hover:underline cursor-pointer"
+                        >
+                          {isCheckingClimahomeBonus ? "..." : "Bonus Yoxla ❄️"}
+                        </button>
+                      )}
+                    </div>
                     <input
                       type="text"
                       placeholder="055-123-4567"

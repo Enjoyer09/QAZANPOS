@@ -44,6 +44,7 @@ interface ProductGridProps {
   productSearchQuery: string;
   selectedProductId: string;
   selectedQuantity: string;
+  climahomeEnabled?: boolean;
   onScanInput: (val: string) => void;
   onProductSearchQuery: (val: string) => void;
   onSelectedProductId: (val: string) => void;
@@ -51,15 +52,18 @@ interface ProductGridProps {
   onAddToBasket: (prod: Record<string, unknown>, serialNum?: string | null, bypassStockCheck?: boolean, customSalePrice?: number) => void;
   onOpenQuickCreate: (name: string) => void;
   onOpenCustomItem: (name: string) => void;
+  onProductImported?: () => void;
 }
 
 export default function ProductGrid({
   posMode, stockLevels, currentUser, isAdmin, basket,
   scanInput, productSearchQuery, selectedProductId, selectedQuantity,
+  climahomeEnabled,
   onScanInput, onProductSearchQuery, onSelectedProductId, onSelectedQuantity,
-  onAddToBasket, onOpenQuickCreate, onOpenCustomItem
+  onAddToBasket, onOpenQuickCreate, onOpenCustomItem, onProductImported
 }: ProductGridProps) {
   const { toast } = useToast();
+  const [isSearchingClimahome, setIsSearchingClimahome] = React.useState(false);
 
   const sellableProducts = posMode === "sale"
     ? (stockLevels?.filter((p) => Number(p.currentQuantity) > 0) || [])
@@ -84,7 +88,7 @@ export default function ProductGrid({
     );
   });
 
-  const handleScanInput = (val: string) => {
+  const handleScanInput = async (val: string) => {
     onScanInput(val);
     const cleaned = val.trim().toUpperCase();
     if (!cleaned) return;
@@ -108,6 +112,35 @@ export default function ProductGrid({
       onAddToBasket(foundProduct, foundSerial);
       onScanInput("");
       toast({ title: "Skan edildi!", description: `Məhsul səbətə əlavə olundu: ${foundProduct.productName}${foundSerial ? ` (IMEI: ${foundSerial})` : ""}`, variant: "success" });
+      return;
+    }
+
+    // Əgər lokal anbarda tapılmadısa və Climahome inteqrasiyası aktivdirsə, API-dən canlı axtarırıq
+    if (climahomeEnabled && val.trim().length >= 3) {
+      setIsSearchingClimahome(true);
+      try {
+        const res = await fetch(`/api/climahome/search?code=${encodeURIComponent(val.trim())}`);
+        if (res.ok) {
+          const remoteProd = await res.json();
+          if (remoteProd && remoteProd.productId) {
+            onAddToBasket(remoteProd, null, true, remoteProd.salePrice);
+            onScanInput("");
+            toast({
+              title: "Climahome-dan tapıldı! ❄️",
+              description: `"${remoteProd.productName}" kataloqa idxal edildi və səbətə əlavə olundu (${remoteProd.salePrice.toFixed(2)} ₼).`,
+              variant: "success",
+            });
+            if (onProductImported) {
+              onProductImported();
+            }
+            return;
+          }
+        }
+      } catch (e) {
+        console.error("Climahome live search error:", e);
+      } finally {
+        setIsSearchingClimahome(false);
+      }
     }
   };
 
@@ -190,7 +223,15 @@ export default function ProductGrid({
       )}
 
       <div className="mb-4 space-y-1.5">
-        <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Sürətli Skan / Barkod və ya IMEI</label>
+        <div className="flex items-center justify-between">
+          <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Sürətli Skan / Barkod və ya IMEI</label>
+          {climahomeEnabled && (
+            <span className="text-[10px] text-blue-600 font-bold flex items-center gap-1">
+              <span className={`w-1.5 h-1.5 rounded-full bg-blue-500 ${isSearchingClimahome ? "animate-ping" : ""}`}></span>
+              Climahome Canlı Axtarış Aktivdir ❄️
+            </span>
+          )}
+        </div>
         <div className="relative">
           <input type="text" placeholder="Barkod və ya IMEI skan edin..."
             value={scanInput}
@@ -198,6 +239,11 @@ export default function ProductGrid({
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleScanInput(scanInput); } }}
             className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 font-mono text-xs font-bold" />
           <Barcode className="absolute left-3.5 top-3.5 w-4 h-4 text-gray-400" />
+          {isSearchingClimahome && (
+            <span className="absolute right-3.5 top-3.5 text-xs text-blue-600 font-bold animate-pulse">
+              Climahome Axtarılır...
+            </span>
+          )}
         </div>
       </div>
 
@@ -216,6 +262,13 @@ export default function ProductGrid({
             <div className="p-4 bg-gray-50/50 border border-gray-100 rounded-xl space-y-3.5 text-center animate-in fade-in duration-200">
               <p className="text-xs text-gray-400 font-semibold">🔍 Axtarışa uyğun məhsul tapılmadı.</p>
               <div className="flex flex-col sm:flex-row gap-2 justify-center items-center">
+                {climahomeEnabled && (
+                  <button type="button" onClick={() => handleScanInput(productSearchQuery.trim())}
+                    disabled={isSearchingClimahome}
+                    className="w-full sm:w-auto px-3.5 py-2 bg-blue-600 text-white text-[10px] font-black uppercase tracking-wider rounded-lg hover:bg-blue-700 cursor-pointer transition-all flex items-center justify-center gap-1.5 hover-elevate shadow-xs">
+                    ❄️ Climahome-da Axtar ({isSearchingClimahome ? "Axtarılır..." : "API"})
+                  </button>
+                )}
                 <button type="button" onClick={() => onOpenQuickCreate(productSearchQuery.trim())}
                   className="w-full sm:w-auto px-3.5 py-2 bg-primary text-white text-[10px] font-black uppercase tracking-wider rounded-lg hover:bg-primary/95 cursor-pointer transition-all flex items-center justify-center gap-1.5 hover-elevate shadow-xs">
                   ➕ Kataloqda Yeni Məhsul Yarat

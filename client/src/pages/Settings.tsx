@@ -29,6 +29,8 @@ import {
   Check,
   Plus,
   Terminal,
+  RefreshCw,
+  Cloud,
 } from "lucide-react";
 
 
@@ -111,6 +113,15 @@ export default function SettingsPage() {
   const [smsSenderName, setSmsSenderName] = useState("");
   const [smsTemplateDebt, setSmsTemplateDebt] = useState("");
   const [smsTemplateSale, setSmsTemplateSale] = useState("");
+
+  // Climahome Integration State
+  const [climahomeEnabled, setClimahomeEnabled] = useState(0);
+  const [climahomeBaseUrl, setClimahomeBaseUrl] = useState("https://api.climahome.az/api");
+  const [climahomeToken, setClimahomeToken] = useState("");
+  const [climahomeLastSync, setClimahomeLastSync] = useState<string | null>(null);
+  const [climahomeAutoSync, setClimahomeAutoSync] = useState(0);
+  const [isTestingClimahome, setIsTestingClimahome] = useState(false);
+  const [isSyncingClimahome, setIsSyncingClimahome] = useState(false);
 
   // Backup Settings State
   const [backupTime, setBackupTime] = useState("23:00");
@@ -494,6 +505,13 @@ export default function SettingsPage() {
       setSmsSenderName(settingsData.smsSenderName || "");
       setSmsTemplateDebt(settingsData.smsTemplateDebt || "Hörmətli [Müştəri], sizin [QalıqBorc] ₼ borcunuz mövcuddur. QazanPOS");
       setSmsTemplateSale(settingsData.smsTemplateSale || "Hörmətli [Müştəri], [Məbləğ] ₼ məbləğində alış-verişiniz üçün təşəkkür edirik! QazanPOS");
+
+      // Load Climahome integration settings
+      setClimahomeEnabled(settingsData.climahomeEnabled ?? 0);
+      setClimahomeBaseUrl(settingsData.climahomeBaseUrl || "https://api.climahome.az/api");
+      setClimahomeToken(settingsData.climahomeToken || "");
+      setClimahomeLastSync(settingsData.climahomeLastSync || null);
+      setClimahomeAutoSync(settingsData.climahomeAutoSync ?? 0);
 
       // Load Marketplace Commissions settings
       try {
@@ -939,6 +957,113 @@ export default function SettingsPage() {
     }
   };
 
+  const handleTestClimahome = async () => {
+    if (!climahomeToken.trim()) {
+      toast({
+        title: "Xəta!",
+        description: "Lütfən, öncə Climahome POS Token məlumatını doldurun.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsTestingClimahome(true);
+    try {
+      // Öncə mövcud tokeni yaddaşa yazaq ki test endpoint-i onu görsün
+      await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          climahomeEnabled,
+          climahomeBaseUrl: climahomeBaseUrl.trim(),
+          climahomeToken: climahomeToken.trim(),
+          climahomeAutoSync,
+        }),
+      });
+
+      const res = await fetch("/api/climahome/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        toast({
+          title: "Uğurlu Bağlantı! ⚡",
+          description: `Climahome API ilə əlaqə quruldu (${data.data?.branch || "Mətbəx / Mağaza"}). Token aktivdir.`,
+          variant: "success",
+        });
+        queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
+      } else {
+        toast({
+          title: "Climahome Bağlantı Xətası!",
+          description: data.message || "API ilə əlaqə qurula bilmədi. Tokeni yoxlayın.",
+          variant: "destructive",
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: "Texniki Xəta!",
+        description: err.message || "Serverlə bağlantı kəsildi.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsTestingClimahome(false);
+    }
+  };
+
+  const handleSyncClimahome = async (full: boolean = false) => {
+    if (!climahomeToken.trim()) {
+      toast({
+        title: "Xəta!",
+        description: "Sinxronizasiya üçün öncə POS Token daxil edilməlidir.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSyncingClimahome(true);
+    try {
+      toast({
+        title: "Sinxronizasiya Başladı...",
+        description: full ? "Bütün kataloq Climahome-dan endirilir..." : "Dəyişmiş məhsullar yenilənir...",
+        variant: "default",
+      });
+
+      const res = await fetch("/api/climahome/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ full }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setClimahomeLastSync(data.lastSync);
+        queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
+        toast({
+          title: "Sinxronizasiya Tamamlandı! 🎉",
+          description: `${data.createdCount} yeni məhsul əlavə edildi, ${data.updatedCount} məhsul yeniləndi (Cəmi: ${data.totalProcessed}).`,
+          variant: "success",
+        });
+      } else {
+        toast({
+          title: "Sinxronizasiya Xətası!",
+          description: data.message || "Məhsullar sinxronlaşdırıla bilmədi.",
+          variant: "destructive",
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: "Xəta!",
+        description: err.message || "Sinxronizasiya zamanı server xətası baş verdi.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSyncingClimahome(false);
+    }
+  };
+
   const toggleBank = (bankName: string) => {
     if (activeBanks.includes(bankName)) {
       setActiveBanks(activeBanks.filter((b) => b !== bankName));
@@ -1023,6 +1148,12 @@ export default function SettingsPage() {
       smsSenderName: smsSenderName.trim() || null,
       smsTemplateDebt: smsTemplateDebt.trim() || null,
       smsTemplateSale: smsTemplateSale.trim() || null,
+
+      // Climahome fields
+      climahomeEnabled,
+      climahomeBaseUrl: climahomeBaseUrl.trim() || "https://api.climahome.az/api",
+      climahomeToken: climahomeToken.trim() || null,
+      climahomeAutoSync,
     };
 
     updateSettingsMutation.mutate(payload);
@@ -1376,6 +1507,18 @@ export default function SettingsPage() {
         >
           <Key className="w-4 h-4 text-primary" />
           API & Vebsayt 🌐
+        </button>
+        <button
+          type="button"
+          onClick={() => setSettingsTab("climahome")}
+          className={`flex items-center gap-2 px-5 py-3 border-b-2 text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+            settingsTab === "climahome"
+              ? "border-primary text-primary"
+              : "border-transparent text-gray-400 hover:text-gray-600"
+          }`}
+        >
+          <Cloud className="w-4 h-4 text-primary" />
+          Climahome İnteqrasiyası ❄️
         </button>
         <button
           type="button"
@@ -2687,7 +2830,162 @@ export default function SettingsPage() {
           </div>
           )}
 
-          {(settingsTab === "general" || settingsTab === "printer" || settingsTab === "tax" || settingsTab === "channels" || settingsTab === "banks" || settingsTab === "loyalty" || settingsTab === "sms") && (
+          {settingsTab === "climahome" && (
+            /* Climahome POS Integration Card */
+            <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-xs glass-card space-y-6 animate-in fade-in-0 duration-300">
+              <div className="flex items-center justify-between border-b border-gray-100/50 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl">
+                    <Cloud className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-gray-900 text-sm">Climahome POS API İnteqrasiyası ❄️</h3>
+                    <p className="text-[11px] text-gray-400 font-medium">
+                      Məhsul kataloqunun sinxronizasiyası, kassada canlı barkod axtarışı və müştəri bonus sistemi
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                    climahomeEnabled === 1
+                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                      : "bg-gray-100 text-gray-500 border border-gray-200"
+                  }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${climahomeEnabled === 1 ? "bg-emerald-500 animate-pulse" : "bg-gray-400"}`}></span>
+                    {climahomeEnabled === 1 ? "Aktiv" : "Deaktiv"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Status Banner */}
+              <div className="bg-gradient-to-r from-blue-50/70 via-indigo-50/40 to-transparent p-4 rounded-xl border border-blue-100 text-xs font-semibold space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-gray-700">
+                    <span className="font-bold text-gray-950">Son Uğurlu Sinxronizasiya:</span>{" "}
+                    {climahomeLastSync ? (
+                      <span className="text-blue-700 font-mono font-bold">
+                        {new Date(climahomeLastSync).toLocaleString("az-AZ")}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">Hələ sinxronizasiya edilməyib</span>
+                    )}
+                  </div>
+                  <div className="text-[11px] text-gray-500">
+                    Məzənnə & Qiymət: <span className="font-bold text-gray-800">Qəpik dəqiqliyi ilə (100 qəpik = 1.00 ₼)</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Form Inputs */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-semibold">
+                <div className="space-y-1 md:col-span-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-gray-400 uppercase tracking-wider block text-[10px]">İnteqrasiyanı Aktivləşdir</label>
+                    <button
+                      type="button"
+                      onClick={() => setClimahomeEnabled(prev => prev === 1 ? 0 : 1)}
+                      className={`px-4 py-1.5 rounded-xl font-bold text-xs cursor-pointer border transition-all font-black ${
+                        climahomeEnabled === 1
+                          ? "bg-emerald-500 text-white border-emerald-500 hover:bg-emerald-600"
+                          : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
+                      }`}
+                    >
+                      {climahomeEnabled === 1 ? "Aktivdir 👍" : "Deaktivdir ❌"}
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-gray-400 font-normal">
+                    Aktiv olduqda kassa ekranında oxudulan və sistemdə tapılmayan məhsullar avtomatik Climahome API-dən axtarılıb səbətə əlavə olunacaq.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5 md:col-span-1">
+                  <label className="text-gray-400 uppercase tracking-wider block text-[10px]">API Server URL</label>
+                  <input
+                    type="text"
+                    value={climahomeBaseUrl}
+                    onChange={(e) => setClimahomeBaseUrl(e.target.value)}
+                    placeholder="https://api.climahome.az/api"
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 font-mono text-xs font-bold"
+                  />
+                  <span className="text-[10px] text-gray-400 font-normal">Standart: https://api.climahome.az/api</span>
+                </div>
+
+                <div className="space-y-1.5 md:col-span-1">
+                  <label className="text-gray-400 uppercase tracking-wider block text-[10px]">POS Giriş Tokeni (Bearer / X-Pos-Token) *</label>
+                  <input
+                    type="password"
+                    value={climahomeToken}
+                    onChange={(e) => setClimahomeToken(e.target.value)}
+                    placeholder="Climahome Admin tərəfindən təqdim olunan POS Token"
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50 font-mono text-xs font-bold"
+                  />
+                  <span className="text-[10px] text-gray-400 font-normal">Təhlükəsizlik üçün yalnız server tərəfindən ötürülür</span>
+                </div>
+
+                <div className="space-y-1.5 md:col-span-2 pt-2">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={climahomeAutoSync === 1}
+                      onChange={(e) => setClimahomeAutoSync(e.target.checked ? 1 : 0)}
+                      className="rounded border-gray-300 text-primary focus:ring-primary size-4"
+                    />
+                    <span>
+                      Dövri Avtomatik Sinxronizasiya (Gündəlik)
+                      <span className="block text-[10px] text-gray-400 font-normal mt-0.5">
+                        Hər gün arxa fonda dəyişən qiymətlər və məhsullar avtomatik yenilənir
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Action Buttons: Test Connection & Manual Sync */}
+              <div className="border-t border-gray-100/70 pt-5 space-y-3">
+                <span className="font-extrabold text-gray-900 text-xs uppercase tracking-wider block">İnteqrasiya Əməliyyatları</span>
+                
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <button
+                    type="button"
+                    onClick={handleTestClimahome}
+                    disabled={isTestingClimahome || !climahomeToken.trim()}
+                    className="flex-1 px-5 py-3 bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-50 font-black text-xs rounded-xl cursor-pointer flex items-center justify-center gap-2 transition-all shadow-sm"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${isTestingClimahome ? "animate-spin" : ""}`} />
+                    <span>{isTestingClimahome ? "Yoxlanılır..." : "Əlaqəni Yoxla (Ping)"}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSyncClimahome(false)}
+                    disabled={isSyncingClimahome || !climahomeToken.trim()}
+                    className="flex-1 px-5 py-3 bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 font-black text-xs rounded-xl cursor-pointer flex items-center justify-center gap-2 transition-all shadow-sm shadow-blue-500/20"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${isSyncingClimahome ? "animate-spin" : ""}`} />
+                    <span>{isSyncingClimahome ? "Sinxronlaşdırılır..." : "Dəyişiklikləri Yenilə (Delta Sync)"}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm("Bütün məhsul kataloqu yenidən yoxlanılacaq və sinxronlaşdırılacaq. Davam edilsin?")) {
+                        handleSyncClimahome(true);
+                      }
+                    }}
+                    disabled={isSyncingClimahome || !climahomeToken.trim()}
+                    className="flex-1 px-5 py-3 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 font-black text-xs rounded-xl cursor-pointer flex items-center justify-center gap-2 transition-all"
+                  >
+                    <Download className="w-4 h-4 text-blue-600" />
+                    <span>Tam Sinxronizasiya (Full)</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+
+          {(settingsTab === "general" || settingsTab === "printer" || settingsTab === "tax" || settingsTab === "channels" || settingsTab === "banks" || settingsTab === "loyalty" || settingsTab === "sms" || settingsTab === "climahome") && (
             /* Save Button */
             <div className="flex justify-end">
               <button

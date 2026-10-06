@@ -92,6 +92,15 @@ async function ensureDefaultTenantsAndUsers() {
       );
     `);
 
+    console.log("Self-Healing Database: Ensuring Climahome integration columns exist...");
+    await db.execute(sql`ALTER TABLE settings ADD COLUMN IF NOT EXISTS climahome_enabled integer NOT NULL DEFAULT 0;`);
+    await db.execute(sql`ALTER TABLE settings ADD COLUMN IF NOT EXISTS climahome_base_url text DEFAULT 'https://api.climahome.az/api';`);
+    await db.execute(sql`ALTER TABLE settings ADD COLUMN IF NOT EXISTS climahome_token text;`);
+    await db.execute(sql`ALTER TABLE settings ADD COLUMN IF NOT EXISTS climahome_last_sync text;`);
+    await db.execute(sql`ALTER TABLE settings ADD COLUMN IF NOT EXISTS climahome_auto_sync integer NOT NULL DEFAULT 0;`);
+    await db.execute(sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS external_source text;`);
+    await db.execute(sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS external_id text;`);
+
 
 
     // 1. Ensure Tenant 1 (demo) exists

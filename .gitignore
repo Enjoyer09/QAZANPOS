@@ -30,3 +30,14 @@ Thumbs.db
 .agents/config.json
 .agents/mcp_config.json
 .agents/plugins/*/mcp_config.json
+
+# Ruflo local secrets and runtime data
+.env.*.local
+.claude-flow/data/
+.claude-flow/logs/
+.claude-flow/sessions/
+
+# Codex local configuration
+.codex/
+# Claude Flow runtime data
+# Environment variables

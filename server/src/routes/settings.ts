@@ -43,6 +43,7 @@ export default function settingsRoutes(): Router {
         "activeBanks", "requireShift", "loyaltyRuleRate", "loyaltyMinPointsRedeem",
         "smsApiKey", "smsSenderName", "smsTemplateDebt", "smsTemplateSale",
         "multiWarehouseEnabled",
+        "climahomeEnabled", "climahomeBaseUrl", "climahomeToken", "climahomeLastSync", "climahomeAutoSync",
       ];
 
       const updateData: Record<string, any> = {};
