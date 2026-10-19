@@ -488,12 +488,15 @@ export async function fetchTenantStockMetrics(tenantId: number, warehouseId?: nu
     .where(eq(schema.stockAdjustments.tenantId, tenantId))
     .groupBy(schema.stockAdjustments.productId, schema.stockAdjustments.type);
 
+  const isAdjustmentIncrease = (type: string) =>
+    ["found", "surplus", "manual_add", "add"].includes(String(type).toLowerCase());
+
   const globalAdjustmentsMap = new Map<number, number>();
   globalAdjustmentsGroup.forEach(g => {
     const pid = g.productId;
     const qty = parseFloat((g.totalQty as string) || "0");
     const current = globalAdjustmentsMap.get(pid) || 0;
-    const change = g.type === "found" ? qty : -qty;
+    const change = isAdjustmentIncrease(g.type) ? qty : -qty;
     globalAdjustmentsMap.set(pid, current + change);
   });
 
@@ -508,7 +511,7 @@ export async function fetchTenantStockMetrics(tenantId: number, warehouseId?: nu
       const pid = g.productId;
       const qty = parseFloat((g.totalQty as string) || "0");
       const current = adjustmentsMap.get(pid) || 0;
-      const change = g.type === "found" ? qty : -qty;
+      const change = isAdjustmentIncrease(g.type) ? qty : -qty;
       adjustmentsMap.set(pid, current + change);
     });
   } else {
@@ -625,62 +628,44 @@ export async function fetchTenantStockMetrics(tenantId: number, warehouseId?: nu
     const totalTransferredIn = transferredInMap.get(productId) || 0;
     const localAdjustments = adjustmentsMap.get(productId) || 0;
 
-    const calculatedQty = Math.max(0, totalRestocked - totalSold + totalReturned - totalVendorReturned - totalTransferredOut + totalTransferredIn + localAdjustments);
-    const currentQuantity = ledgerMap.has(productId) ? Math.max(0, ledgerMap.get(productId)!) : calculatedQty;
-
-
-    const gRestocked = globalRestockedMap.get(productId) || 0;
-    const gSold = globalSoldMap.get(productId) || 0;
-    const gReturned = globalReturnedMap.get(productId) || 0;
-    const gVendorReturned = globalVendorReturnedMap.get(productId) || 0;
-    const gAdjustments = globalAdjustmentsMap.get(productId) || 0;
-    const globalQuantity = gRestocked - gSold + gReturned - gVendorReturned + gAdjustments;
+    // Faktiki anbar hərəkətləri əsasında tam və dəqiq cari qalıq hesablanması
+    const rawCalculatedQty = totalRestocked - totalSold + totalReturned - totalVendorReturned - totalTransferredOut + totalTransferredIn + localAdjustments;
+    const currentQuantity = Math.max(0, Math.round(rawCalculatedQty * 10000) / 10000);
 
     const productEntries = entriesMap.get(productId) || [];
-    const soldAdjustment = gAdjustments < 0 ? -gAdjustments : 0;
-    const netSold = Math.max(0, gSold - gReturned + soldAdjustment);
+    const lastPurchaseDate = productEntries.length > 0 ? productEntries[productEntries.length - 1].entryDate : null;
 
-    let soldRemaining = netSold;
-    let globalTotalValue = 0;
+    // Son Alış Qiyməti (Latest Purchase Price)
     let nextUnitCost = 0;
-    let foundNextUnit = false;
-
-    for (const entry of productEntries) {
-      const vrQty = vrMap.get(entry.id) || 0;
-      const adjustedQuantity = Math.max(0, entry.quantity - vrQty);
-      if (adjustedQuantity === 0) continue;
-
-      if (soldRemaining >= adjustedQuantity) {
-        soldRemaining -= adjustedQuantity;
-      } else {
-        const qtyLeft = adjustedQuantity - soldRemaining;
-        soldRemaining = 0;
-        globalTotalValue += qtyLeft * entry.purchasePrice;
-        if (!foundNextUnit) {
-          nextUnitCost = entry.purchasePrice;
-          foundNextUnit = true;
-        }
-      }
-    }
-
-    if (!foundNextUnit && productEntries.length > 0) {
+    if (productEntries.length > 0) {
       nextUnitCost = productEntries[productEntries.length - 1].purchasePrice;
     }
 
-    if (gAdjustments > 0) {
-      globalTotalValue += gAdjustments * nextUnitCost;
-    }
+    // Dinamik Ümumi Dəyər Hesablanması:
+    // 1. Əgər Cari Miqdar <= 0 olarsa, Ümumi Dəyər MÜTLƏQ 0.00 ₼ olmalıdır! Keçmiş partiya məbləğləri ekranda qala bilməz!
+    // 2. Əgər Cari Miqdar > 0 olarsa, mövcud qalıq üzrə ən son daxil olan partiyalardan geriyə doğru maya dəyəri hesablanır (FIFO)
+    let totalValue = 0;
+    if (currentQuantity > 0) {
+      let qtyNeeded = currentQuantity;
+      for (let i = productEntries.length - 1; i >= 0; i--) {
+        if (qtyNeeded <= 0) break;
+        const entry = productEntries[i];
+        const vrQty = vrMap.get(entry.id) || 0;
+        const availableInEntry = Math.max(0, entry.quantity - vrQty);
+        if (availableInEntry <= 0) continue;
 
-    const lastPurchaseDate = productEntries.length > 0 ? productEntries[productEntries.length - 1].entryDate : null;
-
-    let totalValue = globalTotalValue;
-    if (warehouseId) {
-      if (globalQuantity > 0) {
-        totalValue = (currentQuantity / globalQuantity) * globalTotalValue;
-      } else {
-        totalValue = currentQuantity * nextUnitCost;
+        const taken = Math.min(qtyNeeded, availableInEntry);
+        totalValue += taken * entry.purchasePrice;
+        qtyNeeded -= taken;
       }
+      if (qtyNeeded > 0 && nextUnitCost > 0) {
+        totalValue += qtyNeeded * nextUnitCost;
+      }
+    } else {
+      totalValue = 0;
     }
+
+    totalValue = Math.round(totalValue * 100) / 100;
 
     metrics.set(productId, { currentQuantity, totalValue, nextUnitCost, lastPurchaseDate });
   }

@@ -355,6 +355,34 @@ async function selfHealDatabaseTotals() {
     } else {
       console.log("Database Self-Healing: All financial transaction records are healthy.");
     }
+
+    // Reconcile inventory_ledger with stock_entries to ensure audit trail completeness
+    try {
+      console.log("Database Self-Healing: Checking inventory ledger consistency with stock movements...");
+      await db.execute(sql`
+        INSERT INTO inventory_ledger (
+          tenant_id, product_id, warehouse_id, quantity, movement_type, reference_type, reference_id, unit_price, notes, created_at
+        )
+        SELECT 
+          se.tenant_id,
+          se.product_id,
+          se.warehouse_id,
+          se.quantity,
+          'stock_in',
+          'stock_entry',
+          se.id,
+          se.purchase_price,
+          'Avtomatik Bərpa Mədaxili',
+          se.entry_date
+        FROM stock_entries se
+        WHERE NOT EXISTS (
+          SELECT 1 FROM inventory_ledger il
+          WHERE il.reference_type = 'stock_entry' AND il.reference_id = se.id
+        );
+      `);
+    } catch (ledgerErr) {
+      console.warn("Database Self-Healing: Inventory ledger backfill skipped:", ledgerErr);
+    }
   } catch (error) {
     console.error("Database Self-Healing error:", error);
   }

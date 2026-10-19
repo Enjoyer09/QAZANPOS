@@ -392,8 +392,17 @@ export default function Stock() {
     );
   };
 
-  const totalStockValue = list ? list.reduce((sum, item) => sum + (item.totalValue || 0), 0) : 0;
-  const filteredStockValue = filteredList.reduce((sum, item) => sum + (item.totalValue || 0), 0);
+  // Dinamik Ümumi Dəyər: Əgər cari miqdar <= 0 olarsa, Ümumi Dəyər mütləq 0.00 ₼ olmalıdır
+  const getItemTotalValue = (item: StockLevel): number => {
+    if (!item || item.currentQuantity <= 0) return 0;
+    if (typeof item.totalValue === "number" && item.totalValue > 0) {
+      return item.totalValue;
+    }
+    return Math.max(0, item.currentQuantity) * (item.lastPurchasePrice || 0);
+  };
+
+  const totalStockValue = list ? list.reduce((sum, item) => sum + getItemTotalValue(item), 0) : 0;
+  const filteredStockValue = filteredList.reduce((sum, item) => sum + getItemTotalValue(item), 0);
 
   if (user?.role !== "Admin" && currentUser?.staffCanViewStock === 0) {
     return (
@@ -673,7 +682,10 @@ export default function Stock() {
                             {item.lastPurchasePrice > 0 ? `${item.lastPurchasePrice.toFixed(2)} ₼` : "—"}
                           </td>
                           <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-right font-bold text-gray-955 font-mono hidden lg:table-cell">
-                            {item.totalValue > 0 ? `${item.totalValue.toFixed(2)} ₼` : "0.00 ₼"}
+                            {(() => {
+                              const val = getItemTotalValue(item);
+                              return val > 0 ? `${val.toFixed(2)} ₼` : "0.00 ₼";
+                            })()}
                           </td>
                           <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-right font-semibold text-gray-600 font-mono hidden sm:table-cell">
                             {item.lastSalePrice > 0 ? `${item.lastSalePrice.toFixed(2)} ₼` : "—"}

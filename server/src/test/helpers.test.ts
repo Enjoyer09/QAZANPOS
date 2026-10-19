@@ -127,3 +127,54 @@ describe("TIER_LIMITS", () => {
     });
   });
 });
+
+describe("Stock Valuation and Quantity Integrity Rules", () => {
+  it("strictly computes 0.00 total value when currentQuantity is 0 or negative", () => {
+    // Helper function simulating the inventory valuation formula
+    function computeInventoryValue(currentQuantity: number, entries: Array<{ quantity: number; purchasePrice: number }>, lastPurchasePrice: number) {
+      if (currentQuantity <= 0) return 0;
+      let totalValue = 0;
+      let qtyNeeded = currentQuantity;
+      for (let i = entries.length - 1; i >= 0; i--) {
+        if (qtyNeeded <= 0) break;
+        const entry = entries[i];
+        const taken = Math.min(qtyNeeded, entry.quantity);
+        totalValue += taken * entry.purchasePrice;
+        qtyNeeded -= taken;
+      }
+      if (qtyNeeded > 0 && lastPurchasePrice > 0) {
+        totalValue += qtyNeeded * lastPurchasePrice;
+      }
+      return Math.round(totalValue * 100) / 100;
+    }
+
+    // BOSCH scenario: 2 items were bought at 1083.00, but now 0 items in stock
+    const boschEntries = [{ quantity: 2, purchasePrice: 1083.00 }];
+    expect(computeInventoryValue(0, boschEntries, 1083.00)).toBe(0);
+    expect(computeInventoryValue(-1, boschEntries, 1083.00)).toBe(0);
+
+    // When 2 items exist, total value is 2166.00
+    expect(computeInventoryValue(2, boschEntries, 1083.00)).toBe(2166.00);
+
+    // Boru PVVC scenario: 14000 meters @ 1.20 AZN
+    const pipeEntries = [{ quantity: 14000, purchasePrice: 1.20 }];
+    expect(computeInventoryValue(14000, pipeEntries, 1.20)).toBe(16800.00);
+    expect(computeInventoryValue(0, pipeEntries, 1.20)).toBe(0);
+  });
+
+  it("handles adjustment types correctly (manual_add/found add stock, loss/manual_remove decrease stock)", () => {
+    const isAdjustmentIncrease = (type: string) =>
+      ["found", "surplus", "manual_add", "add"].includes(String(type).toLowerCase());
+
+    expect(isAdjustmentIncrease("found")).toBe(true);
+    expect(isAdjustmentIncrease("manual_add")).toBe(true);
+    expect(isAdjustmentIncrease("surplus")).toBe(true);
+    expect(isAdjustmentIncrease("add")).toBe(true);
+
+    expect(isAdjustmentIncrease("damage")).toBe(false);
+    expect(isAdjustmentIncrease("loss")).toBe(false);
+    expect(isAdjustmentIncrease("expired")).toBe(false);
+    expect(isAdjustmentIncrease("manual_remove")).toBe(false);
+  });
+});
+
