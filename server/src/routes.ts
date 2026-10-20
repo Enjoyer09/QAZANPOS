@@ -30,7 +30,7 @@ declare global {
 const router = Router();
 
 const normalizeName = (text: string): string => {
-  return text
+  return (text || "")
     .trim()
     .toLowerCase()
     .replace(/ı/g, "i")
@@ -40,6 +40,28 @@ const normalizeName = (text: string): string => {
     .replace(/ş/g, "s")
     .replace(/ç/g, "c")
     .replace(/ğ/g, "g");
+};
+
+const getConsonants = (str: string): string => {
+  return normalizeName(str).replace(/[^a-z0-9]/g, "").replace(/[aeiou]/g, "");
+};
+
+const matchesNameOrPart = (fullName: string, candidate: string): boolean => {
+  const normFull = normalizeName(fullName);
+  const normCand = normalizeName(candidate);
+  if (!normFull || !normCand) return false;
+  if (normFull === normCand || normFull.includes(normCand) || normCand.includes(normFull)) return true;
+
+  const candCons = getConsonants(normCand);
+  if (candCons.length >= 3) {
+    const fullCons = getConsonants(normFull);
+    if (fullCons.includes(candCons)) return true;
+    const parts = normFull.split(/\s+/);
+    for (const p of parts) {
+      if (getConsonants(p) === candCons) return true;
+    }
+  }
+  return false;
 };
 
 // ----------------------------------------------------
@@ -2343,8 +2365,8 @@ router.get("/sales", async (req, res) => {
       conditions = and(conditions, lte(schema.sales.saleDate, `${to}T23:59:59.999Z`)) as any;
     }
 
-    const role = req.headers["x-user-role"] as string;
-    const username = req.headers["x-user-username"] as string;
+    const role = (req.headers["x-user-role"] as string) || (req as any).user?.role;
+    const username = (req.headers["x-user-username"] as string) || (req as any).user?.username;
 
     if (!await checkUserPermission(req, "staffCanViewSalesHistory")) {
       return res.status(403).json({ message: "Satış tarixçəsinə giriş administrator tərəfindən məhdudlaşdırılıb" });
@@ -2354,11 +2376,51 @@ router.get("/sales", async (req, res) => {
       const normalizedUsername = username ? username.trim().toLowerCase() : "";
       conditions = and(conditions, eq(schema.sales.sellerName, normalizedUsername)) as any;
     } else if (seller && typeof seller === "string" && seller.trim() !== "" && seller !== "all") {
-      const sellerValues = seller.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
-      if (sellerValues.length === 1) {
-        conditions = and(conditions, sql`LOWER(${schema.sales.sellerName}) = ${sellerValues[0]}`) as any;
-      } else if (sellerValues.length > 1) {
-        conditions = and(conditions, sql`LOWER(${schema.sales.sellerName}) IN (${sql.join(sellerValues.map(s => sql`${s}`), sql`, `)})`) as any;
+      const rawValues = seller.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+      const sellerValues = new Set<string>(rawValues);
+
+      if (rawValues.some(v => v.startsWith("emp-") || v.startsWith("user-") || v.startsWith("sales-"))) {
+        const employees = await db.select().from(schema.employees).where(eq(schema.employees.tenantId, req.tenantId));
+        const users = await db.select().from(schema.users).where(eq(schema.users.tenantId, req.tenantId));
+
+        for (const val of rawValues) {
+          if (val.startsWith("emp-")) {
+            const empId = parseInt(val.replace("emp-", ""));
+            const emp = employees.find(e => e.id === empId);
+            if (emp) {
+              const normName = emp.name.trim();
+              sellerValues.add(normName.toLowerCase());
+              sellerValues.add(normalizeName(normName));
+              const parts = normName.split(/\s+/);
+              for (const p of parts) {
+                sellerValues.add(p.toLowerCase());
+                sellerValues.add(normalizeName(p));
+              }
+              for (const u of users) {
+                if (matchesNameOrPart(emp.name, u.username)) {
+                  sellerValues.add(u.username.trim().toLowerCase());
+                  sellerValues.add(normalizeName(u.username));
+                }
+              }
+            }
+          } else if (val.startsWith("user-")) {
+            const uId = parseInt(val.replace("user-", ""));
+            const u = users.find(x => x.id === uId);
+            if (u) {
+              sellerValues.add(u.username.trim().toLowerCase());
+              sellerValues.add(normalizeName(u.username));
+            }
+          } else if (val.startsWith("sales-")) {
+            sellerValues.add(val.replace("sales-", ""));
+          }
+        }
+      }
+
+      const matchArray = Array.from(sellerValues).filter(Boolean);
+      if (matchArray.length === 1) {
+        conditions = and(conditions, sql`LOWER(${schema.sales.sellerName}) = ${matchArray[0]}`) as any;
+      } else if (matchArray.length > 1) {
+        conditions = and(conditions, sql`LOWER(${schema.sales.sellerName}) IN (${sql.join(matchArray.map(s => sql`${s}`), sql`, `)})`) as any;
       }
     }
 
@@ -2418,60 +2480,92 @@ router.get("/sales/sellers", async (req, res) => {
       aliases: Set<string>;
     }>();
 
+    // 1. Add employees (Full HR directory records with real names & positions)
     for (const emp of employeesList) {
       const normName = emp.name.trim();
       if (!normName) continue;
       const key = normName.toLowerCase();
+      const azNorm = normalizeName(normName);
+      const empId = `emp-${emp.id}`;
+
+      const aliases = new Set<string>([key, azNorm, empId]);
+      const parts = normName.split(/\s+/);
+      for (const p of parts) {
+        if (p.length >= 2) {
+          aliases.add(p.toLowerCase());
+          aliases.add(normalizeName(p));
+        }
+      }
+
       sellersMap.set(key, {
-        id: `emp-${emp.id}`,
+        id: empId,
         name: normName,
-        roleOrPosition: emp.position || undefined,
-        aliases: new Set([key]),
+        roleOrPosition: emp.position || "İşçi",
+        aliases,
       });
     }
 
+    // 2. Add / Merge users (Auth accounts)
     for (const u of usersList) {
       const normUser = u.username.trim();
       if (!normUser) continue;
       const key = normUser.toLowerCase();
+      const azNorm = normalizeName(normUser);
+      const userId = `user-${u.id}`;
 
-      if (sellersMap.has(key)) {
-        const existing = sellersMap.get(key)!;
-        existing.aliases.add(key);
-        if (!existing.roleOrPosition) {
-          existing.roleOrPosition = u.role === "Admin" ? "Administrator" : "İşçi";
+      let matched = false;
+      for (const seller of sellersMap.values()) {
+        if (
+          matchesNameOrPart(seller.name, normUser) ||
+          seller.aliases.has(key) ||
+          seller.aliases.has(azNorm)
+        ) {
+          seller.aliases.add(key);
+          seller.aliases.add(azNorm);
+          seller.aliases.add(userId);
+          matched = true;
+          break;
         }
-      } else {
+      }
+
+      if (!matched) {
         sellersMap.set(key, {
-          id: `user-${u.id}`,
+          id: userId,
           name: normUser,
           roleOrPosition: u.role === "Admin" ? "Administrator" : "İşçi",
-          aliases: new Set([key]),
+          aliases: new Set([key, azNorm, userId]),
         });
       }
     }
 
+    // 3. Historical Sales sellers (ensure any sales cashier/seller is linked or present)
     for (const s of distinctSalesSellers) {
       if (!s.sellerName) continue;
       const normSaleSeller = s.sellerName.trim();
       if (!normSaleSeller) continue;
       const key = normSaleSeller.toLowerCase();
+      const azNorm = normalizeName(normSaleSeller);
 
-      let found = false;
+      let matched = false;
       for (const seller of sellersMap.values()) {
-        if (seller.aliases.has(key) || seller.name.toLowerCase() === key) {
+        if (
+          seller.aliases.has(key) ||
+          seller.aliases.has(azNorm) ||
+          matchesNameOrPart(seller.name, normSaleSeller)
+        ) {
           seller.aliases.add(key);
-          found = true;
+          seller.aliases.add(azNorm);
+          matched = true;
           break;
         }
       }
 
-      if (!found) {
+      if (!matched) {
         sellersMap.set(key, {
           id: `sales-${key}`,
           name: normSaleSeller,
           roleOrPosition: "Satıcı",
-          aliases: new Set([key]),
+          aliases: new Set([key, azNorm]),
         });
       }
     }

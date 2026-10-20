@@ -34,7 +34,7 @@ declare global {
 // ─── Name Normalization ────────────────────────────────────────────────────
 
 export const normalizeName = (text: string): string => {
-  return text
+  return (text || "")
     .trim()
     .toLowerCase()
     .replace(/ı/g, "i")
@@ -44,6 +44,28 @@ export const normalizeName = (text: string): string => {
     .replace(/ş/g, "s")
     .replace(/ç/g, "c")
     .replace(/ğ/g, "g");
+};
+
+export const getConsonants = (str: string): string => {
+  return normalizeName(str).replace(/[^a-z0-9]/g, "").replace(/[aeiou]/g, "");
+};
+
+export const matchesNameOrPart = (fullName: string, candidate: string): boolean => {
+  const normFull = normalizeName(fullName);
+  const normCand = normalizeName(candidate);
+  if (!normFull || !normCand) return false;
+  if (normFull === normCand || normFull.includes(normCand) || normCand.includes(normFull)) return true;
+
+  const candCons = getConsonants(normCand);
+  if (candCons.length >= 3) {
+    const fullCons = getConsonants(normFull);
+    if (fullCons.includes(candCons)) return true;
+    const parts = normFull.split(/\s+/);
+    for (const p of parts) {
+      if (getConsonants(p) === candCons) return true;
+    }
+  }
+  return false;
 };
 
 // ─── Middleware ─────────────────────────────────────────────────────────────
@@ -133,10 +155,10 @@ export async function checkUserPermission(
   req: AuthenticatedRequest,
   permissionKey: PermissionKey
 ): Promise<boolean> {
-  const role = req.headers["x-user-role"] as string;
+  const role = (req.headers["x-user-role"] as string) || req.user?.role;
   if (role === "Admin") return true;
 
-  const username = req.headers["x-user-username"] as string;
+  const username = (req.headers["x-user-username"] as string) || req.user?.username;
   if (!username) return false;
 
   const user = await db.query.users.findFirst({

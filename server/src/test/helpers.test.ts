@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalizeName, getMonthBoundaries, TIER_LIMITS } from "../routes/helpers.js";
+import { normalizeName, getMonthBoundaries, TIER_LIMITS, getConsonants, matchesNameOrPart } from "../routes/helpers.js";
 
 describe("normalizeName", () => {
   it("trims whitespace", () => {
@@ -376,6 +376,108 @@ describe("Sales Seller Filtering & Calculation", () => {
     expect(alzoneMetrics.revenue).toBe(190); // 150 + (50 - 10)
     expect(alzoneMetrics.cost).toBe(124); // 100 + (30 - 6)
     expect(alzoneMetrics.profit).toBe(66);
+  });
+
+  it("accurately unifies employees and usernames using matchesNameOrPart for AlZone scenario", () => {
+    expect(matchesNameOrPart("Əhmədov Təbriz", "tabriz")).toBe(true);
+    expect(matchesNameOrPart("Namazov Sərxan", "sarxan")).toBe(true);
+    expect(matchesNameOrPart("Zülfiqarov Rəşad", "resad")).toBe(true);
+    expect(matchesNameOrPart("Hikmət Əliyev", "hikmet")).toBe(true);
+    expect(matchesNameOrPart("Əhmədov Təbriz", "hikmet")).toBe(false);
+
+    // Test tenant 4 unification simulation
+    const alzoneEmployees = [
+      { id: 2, name: "Əhmədov Təbriz", position: "Menecer", status: "active" },
+      { id: 3, name: "Namazov Sərxan", position: "Menecer", status: "active" },
+      { id: 5, name: "Zülfiqarov Rəşad", position: "Kuryer", status: "active" },
+    ];
+    const alzoneUsers = [
+      { id: 6, username: "hikmet", role: "Admin" },
+      { id: 7, username: "tabriz", role: "Staff" },
+      { id: 8, username: "sarxan", role: "Staff" },
+    ];
+    const alzoneSalesSellers = [
+      { sellerName: "hikmet" },
+      { sellerName: "tabriz" },
+      { sellerName: "sarxan" },
+    ];
+
+    const map = new Map<string, { id: string; name: string; roleOrPosition?: string; aliases: Set<string> }>();
+
+    for (const emp of alzoneEmployees) {
+      const normName = emp.name.trim();
+      const key = normName.toLowerCase();
+      const azNorm = normalizeName(normName);
+      const empId = `emp-${emp.id}`;
+      const aliases = new Set<string>([key, azNorm, empId]);
+      const parts = normName.split(/\s+/);
+      for (const p of parts) {
+        if (p.length >= 2) {
+          aliases.add(p.toLowerCase());
+          aliases.add(normalizeName(p));
+        }
+      }
+      map.set(key, { id: empId, name: normName, roleOrPosition: emp.position, aliases });
+    }
+
+    for (const u of alzoneUsers) {
+      const normUser = u.username.trim();
+      const key = normUser.toLowerCase();
+      const azNorm = normalizeName(normUser);
+      const userId = `user-${u.id}`;
+
+      let matched = false;
+      for (const seller of map.values()) {
+        if (matchesNameOrPart(seller.name, normUser) || seller.aliases.has(key) || seller.aliases.has(azNorm)) {
+          seller.aliases.add(key);
+          seller.aliases.add(azNorm);
+          seller.aliases.add(userId);
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) {
+        map.set(key, { id: userId, name: normUser, roleOrPosition: u.role === "Admin" ? "Administrator" : "İşçi", aliases: new Set([key, azNorm, userId]) });
+      }
+    }
+
+    for (const s of alzoneSalesSellers) {
+      const normSaleSeller = s.sellerName.trim();
+      const key = normSaleSeller.toLowerCase();
+      const azNorm = normalizeName(normSaleSeller);
+
+      let matched = false;
+      for (const seller of map.values()) {
+        if (seller.aliases.has(key) || seller.aliases.has(azNorm) || matchesNameOrPart(seller.name, normSaleSeller)) {
+          seller.aliases.add(key);
+          seller.aliases.add(azNorm);
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) {
+        map.set(key, { id: `sales-${key}`, name: normSaleSeller, roleOrPosition: "Satıcı", aliases: new Set([key, azNorm]) });
+      }
+    }
+
+    const unifiedList = Array.from(map.values());
+    // Exactly 4 individuals: Əhmədov Təbriz, Namazov Sərxan, Zülfiqarov Rəşad, and hikmet
+    expect(unifiedList.length).toBe(4);
+
+    const tabrizEntry = unifiedList.find(s => s.name === "Əhmədov Təbriz");
+    expect(tabrizEntry).toBeDefined();
+    expect(tabrizEntry?.aliases.has("tabriz")).toBe(true);
+
+    const sarxanEntry = unifiedList.find(s => s.name === "Namazov Sərxan");
+    expect(sarxanEntry).toBeDefined();
+    expect(sarxanEntry?.aliases.has("sarxan")).toBe(true);
+
+    const hikmetEntry = unifiedList.find(s => s.name === "hikmet");
+    expect(hikmetEntry).toBeDefined();
+    expect(hikmetEntry?.aliases.has("hikmet")).toBe(true);
+
+    const reshadEntry = unifiedList.find(s => s.name === "Zülfiqarov Rəşad");
+    expect(reshadEntry).toBeDefined();
   });
 });
 

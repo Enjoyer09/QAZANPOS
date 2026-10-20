@@ -32,13 +32,27 @@ app.use("/uploads", express.static(uploadsPath));
 
 // Serve static client assets in production
 const clientBuildPath = path.resolve(__dirname, "../../client/dist");
-app.use(express.static(clientBuildPath));
 
-// For wouter / SPA routing: fallback all non-api GET requests to index.html
+app.use(express.static(clientBuildPath, {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith("index.html")) {
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("Expires", "0");
+    } else if (filePath.includes("/assets/")) {
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    }
+  }
+}));
+
+// For wouter / SPA routing: fallback all non-api GET requests to index.html with cache-busting headers
 app.get("*", (req, res, next) => {
   if (req.path.startsWith("/api")) {
     return next();
   }
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
   res.sendFile(path.join(clientBuildPath, "index.html"), (err) => {
     if (err) {
       res.status(404).send("Client build not found. Run npm run build first.");

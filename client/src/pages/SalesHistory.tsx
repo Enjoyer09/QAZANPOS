@@ -395,9 +395,44 @@ export default function SalesHistory() {
   const [lookupLoading, setLookupLoading] = useState(false);
   const [lookupError, setLookupError] = useState<string | null>(null);
 
+  const normalizeAzeri = (text: string): string => {
+    return (text || "")
+      .trim()
+      .toLowerCase()
+      .replace(/ı/g, "i")
+      .replace(/ə/g, "e")
+      .replace(/ö/g, "o")
+      .replace(/ü/g, "u")
+      .replace(/ş/g, "s")
+      .replace(/ç/g, "c")
+      .replace(/ğ/g, "g");
+  };
+
+  const getConsonants = (str: string): string => {
+    return normalizeAzeri(str).replace(/[^a-z0-9]/g, "").replace(/[aeiou]/g, "");
+  };
+
+  const matchesNameOrPart = (fullName: string, candidate: string): boolean => {
+    const normFull = normalizeAzeri(fullName);
+    const normCand = normalizeAzeri(candidate);
+    if (!normFull || !normCand) return false;
+    if (normFull === normCand || normFull.includes(normCand) || normCand.includes(normFull)) return true;
+
+    const candCons = getConsonants(normCand);
+    if (candCons.length >= 3) {
+      const fullCons = getConsonants(normFull);
+      if (fullCons.includes(candCons)) return true;
+      const parts = normFull.split(/\s+/);
+      for (const p of parts) {
+        if (getConsonants(p) === candCons) return true;
+      }
+    }
+    return false;
+  };
+
   const user = (() => {
     try {
-      const userStr = localStorage.getItem("qazanpos_user");
+      const userStr = localStorage.getItem("qazanpos_user") || sessionStorage.getItem("qazanpos_user");
       return userStr ? JSON.parse(userStr) : null;
     } catch {
       return null;
@@ -426,9 +461,32 @@ export default function SalesHistory() {
     queryKey: ["/api/sales/sellers"],
     queryFn: async () => {
       const res = await fetch("/api/sales/sellers");
+      if (!res.ok) throw new Error("Satıcılar yüklənə bilmədi");
+      return res.json();
+    },
+    staleTime: 30000,
+    retry: 2,
+  });
+
+  // Client-side backup queries for employees & users to ensure dropdown never fails
+  const { data: rawEmployees = [] } = useQuery<any[]>({
+    queryKey: ["/api/employees"],
+    queryFn: async () => {
+      const res = await fetch("/api/employees");
       if (!res.ok) return [];
       return res.json();
     },
+    staleTime: 60000,
+  });
+
+  const { data: rawUsers = [] } = useQuery<any[]>({
+    queryKey: ["/api/users"],
+    queryFn: async () => {
+      const res = await fetch("/api/users");
+      if (!res.ok) return [];
+      return res.json();
+    },
+    staleTime: 60000,
   });
 
   // Sales Query
@@ -447,30 +505,101 @@ export default function SalesHistory() {
   const sellerList = React.useMemo(() => {
     const map = new Map<string, SellerOption>();
 
-    // 1. Add all from API (all users, all employees, and all sellers recorded in sales history)
-    dbSellers.forEach((s) => {
-      map.set(s.name.trim().toLowerCase(), s);
-    });
+    // 1. If dbSellers has returned from server, use it as primary source
+    if (dbSellers && dbSellers.length > 0) {
+      dbSellers.forEach((s) => {
+        map.set(s.id, {
+          ...s,
+          aliases: Array.from(new Set([
+            ...s.aliases,
+            s.id,
+            s.name.toLowerCase(),
+            normalizeAzeri(s.name),
+          ])),
+        });
+      });
+    } else {
+      // Fallback: build from rawEmployees and rawUsers
+      rawEmployees.forEach((emp: any) => {
+        const normName = (emp.name || "").trim();
+        if (!normName) return;
+        const empId = `emp-${emp.id}`;
+        const aliases = new Set<string>([empId, normName.toLowerCase(), normalizeAzeri(normName)]);
+        const parts = normName.split(/\s+/);
+        for (const p of parts) {
+          if (p.length >= 2) {
+            aliases.add(p.toLowerCase());
+            aliases.add(normalizeAzeri(p));
+          }
+        }
+        map.set(empId, {
+          id: empId,
+          name: normName,
+          roleOrPosition: emp.position || "İşçi",
+          aliases: Array.from(aliases),
+        });
+      });
 
-    // 2. Also ensure any sellerName from currently loaded sales is present as a fallback
+      rawUsers.forEach((u: any) => {
+        const normUser = (u.username || "").trim();
+        if (!normUser) return;
+        const userId = `user-${u.id}`;
+        const userLower = normUser.toLowerCase();
+        const userNorm = normalizeAzeri(normUser);
+
+        let matched = false;
+        for (const seller of map.values()) {
+          if (
+            matchesNameOrPart(seller.name, normUser) ||
+            seller.aliases.includes(userLower) ||
+            seller.aliases.includes(userNorm)
+          ) {
+            if (!seller.aliases.includes(userLower)) seller.aliases.push(userLower);
+            if (!seller.aliases.includes(userNorm)) seller.aliases.push(userNorm);
+            if (!seller.aliases.includes(userId)) seller.aliases.push(userId);
+            matched = true;
+            break;
+          }
+        }
+
+        if (!matched) {
+          map.set(userId, {
+            id: userId,
+            name: normUser,
+            roleOrPosition: u.role === "Admin" ? "Administrator" : "İşçi",
+            aliases: [userId, userLower, userNorm],
+          });
+        }
+      });
+    }
+
+    // 2. Also ensure any sellerName from currently loaded sales is incorporated
     if (sales) {
       sales.forEach((sale) => {
         if (sale.sellerName) {
           const norm = sale.sellerName.trim();
           const key = norm.toLowerCase();
+          const normKey = normalizeAzeri(norm);
           let matched = false;
           for (const s of map.values()) {
-            if (s.name.toLowerCase() === key || s.aliases.some((a) => a.toLowerCase() === key)) {
+            if (
+              s.name.toLowerCase() === key ||
+              s.aliases.some((a) => a.toLowerCase() === key || normalizeAzeri(a) === normKey) ||
+              matchesNameOrPart(s.name, norm)
+            ) {
+              if (!s.aliases.includes(key)) s.aliases.push(key);
+              if (!s.aliases.includes(normKey)) s.aliases.push(normKey);
               matched = true;
               break;
             }
           }
           if (!matched) {
-            map.set(key, {
-              id: `sale-${key}`,
+            const saleId = `sales-${key}`;
+            map.set(saleId, {
+              id: saleId,
               name: norm,
               roleOrPosition: "Satıcı",
-              aliases: [key],
+              aliases: [saleId, key, normKey],
             });
           }
         }
@@ -478,7 +607,7 @@ export default function SalesHistory() {
     }
 
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, "az"));
-  }, [dbSellers, sales]);
+  }, [dbSellers, rawEmployees, rawUsers, sales]);
 
   const handleFilter = () => {
     setAppliedFrom(fromDate);
@@ -499,6 +628,7 @@ export default function SalesHistory() {
     // 1. Employee / Seller Filter
     if (selectedSeller && selectedSeller !== "" && selectedSeller !== "all") {
       const saleSeller = (sale.sellerName || "").trim().toLowerCase();
+      const saleSellerNorm = normalizeAzeri(saleSeller);
       const targetSeller = sellerList.find(
         (s) => s.id === selectedSeller || s.name.toLowerCase() === selectedSeller.toLowerCase()
       );
@@ -506,10 +636,14 @@ export default function SalesHistory() {
       if (targetSeller) {
         const matches =
           targetSeller.name.trim().toLowerCase() === saleSeller ||
-          targetSeller.aliases.some((a) => a.toLowerCase() === saleSeller);
+          targetSeller.id === selectedSeller && targetSeller.aliases.some((a) => {
+            const lowA = a.toLowerCase();
+            return lowA === saleSeller || lowA === saleSellerNorm || normalizeAzeri(lowA) === saleSellerNorm;
+          }) ||
+          matchesNameOrPart(targetSeller.name, saleSeller);
         if (!matches) return false;
       } else {
-        if (saleSeller !== selectedSeller.trim().toLowerCase()) {
+        if (saleSeller !== selectedSeller.trim().toLowerCase() && saleSellerNorm !== normalizeAzeri(selectedSeller)) {
           return false;
         }
       }
@@ -569,8 +703,8 @@ export default function SalesHistory() {
   // Extract individual sale items sold below cost price (loss-making items)
   const lossItems = React.useMemo(() => {
     const list: any[] = [];
-    if (sales) {
-      for (const sale of sales) {
+    if (filteredSales) {
+      for (const sale of filteredSales) {
         if (sale.items) {
           for (const item of sale.items) {
             const salePrice = Number(item.salePrice || 0);
@@ -863,9 +997,19 @@ export default function SalesHistory() {
                             {new Date(sale.saleDate).toLocaleTimeString("az-AZ", { hour: "2-digit", minute: "2-digit" })}
                           </td>
                           <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-center hidden xl:table-cell">
-                            <span className="px-2.5 py-1 bg-gray-100 rounded-lg text-gray-700 text-[10.5px] font-black">
-                              {sale.sellerName || "Sistem"}
-                            </span>
+                            {(() => {
+                              const raw = sale.sellerName || "Sistem";
+                              const found = sellerList.find(s => 
+                                s.name.toLowerCase() === raw.toLowerCase() ||
+                                s.aliases.some(a => a.toLowerCase() === raw.toLowerCase() || normalizeAzeri(a) === normalizeAzeri(raw))
+                              );
+                              const displayName = found ? found.name : raw;
+                              return (
+                                <span className="px-2.5 py-1 bg-gray-100 rounded-lg text-gray-700 text-[10.5px] font-black" title={found && found.roleOrPosition ? `${displayName} (${found.roleOrPosition})` : displayName}>
+                                  {displayName}
+                                </span>
+                              );
+                            })()}
                           </td>
                           <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-center font-semibold hidden md:table-cell">
                             <span

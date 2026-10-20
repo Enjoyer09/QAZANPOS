@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db } from "../db/index.js";
 import * as schema from "../db/schema.js";
 import { eq, and, gte, lte, sql, desc, isNull, or, inArray } from "drizzle-orm";
-import { AuthenticatedRequest, requireAdmin, checkUserPermission, logActivity, verifyTenantLimit, computeFIFOSaleCost, computeRemainingDebt, fetchTenantStockMetrics, recordLedgerMovement } from "./helpers.js";
+import { AuthenticatedRequest, requireAdmin, checkUserPermission, logActivity, verifyTenantLimit, computeFIFOSaleCost, computeRemainingDebt, fetchTenantStockMetrics, recordLedgerMovement, normalizeName, matchesNameOrPart } from "./helpers.js";
 
 import { sendTelegramNotification } from "../lib/telegram.js";
 
@@ -20,17 +20,58 @@ export default function salesRoutes(): Router {
         return res.status(403).json({ message: "Satış tarixçəsinə giriş administrator tərəfindən məhdudlaşdırılıb" });
       }
 
-      const role = req.headers["x-user-role"] as string;
-      const username = req.headers["x-user-username"] as string;
+      const role = (req.headers["x-user-role"] as string) || req.user?.role;
+      const username = (req.headers["x-user-username"] as string) || req.user?.username;
       if (role !== "Admin") {
         const normalizedUsername = username ? username.trim().toLowerCase() : "";
         conditions = and(conditions, eq(schema.sales.sellerName, normalizedUsername)) as any;
       } else if (seller && typeof seller === "string" && seller.trim() !== "" && seller !== "all") {
-        const sellerValues = seller.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
-        if (sellerValues.length === 1) {
-          conditions = and(conditions, sql`LOWER(${schema.sales.sellerName}) = ${sellerValues[0]}`) as any;
-        } else if (sellerValues.length > 1) {
-          conditions = and(conditions, sql`LOWER(${schema.sales.sellerName}) IN (${sql.join(sellerValues.map(s => sql`${s}`), sql`, `)})`) as any;
+        const rawValues = seller.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+        const sellerValues = new Set<string>(rawValues);
+
+        // Expand aliases if query has emp-*, user-*, or sales-* IDs
+        if (rawValues.some(v => v.startsWith("emp-") || v.startsWith("user-") || v.startsWith("sales-"))) {
+          const employees = await db.select().from(schema.employees).where(eq(schema.employees.tenantId, req.tenantId));
+          const users = await db.select().from(schema.users).where(eq(schema.users.tenantId, req.tenantId));
+
+          for (const val of rawValues) {
+            if (val.startsWith("emp-")) {
+              const empId = parseInt(val.replace("emp-", ""));
+              const emp = employees.find(e => e.id === empId);
+              if (emp) {
+                const normName = emp.name.trim();
+                sellerValues.add(normName.toLowerCase());
+                sellerValues.add(normalizeName(normName));
+                const parts = normName.split(/\s+/);
+                for (const p of parts) {
+                  sellerValues.add(p.toLowerCase());
+                  sellerValues.add(normalizeName(p));
+                }
+                for (const u of users) {
+                  if (matchesNameOrPart(emp.name, u.username)) {
+                    sellerValues.add(u.username.trim().toLowerCase());
+                    sellerValues.add(normalizeName(u.username));
+                  }
+                }
+              }
+            } else if (val.startsWith("user-")) {
+              const uId = parseInt(val.replace("user-", ""));
+              const u = users.find(x => x.id === uId);
+              if (u) {
+                sellerValues.add(u.username.trim().toLowerCase());
+                sellerValues.add(normalizeName(u.username));
+              }
+            } else if (val.startsWith("sales-")) {
+              sellerValues.add(val.replace("sales-", ""));
+            }
+          }
+        }
+
+        const matchArray = Array.from(sellerValues).filter(Boolean);
+        if (matchArray.length === 1) {
+          conditions = and(conditions, sql`LOWER(${schema.sales.sellerName}) = ${matchArray[0]}`) as any;
+        } else if (matchArray.length > 1) {
+          conditions = and(conditions, sql`LOWER(${schema.sales.sellerName}) IN (${sql.join(matchArray.map(s => sql`${s}`), sql`, `)})`) as any;
         }
       }
 
@@ -88,63 +129,92 @@ export default function salesRoutes(): Router {
         aliases: Set<string>;
       }>();
 
-      // 1. Add employees (HR directory)
+      // 1. Add employees (HR directory with full name and position)
       for (const emp of employeesList) {
         const normName = emp.name.trim();
         if (!normName) continue;
         const key = normName.toLowerCase();
+        const azNorm = normalizeName(normName);
+        const empId = `emp-${emp.id}`;
+
+        const aliases = new Set<string>([key, azNorm, empId]);
+        const parts = normName.split(/\s+/);
+        for (const p of parts) {
+          if (p.length >= 2) {
+            aliases.add(p.toLowerCase());
+            aliases.add(normalizeName(p));
+          }
+        }
+
         sellersMap.set(key, {
-          id: `emp-${emp.id}`,
+          id: empId,
           name: normName,
-          roleOrPosition: emp.position || undefined,
-          aliases: new Set([key]),
+          roleOrPosition: emp.position || "İşçi",
+          aliases,
         });
       }
 
-      // 2. Add users (Auth system)
+      // 2. Add / Merge users (Auth accounts)
       for (const u of usersList) {
         const normUser = u.username.trim();
         if (!normUser) continue;
         const key = normUser.toLowerCase();
+        const azNorm = normalizeName(normUser);
+        const userId = `user-${u.id}`;
 
-        if (sellersMap.has(key)) {
-          const existing = sellersMap.get(key)!;
-          existing.aliases.add(key);
-          if (!existing.roleOrPosition) {
-            existing.roleOrPosition = u.role === "Admin" ? "Administrator" : "İşçi";
+        let matched = false;
+        for (const seller of sellersMap.values()) {
+          if (
+            matchesNameOrPart(seller.name, normUser) ||
+            seller.aliases.has(key) ||
+            seller.aliases.has(azNorm)
+          ) {
+            seller.aliases.add(key);
+            seller.aliases.add(azNorm);
+            seller.aliases.add(userId);
+            matched = true;
+            break;
           }
-        } else {
+        }
+
+        if (!matched) {
           sellersMap.set(key, {
-            id: `user-${u.id}`,
+            id: userId,
             name: normUser,
             roleOrPosition: u.role === "Admin" ? "Administrator" : "İşçi",
-            aliases: new Set([key]),
+            aliases: new Set([key, azNorm, userId]),
           });
         }
       }
 
-      // 3. Historical Sales sellers (ensure any username that made a sale is present)
+      // 3. Historical Sales sellers (ensure any sales cashier/seller is linked or present)
       for (const s of distinctSalesSellers) {
         if (!s.sellerName) continue;
         const normSaleSeller = s.sellerName.trim();
         if (!normSaleSeller) continue;
         const key = normSaleSeller.toLowerCase();
+        const azNorm = normalizeName(normSaleSeller);
 
-        let found = false;
+        let matched = false;
         for (const seller of sellersMap.values()) {
-          if (seller.aliases.has(key) || seller.name.toLowerCase() === key) {
+          if (
+            seller.aliases.has(key) ||
+            seller.aliases.has(azNorm) ||
+            matchesNameOrPart(seller.name, normSaleSeller)
+          ) {
             seller.aliases.add(key);
-            found = true;
+            seller.aliases.add(azNorm);
+            matched = true;
             break;
           }
         }
 
-        if (!found) {
+        if (!matched) {
           sellersMap.set(key, {
             id: `sales-${key}`,
             name: normSaleSeller,
             roleOrPosition: "Satıcı",
-            aliases: new Set([key]),
+            aliases: new Set([key, azNorm]),
           });
         }
       }

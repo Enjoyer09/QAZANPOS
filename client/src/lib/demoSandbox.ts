@@ -920,6 +920,41 @@ export async function mockDemoFetch(url: string | URL, options?: RequestInit): P
     }
   }
 
+  if (path === "/api/sales/sellers" && method === "GET") {
+    const sales = getDb("sales") || [];
+    const sellersMap = new Map<string, any>();
+
+    sellersMap.set("admin", {
+      id: "user-1",
+      name: "Admin",
+      roleOrPosition: "Administrator",
+      aliases: ["admin", "user-1"],
+    });
+    sellersMap.set("satici", {
+      id: "user-2",
+      name: "Satıcı",
+      roleOrPosition: "Kassir",
+      aliases: ["satici", "user-2"],
+    });
+
+    for (const s of sales) {
+      if (s.sellerName) {
+        const norm = s.sellerName.trim();
+        const key = norm.toLowerCase();
+        if (!sellersMap.has(key)) {
+          sellersMap.set(key, {
+            id: `sales-${key}`,
+            name: norm,
+            roleOrPosition: "Satıcı",
+            aliases: [key],
+          });
+        }
+      }
+    }
+
+    return jsonResponse(Array.from(sellersMap.values()));
+  }
+
   if (path.startsWith("/api/sales/")) {
     const parts = path.split("/");
     const id = parseInt(parts[3] || "0");
