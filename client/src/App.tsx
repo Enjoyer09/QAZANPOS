@@ -36,6 +36,7 @@ import Dashboard from "./pages/Dashboard.tsx";
 import Products from "./pages/Products.tsx";
 import Stock from "./pages/Stock.tsx";
 import StockIn from "./pages/StockIn.tsx";
+import ProductMovements from "./pages/ProductMovements.tsx";
 import POS from "./pages/POS.tsx";
 import SalesHistory from "./pages/SalesHistory.tsx";
 import Invoice from "./pages/Invoice.tsx";
@@ -309,6 +310,7 @@ function AppLayout({ children, user, currentUser, onLogout }: { children: React.
             { href: "/anbar", label: "Məhsul Qalıqları", icon: Boxes },
             { href: "/anbar/daxil", label: "Yeni Mədaxil", icon: PlusCircle },
             ...((isAdmin || currentUser?.staffCanViewStock !== 0) ? [
+              { href: "/anbar/mehsul-hereketi", label: "Məhsul üzrə Hərəkət", icon: History },
               { href: "/anbar/qaytaris", label: "Tədarükçüyə Qaytarış", icon: RotateCw }
             ] : []),
             ...((isAdmin || currentUser?.staffCanManageCatalog !== 0) ? [
@@ -966,7 +968,13 @@ function MainRoutes({ user, onLogout }: { user: any; onLogout: () => void }) {
              {isAdmin && <Route path="/hr" component={Payroll} />}
              <Route path="/anbar" component={Stock} />
              <Route path="/anbar/daxil" component={StockIn} />
-             {(isAdmin || currentUser?.staffCanViewStock !== 0) && <Route path="/anbar/qaytaris" component={VendorReturns} />}
+             {(isAdmin || currentUser?.staffCanViewStock !== 0) && (
+               <>
+                 <Route path="/anbar/mehsul-hereketi" component={ProductMovements} />
+                 <Route path="/anbar/movements" component={ProductMovements} />
+                 <Route path="/anbar/qaytaris" component={VendorReturns} />
+               </>
+             )}
             {(isAdmin || currentUser?.staffCanManageCatalog !== 0) && <Route path="/mehsullar" component={Products} />}
             {isAdmin && <Route path="/etiketler" component={Labels} />}
             <Route path="/satislar" component={SalesHistory} />

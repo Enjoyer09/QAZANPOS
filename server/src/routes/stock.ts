@@ -204,6 +204,433 @@ export default function stockRoutes(): Router {
     }
   });
 
+  // ─── Product Stock Movement History (Audit Trail) ────────────────────────
+  router.get("/stock/movements", async (req: AuthenticatedRequest, res) => {
+    try {
+      if (!await checkUserPermission(req, "staffCanViewStock")) {
+        return res.status(403).json({ message: "Anbar hərəkətlərinə baxış administrator tərəfindən məhdudlaşdırılıb" });
+      }
+
+      const productIdStr = (req.query.productId as string) || (req.query.product_id as string);
+      if (!productIdStr) {
+        return res.status(400).json({ message: "Məhsul ID-si tələb olunur" });
+      }
+      const productId = parseInt(productIdStr);
+      if (isNaN(productId)) {
+        return res.status(400).json({ message: "Yararsız Məhsul ID-si" });
+      }
+
+      const warehouseIdStr = req.query.warehouseId as string;
+      const warehouseId = warehouseIdStr ? parseInt(warehouseIdStr) : undefined;
+      const startDate = req.query.startDate as string;
+      const endDate = req.query.endDate as string;
+      const filterType = req.query.type as string;
+
+      // 1. Fetch target product details
+      const productList = await db.select().from(schema.products)
+        .where(and(eq(schema.products.id, productId), eq(schema.products.tenantId, req.tenantId)))
+        .limit(1);
+
+      if (productList.length === 0) {
+        return res.status(404).json({ message: "Məhsul tapılmadı" });
+      }
+      const product = productList[0];
+
+      // 2. Warehouses mapping
+      const warehousesList = await db.select().from(schema.warehouses)
+        .where(eq(schema.warehouses.tenantId, req.tenantId));
+      const warehouseMap = new Map(warehousesList.map(w => [w.id, w.name]));
+
+      const vendorList = await db.select().from(schema.vendors)
+        .where(eq(schema.vendors.tenantId, req.tenantId));
+      const vendorMap = new Map(vendorList.map(v => [v.id, v.name]));
+
+      // 3. Stock Entries (Mədaxillər)
+      const entryConditions = [
+        eq(schema.stockEntries.productId, productId),
+        eq(schema.stockEntries.tenantId, req.tenantId),
+      ];
+      if (warehouseId) {
+        entryConditions.push(eq(schema.stockEntries.warehouseId, warehouseId));
+      }
+      const entries = await db.query.stockEntries.findMany({
+        where: and(...entryConditions),
+        with: { serials: true },
+        orderBy: [asc(schema.stockEntries.entryDate), asc(schema.stockEntries.id)],
+      });
+
+      // 4. Sales Items (Satışlar)
+      const salesQueryConditions = [
+        eq(schema.saleItems.productId, productId),
+        eq(schema.saleItems.tenantId, req.tenantId),
+      ];
+      if (warehouseId) {
+        salesQueryConditions.push(eq(schema.sales.warehouseId, warehouseId));
+      }
+      const salesRows = await db
+        .select({
+          itemId: schema.saleItems.id,
+          saleId: schema.sales.id,
+          date: schema.sales.saleDate,
+          quantity: schema.saleItems.quantity,
+          price: schema.saleItems.salePrice,
+          cost: schema.saleItems.purchasePrice,
+          customerName: schema.sales.customerName,
+          warehouseId: schema.sales.warehouseId,
+          sellerName: schema.sales.sellerName,
+          paymentType: schema.sales.paymentType,
+        })
+        .from(schema.saleItems)
+        .innerJoin(schema.sales, eq(schema.saleItems.saleId, schema.sales.id))
+        .where(and(...salesQueryConditions))
+        .orderBy(asc(schema.sales.saleDate), asc(schema.saleItems.id));
+
+      // 5. Customer Returns (Müştəri Qaytarmaları)
+      const returnConditions = [
+        eq(schema.returnItems.productId, productId),
+        eq(schema.returnItems.tenantId, req.tenantId),
+        eq(schema.returnItems.status, "returned_to_stock"),
+      ];
+      if (warehouseId) {
+        returnConditions.push(eq(schema.returns.warehouseId, warehouseId));
+      }
+      const returnsRows = await db
+        .select({
+          itemId: schema.returnItems.id,
+          returnId: schema.returns.id,
+          date: schema.returns.returnDate,
+          quantity: schema.returnItems.quantity,
+          price: schema.returnItems.salePrice,
+          reason: schema.returns.reason,
+          customerName: schema.sales.customerName,
+          warehouseId: schema.returns.warehouseId,
+        })
+        .from(schema.returnItems)
+        .innerJoin(schema.returns, eq(schema.returnItems.returnId, schema.returns.id))
+        .leftJoin(schema.sales, eq(schema.returns.saleId, schema.sales.id))
+        .where(and(...returnConditions))
+        .orderBy(asc(schema.returns.returnDate), asc(schema.returnItems.id));
+
+      // 6. Vendor Returns (Tədarükçüyə Qaytarışlar)
+      const vendorReturnConditions = [
+        eq(schema.vendorReturnItems.productId, productId),
+        eq(schema.vendorReturnItems.tenantId, req.tenantId),
+      ];
+      if (warehouseId) {
+        vendorReturnConditions.push(eq(schema.vendorReturns.warehouseId, warehouseId));
+      }
+      const vendorReturnsRows = await db
+        .select({
+          itemId: schema.vendorReturnItems.id,
+          vendorReturnId: schema.vendorReturns.id,
+          date: schema.vendorReturns.returnDate,
+          quantity: schema.vendorReturnItems.quantity,
+          price: schema.vendorReturnItems.purchasePrice,
+          notes: schema.vendorReturns.notes,
+          supplierName: schema.vendors.name,
+          warehouseId: schema.vendorReturns.warehouseId,
+        })
+        .from(schema.vendorReturnItems)
+        .innerJoin(schema.vendorReturns, eq(schema.vendorReturnItems.vendorReturnId, schema.vendorReturns.id))
+        .leftJoin(schema.vendors, eq(schema.vendorReturns.vendorId, schema.vendors.id))
+        .where(and(...vendorReturnConditions))
+        .orderBy(asc(schema.vendorReturns.returnDate), asc(schema.vendorReturnItems.id));
+
+      // 7. Stock Transfers (Anbar Yerdəyişmələri)
+      const transferConditions = [
+        eq(schema.stockTransfers.productId, productId),
+        eq(schema.stockTransfers.tenantId, req.tenantId),
+      ];
+      const transfersRows = await db
+        .select()
+        .from(schema.stockTransfers)
+        .where(and(...transferConditions))
+        .orderBy(asc(schema.stockTransfers.transferDate), asc(schema.stockTransfers.id));
+
+      // 8. Stock Adjustments (Sayım / Düzəlişlər)
+      const adjConditions = [
+        eq(schema.stockAdjustments.productId, productId),
+        eq(schema.stockAdjustments.tenantId, req.tenantId),
+      ];
+      if (warehouseId) {
+        adjConditions.push(eq(schema.stockAdjustments.warehouseId, warehouseId));
+      }
+      const adjustmentsRows = await db
+        .select()
+        .from(schema.stockAdjustments)
+        .where(and(...adjConditions))
+        .orderBy(asc(schema.stockAdjustments.date), asc(schema.stockAdjustments.id));
+
+      const allEvents: any[] = [];
+
+      // Add Stock Entries
+      for (const e of entries) {
+        allEvents.push({
+          id: `in-${e.id}`,
+          timestamp: e.entryDate,
+          type: "stock_in",
+          typeLabel: "Mədaxil (Alış)",
+          documentNumber: `MDX-${e.id.toString().padStart(5, "0")}`,
+          documentType: "stock_entry",
+          documentId: e.id,
+          documentUrl: "/anbar",
+          counterparty: e.supplier || (e.vendorId ? vendorMap.get(e.vendorId) : null) || "Təchizatçı",
+          quantity: e.quantity,
+          unitPrice: e.purchasePrice,
+          totalAmount: Math.round(e.quantity * e.purchasePrice * 100) / 100,
+          warehouseId: e.warehouseId,
+          warehouseName: (e.warehouseId && warehouseMap.get(e.warehouseId)) || "Əsas Anbar",
+          operator: "Admin",
+          notes: e.notes || (e.paymentType ? `Ödəniş: ${e.paymentType}` : ""),
+        });
+      }
+
+      // Add Sales
+      for (const s of salesRows) {
+        allEvents.push({
+          id: `sale-${s.itemId}`,
+          timestamp: s.date,
+          type: "sale",
+          typeLabel: "Satış (POS)",
+          documentNumber: `POS-${s.saleId.toString().padStart(5, "0")}`,
+          documentType: "sale",
+          documentId: s.saleId,
+          documentUrl: `/satislar/${s.saleId}`,
+          counterparty: s.customerName || "Pərakəndə Müştəri",
+          quantity: -s.quantity,
+          unitPrice: s.price,
+          totalAmount: Math.round(s.quantity * s.price * 100) / 100,
+          warehouseId: s.warehouseId,
+          warehouseName: (s.warehouseId && warehouseMap.get(s.warehouseId)) || "Əsas Anbar",
+          operator: s.sellerName || "Kassir",
+          notes: s.paymentType ? `Ödəniş: ${s.paymentType}` : "",
+        });
+      }
+
+      // Add Customer Returns
+      for (const r of returnsRows) {
+        allEvents.push({
+          id: `ret-${r.itemId}`,
+          timestamp: r.date,
+          type: "return",
+          typeLabel: "Müştəri Qaytarması",
+          documentNumber: `QYT-${r.returnId.toString().padStart(5, "0")}`,
+          documentType: "return",
+          documentId: r.returnId,
+          documentUrl: `/qaytarislar/${r.returnId}`,
+          counterparty: r.customerName || "Müştəri",
+          quantity: r.quantity,
+          unitPrice: r.price,
+          totalAmount: Math.round(r.quantity * r.price * 100) / 100,
+          warehouseId: r.warehouseId,
+          warehouseName: (r.warehouseId && warehouseMap.get(r.warehouseId)) || "Əsas Anbar",
+          operator: "Kassir",
+          notes: r.reason ? `Səbəb: ${r.reason}` : "",
+        });
+      }
+
+      // Add Vendor Returns
+      for (const vr of vendorReturnsRows) {
+        allEvents.push({
+          id: `vret-${vr.itemId}`,
+          timestamp: vr.date,
+          type: "vendor_return",
+          typeLabel: "Tədarükçüyə Qaytarış",
+          documentNumber: `TQY-${vr.vendorReturnId.toString().padStart(5, "0")}`,
+          documentType: "vendor_return",
+          documentId: vr.vendorReturnId,
+          documentUrl: "/anbar/qaytaris",
+          counterparty: vr.supplierName || "Tədarükçü",
+          quantity: -vr.quantity,
+          unitPrice: vr.price,
+          totalAmount: Math.round(vr.quantity * vr.price * 100) / 100,
+          warehouseId: vr.warehouseId,
+          warehouseName: (vr.warehouseId && warehouseMap.get(vr.warehouseId)) || "Əsas Anbar",
+          operator: "Admin",
+          notes: vr.notes || "",
+        });
+      }
+
+      // Add Transfers
+      for (const t of transfersRows) {
+        const fromName = warehouseMap.get(t.fromWarehouseId) || `Anbar #${t.fromWarehouseId}`;
+        const toName = warehouseMap.get(t.toWarehouseId) || `Anbar #${t.toWarehouseId}`;
+
+        if (warehouseId) {
+          if (t.fromWarehouseId === warehouseId) {
+            allEvents.push({
+              id: `trf-out-${t.id}`,
+              timestamp: t.transferDate,
+              type: "transfer",
+              typeLabel: "Yerdəyişmə (Çıxış)",
+              documentNumber: `TRF-${t.id.toString().padStart(5, "0")}`,
+              documentType: "transfer",
+              documentId: t.id,
+              documentUrl: "/anbar",
+              counterparty: `Qəbul edən: ${toName}`,
+              quantity: -t.quantity,
+              unitPrice: 0,
+              totalAmount: 0,
+              warehouseId: t.fromWarehouseId,
+              warehouseName: fromName,
+              operator: t.transferredBy || "Sistem",
+              notes: t.notes || "",
+            });
+          }
+          if (t.toWarehouseId === warehouseId) {
+            allEvents.push({
+              id: `trf-in-${t.id}`,
+              timestamp: t.transferDate,
+              type: "transfer",
+              typeLabel: "Yerdəyişmə (Giriş)",
+              documentNumber: `TRF-${t.id.toString().padStart(5, "0")}`,
+              documentType: "transfer",
+              documentId: t.id,
+              documentUrl: "/anbar",
+              counterparty: `Göndərən: ${fromName}`,
+              quantity: t.quantity,
+              unitPrice: 0,
+              totalAmount: 0,
+              warehouseId: t.toWarehouseId,
+              warehouseName: toName,
+              operator: t.transferredBy || "Sistem",
+              notes: t.notes || "",
+            });
+          }
+        } else {
+          allEvents.push({
+            id: `trf-${t.id}`,
+            timestamp: t.transferDate,
+            type: "transfer",
+            typeLabel: "Anbar Yerdəyişməsi",
+            documentNumber: `TRF-${t.id.toString().padStart(5, "0")}`,
+            documentType: "transfer",
+            documentId: t.id,
+            documentUrl: "/anbar",
+            counterparty: `${fromName} ➔ ${toName}`,
+            quantity: 0, // In global view, internal movement doesn't alter global stock quantity
+            unitPrice: 0,
+            totalAmount: 0,
+            warehouseId: null,
+            warehouseName: `${fromName} ➔ ${toName}`,
+            operator: t.transferredBy || "Sistem",
+            notes: `${t.quantity} ${product.unit} köçürüldü. ${t.notes || ""}`,
+          });
+        }
+      }
+
+      // Add Adjustments
+      for (const a of adjustmentsRows) {
+        const isIncrease = ["found", "surplus", "manual_add", "add"].includes(String(a.type).toLowerCase());
+        const signedQty = isIncrease ? a.quantity : -a.quantity;
+        allEvents.push({
+          id: `adj-${a.id}`,
+          timestamp: a.date,
+          type: "stock_adjustment",
+          typeLabel: isIncrease ? "Sayım Artığı (Korreksiya)" : "Sayım Əskikliyi (Silinmə)",
+          documentNumber: `ADJ-${a.id.toString().padStart(5, "0")}`,
+          documentType: "adjustment",
+          documentId: a.id,
+          documentUrl: "/anbar",
+          counterparty: a.adjustedBy || "Sistem",
+          quantity: signedQty,
+          unitPrice: 0,
+          totalAmount: 0,
+          warehouseId: a.warehouseId,
+          warehouseName: (a.warehouseId && warehouseMap.get(a.warehouseId)) || "Əsas Anbar",
+          operator: a.adjustedBy || "Sistem",
+          notes: a.notes || `Sayım növü: ${a.type}`,
+        });
+      }
+
+      // Sort chronologically ascending to calculate accurate running balance
+      allEvents.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+      let running = 0;
+      for (const ev of allEvents) {
+        running = Math.max(0, Math.round((running + ev.quantity) * 10000) / 10000);
+        ev.balanceAfter = running;
+      }
+
+      const currentStock = running;
+
+      // Filter events by period / type for display
+      let filtered = allEvents;
+
+      if (startDate) {
+        const startTs = new Date(startDate).getTime();
+        filtered = filtered.filter(e => new Date(e.timestamp).getTime() >= startTs);
+      }
+      if (endDate) {
+        // Include full day of endDate
+        const endTs = new Date(endDate).setHours(23, 59, 59, 999);
+        filtered = filtered.filter(e => new Date(e.timestamp).getTime() <= endTs);
+      }
+      if (filterType && filterType !== "all") {
+        if (filterType === "return") {
+          filtered = filtered.filter(e => e.type === "return" || e.type === "vendor_return");
+        } else {
+          filtered = filtered.filter(e => e.type === filterType);
+        }
+      }
+
+      // Calculate period summary metrics
+      let totalInQty = 0;
+      let totalInAmount = 0;
+      let totalOutQty = 0;
+      let totalOutAmount = 0;
+      let totalReturnsQty = 0;
+      let totalReturnsAmount = 0;
+
+      for (const ev of filtered) {
+        if (ev.type === "stock_in" || (ev.type === "transfer" && ev.quantity > 0) || (ev.type === "stock_adjustment" && ev.quantity > 0)) {
+          totalInQty += Math.max(0, ev.quantity);
+          totalInAmount += ev.totalAmount || 0;
+        } else if (ev.type === "sale" || (ev.type === "transfer" && ev.quantity < 0) || (ev.type === "stock_adjustment" && ev.quantity < 0)) {
+          totalOutQty += Math.abs(ev.quantity);
+          totalOutAmount += ev.totalAmount || 0;
+        } else if (ev.type === "return" || ev.type === "vendor_return") {
+          totalReturnsQty += Math.abs(ev.quantity);
+          totalReturnsAmount += ev.totalAmount || 0;
+        }
+      }
+
+      // Display descending order (most recent first)
+      const reversedFiltered = [...filtered].reverse();
+
+      const lastPurchasePrice = entries.length > 0 ? entries[entries.length - 1].purchasePrice : 0;
+      const currentStockValue = currentStock > 0 ? Math.round(currentStock * lastPurchasePrice * 100) / 100 : 0;
+
+      res.json({
+        product: {
+          id: product.id,
+          name: product.name,
+          category: product.category,
+          unit: product.unit,
+          barcode: product.barcode,
+          description: product.description,
+          currentStock,
+          lastPurchasePrice,
+          currentStockValue,
+        },
+        summary: {
+          totalInQty: Math.round(totalInQty * 100) / 100,
+          totalInAmount: Math.round(totalInAmount * 100) / 100,
+          totalOutQty: Math.round(totalOutQty * 100) / 100,
+          totalOutAmount: Math.round(totalOutAmount * 100) / 100,
+          totalReturnsQty: Math.round(totalReturnsQty * 100) / 100,
+          totalReturnsAmount: Math.round(totalReturnsAmount * 100) / 100,
+          currentStock: Math.round(currentStock * 100) / 100,
+          currentStockValue: Math.round(currentStockValue * 100) / 100,
+        },
+        movements: reversedFiltered,
+      });
+    } catch (error: any) {
+      console.error("Product movements error:", error);
+      res.status(500).json({ message: "Məhsul hərəkət tarixçəsini gətirərkən xəta baş verdi" });
+    }
+  });
+
   // Supplier debts
   router.get("/stock/my-debts", requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {

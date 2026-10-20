@@ -178,3 +178,204 @@ describe("Stock Valuation and Quantity Integrity Rules", () => {
   });
 });
 
+describe("Sales Seller Filtering & Calculation", () => {
+  interface MockSeller {
+    id: string;
+    name: string;
+    roleOrPosition?: string | null;
+    aliases: string[];
+  }
+
+  interface MockSale {
+    id: number;
+    sellerName: string;
+    totalAmount: number;
+    totalCost: number;
+    returns?: { totalAmount: number; items?: { purchasePrice: number; quantity: number }[] }[];
+  }
+
+  const mockUsers = [
+    { id: 1, username: "admin", role: "Admin" },
+    { id: 2, username: "alzone", role: "Staff" },
+  ];
+
+  const mockEmployees = [
+    { id: 10, name: "Əli Məmmədov", position: "Kassir", status: "active" },
+    { id: 11, name: "Alzone", position: "Satıcı", status: "active" },
+  ];
+
+  const mockDistinctSalesSellers = [
+    { sellerName: "admin" },
+    { sellerName: "alzone" },
+    { sellerName: "Sistem" },
+  ];
+
+  function aggregateSellers(
+    employees: typeof mockEmployees,
+    users: typeof mockUsers,
+    salesSellers: typeof mockDistinctSalesSellers
+  ): MockSeller[] {
+    const map = new Map<string, { id: string; name: string; roleOrPosition?: string; aliases: Set<string> }>();
+
+    for (const emp of employees) {
+      const normName = emp.name.trim();
+      const key = normName.toLowerCase();
+      map.set(key, {
+        id: `emp-${emp.id}`,
+        name: normName,
+        roleOrPosition: emp.position || undefined,
+        aliases: new Set([key]),
+      });
+    }
+
+    for (const u of users) {
+      const normUser = u.username.trim();
+      const key = normUser.toLowerCase();
+      if (map.has(key)) {
+        const existing = map.get(key)!;
+        existing.aliases.add(key);
+        if (!existing.roleOrPosition) {
+          existing.roleOrPosition = u.role === "Admin" ? "Administrator" : "İşçi";
+        }
+      } else {
+        map.set(key, {
+          id: `user-${u.id}`,
+          name: normUser,
+          roleOrPosition: u.role === "Admin" ? "Administrator" : "İşçi",
+          aliases: new Set([key]),
+        });
+      }
+    }
+
+    for (const s of salesSellers) {
+      if (!s.sellerName) continue;
+      const normSaleSeller = s.sellerName.trim();
+      const key = normSaleSeller.toLowerCase();
+      let found = false;
+      for (const seller of map.values()) {
+        if (seller.aliases.has(key) || seller.name.toLowerCase() === key) {
+          seller.aliases.add(key);
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        map.set(key, {
+          id: `sales-${key}`,
+          name: normSaleSeller,
+          roleOrPosition: "Satıcı",
+          aliases: new Set([key]),
+        });
+      }
+    }
+
+    return Array.from(map.values())
+      .map(s => ({
+        id: s.id,
+        name: s.name,
+        roleOrPosition: s.roleOrPosition || null,
+        aliases: Array.from(s.aliases),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, "az"));
+  }
+
+  it("aggregates and deduplicates users, employees, and historical sales sellers", () => {
+    const sellers = aggregateSellers(mockEmployees, mockUsers, mockDistinctSalesSellers);
+
+    expect(sellers.length).toBe(4);
+    // Should include: "Alzone" (merged employee + user), "admin" (user), "Əli Məmmədov" (employee), "Sistem" (sales)
+    const names = sellers.map(s => s.name);
+    expect(names).toContain("Əli Məmmədov");
+    expect(names).toContain("Alzone");
+    expect(names).toContain("admin");
+    expect(names).toContain("Sistem");
+
+    const alzone = sellers.find(s => s.name.toLowerCase() === "alzone");
+    expect(alzone).toBeDefined();
+    expect(alzone?.aliases).toContain("alzone");
+  });
+
+  it("filters sales by selected seller matching name or alias case-insensitively", () => {
+    const sellers = aggregateSellers(mockEmployees, mockUsers, mockDistinctSalesSellers);
+
+    const salesList: MockSale[] = [
+      { id: 1, sellerName: "alzone", totalAmount: 150, totalCost: 100 },
+      { id: 2, sellerName: "admin", totalAmount: 300, totalCost: 200 },
+      { id: 3, sellerName: "Alzone", totalAmount: 50, totalCost: 30 },
+      { id: 4, sellerName: "Sistem", totalAmount: 20, totalCost: 10 },
+      { id: 5, sellerName: "Əli Məmmədov", totalAmount: 500, totalCost: 350 },
+    ];
+
+    const filterBySeller = (list: MockSale[], selected: string) => {
+      if (!selected || selected === "all") return list;
+      const targetSeller = sellers.find(s => s.id === selected || s.name.toLowerCase() === selected.toLowerCase());
+      return list.filter(sale => {
+        const saleSeller = (sale.sellerName || "").trim().toLowerCase();
+        if (targetSeller) {
+          return (
+            targetSeller.name.trim().toLowerCase() === saleSeller ||
+            targetSeller.aliases.some(a => a.toLowerCase() === saleSeller)
+          );
+        }
+        return saleSeller === selected.trim().toLowerCase();
+      });
+    };
+
+    // Filter by Alzone
+    const alzoneSales = filterBySeller(salesList, "Alzone");
+    expect(alzoneSales.length).toBe(2);
+    expect(alzoneSales.map(s => s.id)).toEqual([1, 3]);
+
+    // Filter by admin
+    const adminSales = filterBySeller(salesList, "admin");
+    expect(adminSales.length).toBe(1);
+    expect(adminSales[0].id).toBe(2);
+
+    // Filter by Əli Məmmədov
+    const eliSales = filterBySeller(salesList, "Əli Məmmədov");
+    expect(eliSales.length).toBe(1);
+    expect(eliSales[0].id).toBe(5);
+
+    // Filter all
+    expect(filterBySeller(salesList, "").length).toBe(5);
+  });
+
+  it("dynamically updates revenue, cost, and profit metrics for the filtered worker", () => {
+    const salesList: MockSale[] = [
+      { id: 1, sellerName: "alzone", totalAmount: 150, totalCost: 100 },
+      { id: 2, sellerName: "admin", totalAmount: 300, totalCost: 200 },
+      { id: 3, sellerName: "alzone", totalAmount: 50, totalCost: 30, returns: [{ totalAmount: 10, items: [{ purchasePrice: 6, quantity: 1 }] }] },
+    ];
+
+    const computeMetrics = (list: MockSale[]) => {
+      const revenue = list.reduce((sum, s) => {
+        const returned = (s.returns || []).reduce((acc, r) => acc + (r.totalAmount || 0), 0);
+        return sum + (s.totalAmount - returned);
+      }, 0);
+
+      const cost = list.reduce((sum, s) => {
+        const returnedCost = (s.returns || []).reduce((retSum, r) => {
+          const itemsCost = (r.items || []).reduce((iSum, item) => iSum + item.purchasePrice * item.quantity, 0);
+          return retSum + itemsCost;
+        }, 0);
+        return sum + (s.totalCost - returnedCost);
+      }, 0);
+
+      return { revenue, cost, profit: revenue - cost };
+    };
+
+    // All sales
+    const allMetrics = computeMetrics(salesList);
+    expect(allMetrics.revenue).toBe(490); // 150 + 300 + (50 - 10)
+    expect(allMetrics.cost).toBe(324); // 100 + 200 + (30 - 6)
+    expect(allMetrics.profit).toBe(166);
+
+    // Only alzone
+    const alzoneOnly = salesList.filter(s => s.sellerName === "alzone");
+    const alzoneMetrics = computeMetrics(alzoneOnly);
+    expect(alzoneMetrics.revenue).toBe(190); // 150 + (50 - 10)
+    expect(alzoneMetrics.cost).toBe(124); // 100 + (30 - 6)
+    expect(alzoneMetrics.profit).toBe(66);
+  });
+});
+

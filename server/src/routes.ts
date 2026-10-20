@@ -2333,7 +2333,7 @@ router.get("/customers/:id/sales", async (req, res) => {
 
 router.get("/sales", async (req, res) => {
   try {
-    const { from, to } = req.query;
+    const { from, to, seller } = req.query;
     let conditions = eq(schema.sales.tenantId, req.tenantId);
 
     if (from) {
@@ -2353,6 +2353,13 @@ router.get("/sales", async (req, res) => {
     if (role !== "Admin") {
       const normalizedUsername = username ? username.trim().toLowerCase() : "";
       conditions = and(conditions, eq(schema.sales.sellerName, normalizedUsername)) as any;
+    } else if (seller && typeof seller === "string" && seller.trim() !== "" && seller !== "all") {
+      const sellerValues = seller.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+      if (sellerValues.length === 1) {
+        conditions = and(conditions, sql`LOWER(${schema.sales.sellerName}) = ${sellerValues[0]}`) as any;
+      } else if (sellerValues.length > 1) {
+        conditions = and(conditions, sql`LOWER(${schema.sales.sellerName}) IN (${sql.join(sellerValues.map(s => sql`${s}`), sql`, `)})`) as any;
+      }
     }
 
     const list = await db.query.sales.findMany({
@@ -2368,6 +2375,119 @@ router.get("/sales", async (req, res) => {
     res.json(list);
   } catch (error) {
     res.status(500).json({ message: "Satış tarixçəsini gətirərkən xəta baş verdi" });
+  }
+});
+
+// GET /sales/sellers — list of all employees and sellers for sales history filter
+router.get("/sales/sellers", async (req, res) => {
+  try {
+    if (!await checkUserPermission(req, "staffCanViewSalesHistory")) {
+      return res.status(403).json({ message: "Satıcı siyahısına giriş administrator tərəfindən məhdudlaşdırılıb" });
+    }
+
+    const usersList = await db
+      .select({
+        id: schema.users.id,
+        username: schema.users.username,
+        role: schema.users.role,
+      })
+      .from(schema.users)
+      .where(eq(schema.users.tenantId, req.tenantId));
+
+    const employeesList = await db
+      .select({
+        id: schema.employees.id,
+        name: schema.employees.name,
+        position: schema.employees.position,
+        status: schema.employees.status,
+      })
+      .from(schema.employees)
+      .where(eq(schema.employees.tenantId, req.tenantId));
+
+    const distinctSalesSellers = await db
+      .selectDistinct({
+        sellerName: schema.sales.sellerName,
+      })
+      .from(schema.sales)
+      .where(and(eq(schema.sales.tenantId, req.tenantId), sql`${schema.sales.sellerName} IS NOT NULL`));
+
+    const sellersMap = new Map<string, {
+      id: string;
+      name: string;
+      roleOrPosition?: string;
+      aliases: Set<string>;
+    }>();
+
+    for (const emp of employeesList) {
+      const normName = emp.name.trim();
+      if (!normName) continue;
+      const key = normName.toLowerCase();
+      sellersMap.set(key, {
+        id: `emp-${emp.id}`,
+        name: normName,
+        roleOrPosition: emp.position || undefined,
+        aliases: new Set([key]),
+      });
+    }
+
+    for (const u of usersList) {
+      const normUser = u.username.trim();
+      if (!normUser) continue;
+      const key = normUser.toLowerCase();
+
+      if (sellersMap.has(key)) {
+        const existing = sellersMap.get(key)!;
+        existing.aliases.add(key);
+        if (!existing.roleOrPosition) {
+          existing.roleOrPosition = u.role === "Admin" ? "Administrator" : "İşçi";
+        }
+      } else {
+        sellersMap.set(key, {
+          id: `user-${u.id}`,
+          name: normUser,
+          roleOrPosition: u.role === "Admin" ? "Administrator" : "İşçi",
+          aliases: new Set([key]),
+        });
+      }
+    }
+
+    for (const s of distinctSalesSellers) {
+      if (!s.sellerName) continue;
+      const normSaleSeller = s.sellerName.trim();
+      if (!normSaleSeller) continue;
+      const key = normSaleSeller.toLowerCase();
+
+      let found = false;
+      for (const seller of sellersMap.values()) {
+        if (seller.aliases.has(key) || seller.name.toLowerCase() === key) {
+          seller.aliases.add(key);
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) {
+        sellersMap.set(key, {
+          id: `sales-${key}`,
+          name: normSaleSeller,
+          roleOrPosition: "Satıcı",
+          aliases: new Set([key]),
+        });
+      }
+    }
+
+    const result = Array.from(sellersMap.values())
+      .map(s => ({
+        id: s.id,
+        name: s.name,
+        roleOrPosition: s.roleOrPosition || null,
+        aliases: Array.from(s.aliases),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, "az"));
+
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ message: "Satıcı siyahısını gətirərkən xəta baş verdi" });
   }
 });
 

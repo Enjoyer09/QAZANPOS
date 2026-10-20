@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link } from "wouter";import {
-  PlusCircle, Lock, ArrowLeftRight, Warehouse, ClipboardCheck, ShoppingCart, AlertTriangle, Printer, CheckCircle2, X, Edit2
+import { Link } from "wouter";
+import {
+  PlusCircle, Lock, ArrowLeftRight, Warehouse, ClipboardCheck, ShoppingCart, AlertTriangle, Printer, CheckCircle2, X, Edit2, History
 } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
 import { TableSkeleton } from "../components/Skeleton.tsx";
@@ -716,6 +717,14 @@ export default function Stock() {
                           </td>
                           <td className="py-2.5 sm:py-3 px-3 sm:px-4">
                             <div className="flex items-center gap-1.5 flex-wrap justify-end sm:justify-start">
+                              <Link href={`/anbar/mehsul-hereketi?productId=${item.productId}`}>
+                                <button
+                                  className="px-2 py-1 bg-white hover:bg-blue-50 border border-gray-200 hover:border-blue-300 text-gray-600 hover:text-blue-700 rounded-lg transition-all cursor-pointer font-bold text-[10px] flex items-center gap-1 shadow-2xs"
+                                  title="Məhsulun bütün anbar hərəkət tarixçəsi (audit jurnalı)"
+                                >
+                                  <History className="w-2.5 h-2.5 text-blue-600" /> Tarixçə / Hərəkət
+                                </button>
+                              </Link>
                               {item.currentQuantity > 0 && settings?.multiWarehouseEnabled === 1 ? (
                                 <button
                                   onClick={() => {

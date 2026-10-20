@@ -403,13 +403,30 @@ export default function SalesHistory() {
       return null;
     }
   })();
-  const isAdmin = user?.role === "Admin";
-
   const { data: currentUser } = useQuery<any>({
     queryKey: ["/api/users/me"],
     queryFn: async () => {
       const res = await fetch("/api/users/me");
       if (!res.ok) throw new Error();
+      return res.json();
+    },
+  });
+
+  const isAdmin = user?.role === "Admin" || currentUser?.role === "Admin";
+
+  interface SellerOption {
+    id: string;
+    name: string;
+    roleOrPosition?: string | null;
+    aliases: string[];
+  }
+
+  // Fetch all sellers/employees for the dropdown from database
+  const { data: dbSellers = [] } = useQuery<SellerOption[]>({
+    queryKey: ["/api/sales/sellers"],
+    queryFn: async () => {
+      const res = await fetch("/api/sales/sellers");
+      if (!res.ok) return [];
       return res.json();
     },
   });
@@ -427,14 +444,41 @@ export default function SalesHistory() {
     enabled: activeTab === "sales",
   });
 
-  const sellerNames = React.useMemo(() => {
-    if (!sales) return [];
-    const names = new Set<string>();
-    sales.forEach(sale => {
-      if (sale.sellerName) names.add(sale.sellerName);
+  const sellerList = React.useMemo(() => {
+    const map = new Map<string, SellerOption>();
+
+    // 1. Add all from API (all users, all employees, and all sellers recorded in sales history)
+    dbSellers.forEach((s) => {
+      map.set(s.name.trim().toLowerCase(), s);
     });
-    return Array.from(names).sort();
-  }, [sales]);
+
+    // 2. Also ensure any sellerName from currently loaded sales is present as a fallback
+    if (sales) {
+      sales.forEach((sale) => {
+        if (sale.sellerName) {
+          const norm = sale.sellerName.trim();
+          const key = norm.toLowerCase();
+          let matched = false;
+          for (const s of map.values()) {
+            if (s.name.toLowerCase() === key || s.aliases.some((a) => a.toLowerCase() === key)) {
+              matched = true;
+              break;
+            }
+          }
+          if (!matched) {
+            map.set(key, {
+              id: `sale-${key}`,
+              name: norm,
+              roleOrPosition: "Satıcı",
+              aliases: [key],
+            });
+          }
+        }
+      });
+    }
+
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, "az"));
+  }, [dbSellers, sales]);
 
   const handleFilter = () => {
     setAppliedFrom(fromDate);
@@ -452,9 +496,23 @@ export default function SalesHistory() {
   };
 
   const filteredSales = (sales || []).filter((sale) => {
-    // 1. Employee Filter
-    if (selectedSeller && sale.sellerName !== selectedSeller) {
-      return false;
+    // 1. Employee / Seller Filter
+    if (selectedSeller && selectedSeller !== "" && selectedSeller !== "all") {
+      const saleSeller = (sale.sellerName || "").trim().toLowerCase();
+      const targetSeller = sellerList.find(
+        (s) => s.id === selectedSeller || s.name.toLowerCase() === selectedSeller.toLowerCase()
+      );
+
+      if (targetSeller) {
+        const matches =
+          targetSeller.name.trim().toLowerCase() === saleSeller ||
+          targetSeller.aliases.some((a) => a.toLowerCase() === saleSeller);
+        if (!matches) return false;
+      } else {
+        if (saleSeller !== selectedSeller.trim().toLowerCase()) {
+          return false;
+        }
+      }
     }
 
     // 2. Text Search
@@ -662,12 +720,12 @@ export default function SalesHistory() {
                   <select
                     value={selectedSeller}
                     onChange={(e) => setSelectedSeller(e.target.value)}
-                    className="px-3 py-1.5 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary w-full sm:w-44 bg-gray-50/50 cursor-pointer font-bold text-gray-700"
+                    className="px-3 py-1.5 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary w-full sm:w-48 bg-gray-50/50 cursor-pointer font-bold text-gray-700"
                   >
                     <option value="">Hamısı (Bütün İşçilər)</option>
-                    {sellerNames.map((name) => (
-                      <option key={name} value={name}>
-                        {name}
+                    {sellerList.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}{s.roleOrPosition ? ` (${s.roleOrPosition})` : ""}
                       </option>
                     ))}
                   </select>
