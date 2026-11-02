@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { ArrowLeft, CheckCircle, Lock, Edit2, X, Plus } from "lucide-react";
 import { useToast } from "../components/Toast.tsx";
-import { sanitizeQtyInput } from "../lib/utils.ts";
+import { cleanNumberInput } from "../lib/utils.ts";
 import { generateValidEAN13 } from "../components/Barcode.tsx";
 import { TableSkeleton } from "../components/Skeleton.tsx";
 
@@ -351,6 +351,18 @@ export default function StockIn() {
       return;
     }
 
+    const qty = parseFloat(formData.quantity);
+    if (isNaN(qty) || qty <= 0) {
+      toast({ title: "Xəta!", description: "Düzgün miqdar daxil edin (0-dan böyük olmalıdır).", variant: "destructive" });
+      return;
+    }
+
+    const price = parseFloat(formData.purchasePrice);
+    if (isNaN(price) || price <= 0) {
+      toast({ title: "Xəta!", description: "Düzgün alış qiyməti daxil edin (0-dan böyük olmalıdır).", variant: "destructive" });
+      return;
+    }
+
     if (isCredit && !formData.creditDueDate) {
       toast({ title: "Xəta!", description: "Nisyə üçün ödəmə tarixi daxil edilməlidir.", variant: "destructive" });
       return;
@@ -517,14 +529,22 @@ export default function StockIn() {
               <div className="space-y-1.5">
                 <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Miqdar *</label>
                 <input
-                  type="number"
-                  min="0.01"
-                  step="0.01"
+                  type="text"
+                  inputMode="decimal"
                   placeholder="0.00"
                   value={formData.quantity}
                   onChange={(e) => {
-                    const sanitized = sanitizeQtyInput(e.target.value);
-                    setFormData((prev) => ({ ...prev, quantity: sanitized }));
+                    const cleaned = cleanNumberInput(e.target.value);
+                    setFormData((prev) => ({ ...prev, quantity: cleaned }));
+                  }}
+                  onBlur={() => {
+                    if (!formData.quantity) return;
+                    const num = parseFloat(formData.quantity);
+                    if (isNaN(num) || num <= 0) {
+                      setFormData((prev) => ({ ...prev, quantity: "1" }));
+                    } else if (formData.quantity.endsWith(".")) {
+                      setFormData((prev) => ({ ...prev, quantity: formData.quantity.slice(0, -1) }));
+                    }
                   }}
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50"
                   required
@@ -533,12 +553,20 @@ export default function StockIn() {
               <div className="space-y-1.5">
                 <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Alış Qiyməti (₼) *</label>
                 <input
-                  type="number"
-                  min="0.0001"
-                  step="any"
+                  type="text"
+                  inputMode="decimal"
                   placeholder="0.0000"
                   value={formData.purchasePrice}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, purchasePrice: e.target.value }))}
+                  onChange={(e) => {
+                    const cleaned = cleanNumberInput(e.target.value);
+                    setFormData((prev) => ({ ...prev, purchasePrice: cleaned }));
+                  }}
+                  onBlur={() => {
+                    if (!formData.purchasePrice) return;
+                    if (formData.purchasePrice.endsWith(".")) {
+                      setFormData((prev) => ({ ...prev, purchasePrice: formData.purchasePrice.slice(0, -1) }));
+                    }
+                  }}
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-gray-50/50"
                   required
                 />
@@ -884,6 +912,16 @@ export default function StockIn() {
                   toast({ title: "Xəta!", description: "Məcburi sahələri doldurun.", variant: "destructive" });
                   return;
                 }
+                const editQty = parseFloat(editFormData.quantity);
+                if (isNaN(editQty) || editQty <= 0) {
+                  toast({ title: "Xəta!", description: "Düzgün miqdar daxil edin (0-dan böyük olmalıdır).", variant: "destructive" });
+                  return;
+                }
+                const editPrice = parseFloat(editFormData.purchasePrice);
+                if (isNaN(editPrice) || editPrice <= 0) {
+                  toast({ title: "Xəta!", description: "Düzgün alış qiyməti daxil edin (0-dan böyük olmalıdır).", variant: "destructive" });
+                  return;
+                }
                 const isEditCredit = editFormData.paymentType === "Nisyə";
                 if (isEditCredit && !editFormData.creditDueDate) {
                   toast({ title: "Xəta!", description: "Nisyə üçün ödəmə tarixi daxil edilməlidir.", variant: "destructive" });
@@ -930,7 +968,7 @@ export default function StockIn() {
                   {products?.find(p => String(p.id) === editFormData.productId)?.trackingType === "serialized" ? (
                     <div>
                       <input
-                        type="number"
+                        type="text"
                         value={editFormData.quantity}
                         disabled
                         className="w-full px-3 py-2 border border-gray-100 rounded-xl bg-gray-50 text-gray-400 cursor-not-allowed font-mono"
@@ -941,13 +979,22 @@ export default function StockIn() {
                     </div>
                   ) : (
                     <input
-                      type="number"
-                      min="0.01"
-                      step="0.01"
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="0.00"
                       value={editFormData.quantity}
                       onChange={(e) => {
-                        const sanitized = sanitizeQtyInput(e.target.value);
-                        setEditFormData((prev: any) => ({ ...prev, quantity: sanitized }));
+                        const cleaned = cleanNumberInput(e.target.value);
+                        setEditFormData((prev: any) => ({ ...prev, quantity: cleaned }));
+                      }}
+                      onBlur={() => {
+                        if (!editFormData.quantity) return;
+                        const num = parseFloat(editFormData.quantity);
+                        if (isNaN(num) || num <= 0) {
+                          setEditFormData((prev: any) => ({ ...prev, quantity: "1" }));
+                        } else if (editFormData.quantity.endsWith(".")) {
+                          setEditFormData((prev: any) => ({ ...prev, quantity: editFormData.quantity.slice(0, -1) }));
+                        }
                       }}
                       className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-white"
                       required
@@ -957,11 +1004,20 @@ export default function StockIn() {
                 <div className="space-y-1">
                   <label className="text-gray-400 uppercase tracking-wider block text-[9px]">Alış Qiyməti (₼) *</label>
                   <input
-                    type="number"
-                    min="0.0001"
-                    step="any"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0.0000"
                     value={editFormData.purchasePrice}
-                    onChange={(e) => setEditFormData((prev: any) => ({ ...prev, purchasePrice: e.target.value }))}
+                    onChange={(e) => {
+                      const cleaned = cleanNumberInput(e.target.value);
+                      setEditFormData((prev: any) => ({ ...prev, purchasePrice: cleaned }));
+                    }}
+                    onBlur={() => {
+                      if (!editFormData.purchasePrice) return;
+                      if (editFormData.purchasePrice.endsWith(".")) {
+                        setEditFormData((prev: any) => ({ ...prev, purchasePrice: editFormData.purchasePrice.slice(0, -1) }));
+                      }
+                    }}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary bg-white"
                     required
                   />

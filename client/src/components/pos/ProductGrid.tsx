@@ -1,6 +1,6 @@
 import React from "react";
 import { Search, Barcode, Plus, AlertTriangle } from "lucide-react";
-import { sanitizeQtyInput } from "../../lib/utils.ts";
+import { cleanNumberInput } from "../../lib/utils.ts";
 import { useToast } from "../Toast.tsx";
 import type { BasketItem } from "./CartPanel.tsx";
 
@@ -337,7 +337,7 @@ export default function ProductGrid({
         </div>
         <div className="w-full sm:w-24">
           <input type="text" inputMode="decimal" placeholder="Miqdar" value={selectedQuantity}
-            onChange={(e) => onSelectedQuantity(sanitizeQtyInput(e.target.value))}
+            onChange={(e) => onSelectedQuantity(cleanNumberInput(e.target.value))}
             className={`w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none bg-gray-50/50 focus:ring-1 ${posMode === "return" ? "focus:ring-amber-500" : "focus:ring-primary"}`} />
         </div>
         <button onClick={handleAddToBasketFromSelect}
