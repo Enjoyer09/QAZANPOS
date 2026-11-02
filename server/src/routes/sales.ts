@@ -5,6 +5,7 @@ import { eq, and, gte, lte, sql, desc, isNull, or, inArray } from "drizzle-orm";
 import { AuthenticatedRequest, requireAdmin, checkUserPermission, logActivity, verifyTenantLimit, computeFIFOSaleCost, computeRemainingDebt, fetchTenantStockMetrics, recordLedgerMovement, normalizeName, matchesNameOrPart } from "./helpers.js";
 
 import { sendTelegramNotification } from "../lib/telegram.js";
+import { hashPassword } from "../lib/auth.js";
 
 export default function salesRoutes(): Router {
   const router = Router();
@@ -462,74 +463,161 @@ export default function salesRoutes(): Router {
       const id = parseInt(req.params.id);
       const { paymentType, customerName, customerPhone, bankName, creditDueDate, notes, saleDate, items } = req.body;
 
+      if (!items || !Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ message: "Satışda ən azı 1 məhsul olmalıdır" });
+      }
+
       // Fetch existing sale with items
       const sale = await db.query.sales.findFirst({
         where: and(eq(schema.sales.id, id), eq(schema.sales.tenantId, req.tenantId)),
-        with: { items: true },
+        with: { items: true, payments: true, returns: true },
       });
       if (!sale) return res.status(404).json({ message: "Satış tapılmadı" });
 
-      // Update each sale_item's salePrice (purchasePrice stays unchanged — COGS snapshot)
-      let newTotalAmount = 0;
-      let newTotalCost = 0;
-
-      if (items && Array.isArray(items) && items.length > 0) {
-        for (const editItem of items) {
-          const itemId = parseInt(editItem.id);
-          const newSalePrice = parseFloat(editItem.salePrice);
-          const newQuantity = parseFloat(editItem.quantity);
-
-          // Find the original item to get purchasePrice
-          const origItem = sale.items.find((i: any) => i.id === itemId);
-          if (!origItem) continue;
-
-          const purchasePrice = origItem.purchasePrice;
-
-          await db
-            .update(schema.saleItems)
-            .set({ salePrice: newSalePrice, quantity: newQuantity })
-            .where(and(eq(schema.saleItems.id, itemId), eq(schema.saleItems.tenantId, req.tenantId)));
-
-          newTotalAmount += newSalePrice * newQuantity;
-          newTotalCost += purchasePrice * newQuantity;
+      // Validate each item
+      for (const it of items) {
+        const pid = parseInt(it.productId);
+        const qty = parseFloat(it.quantity);
+        const price = parseFloat(it.salePrice);
+        if (isNaN(pid) || pid <= 0) {
+          return res.status(400).json({ message: "Bütün sətirlərdə düzgün məhsul seçilməlidir" });
         }
-      } else {
-        // No items provided — recalculate from existing items
-        for (const item of sale.items) {
-          newTotalAmount += (item as any).salePrice * (item as any).quantity;
-          newTotalCost += (item as any).purchasePrice * (item as any).quantity;
+        if (isNaN(qty) || qty <= 0) {
+          return res.status(400).json({ message: "Bütün sətirlərdə miqdar 0-dan böyük olmalıdır" });
+        }
+        if (isNaN(price) || price < 0) {
+          return res.status(400).json({ message: "Bütün sətirlərdə satış qiyməti mənfi ola bilməz" });
         }
       }
 
-      // Build update payload — only update fields that were provided
-      const updatePayload: Record<string, any> = {
-        totalAmount: newTotalAmount,
-        totalCost: newTotalCost,
-      };
-      if (paymentType !== undefined) updatePayload.paymentType = paymentType;
-      if (customerName !== undefined) updatePayload.customerName = customerName;
-      if (customerPhone !== undefined) updatePayload.customerPhone = customerPhone;
-      if (bankName !== undefined) updatePayload.bankName = bankName;
-      if (creditDueDate !== undefined) updatePayload.creditDueDate = creditDueDate;
-      if (notes !== undefined) updatePayload.notes = notes;
-      if (saleDate !== undefined) updatePayload.saleDate = saleDate;
+      const updated = await db.transaction(async (tx) => {
+        // 1. Calculate stock difference per product
+        const oldQtyMap = new Map<number, number>();
+        const oldItemMap = new Map<number, any>();
+        for (const oi of sale.items) {
+          oldQtyMap.set(oi.productId, (oldQtyMap.get(oi.productId) || 0) + oi.quantity);
+          oldItemMap.set(oi.productId, oi);
+        }
 
-      const [updated] = await db
-        .update(schema.sales)
-        .set(updatePayload)
-        .where(and(eq(schema.sales.id, id), eq(schema.sales.tenantId, req.tenantId)))
-        .returning();
+        const newQtyMap = new Map<number, number>();
+        for (const ni of items) {
+          const pid = parseInt(ni.productId);
+          const qty = parseFloat(ni.quantity);
+          newQtyMap.set(pid, (newQtyMap.get(pid) || 0) + qty);
+        }
+
+        // Adjust ledger for inventory balance changes
+        const allProductIds = new Set([...oldQtyMap.keys(), ...newQtyMap.keys()]);
+        for (const pid of allProductIds) {
+          const oldQty = oldQtyMap.get(pid) || 0;
+          const newQty = newQtyMap.get(pid) || 0;
+          const delta = newQty - oldQty; // e.g. old: 2, new: 5 -> delta: +3 (sold 3 more, so -3 stock)
+
+          if (delta !== 0) {
+            await recordLedgerMovement(tx, {
+              tenantId: req.tenantId,
+              productId: pid,
+              warehouseId: sale.warehouseId || null,
+              quantity: -delta, // if delta > 0, -delta decreases stock; if delta < 0, Math.abs(delta) increases stock
+              movementType: "stock_adjustment",
+              referenceType: "sale",
+              referenceId: id,
+              userId: req.user?.userId || null,
+              username: (req.headers["x-user-username"] as string) || req.user?.username || "admin",
+              unitPrice: 0,
+              notes: delta > 0
+                ? `Satışın redaktəsi (Çek № ${id}) - Əlavə çıxış (${delta} ədəd)`
+                : `Satışın redaktəsi (Çek № ${id}) - Qalıq bərpası (${Math.abs(delta)} ədəd)`,
+            });
+          }
+        }
+
+        // 2. Replace sale items
+        await tx.delete(schema.saleItems).where(and(eq(schema.saleItems.saleId, id), eq(schema.saleItems.tenantId, req.tenantId)));
+
+        let newTotalAmount = 0;
+        let newTotalCost = 0;
+
+        for (const it of items) {
+          const pid = parseInt(it.productId);
+          const qty = parseFloat(it.quantity);
+          const salePrice = parseFloat(it.salePrice);
+          let purchasePrice = parseFloat(it.purchasePrice);
+
+          if (isNaN(purchasePrice) || purchasePrice <= 0) {
+            const oldItem = oldItemMap.get(pid);
+            if (oldItem && oldItem.purchasePrice > 0) {
+              purchasePrice = oldItem.purchasePrice;
+            } else {
+              purchasePrice = await computeFIFOSaleCost(pid, req.tenantId, qty);
+              if (purchasePrice <= 0) {
+                purchasePrice = salePrice;
+              }
+            }
+          }
+
+          await tx.insert(schema.saleItems).values({
+            tenantId: req.tenantId,
+            saleId: id,
+            productId: pid,
+            quantity: qty,
+            salePrice,
+            purchasePrice,
+          });
+
+          newTotalAmount += salePrice * qty;
+          newTotalCost += purchasePrice * qty;
+        }
+
+        newTotalAmount = Math.round(newTotalAmount * 100) / 100;
+        newTotalCost = Math.round(newTotalCost * 100) / 100;
+
+        // 3. Update sale header
+        const updatePayload: Record<string, any> = {
+          totalAmount: newTotalAmount,
+          totalCost: newTotalCost,
+        };
+        if (paymentType !== undefined) updatePayload.paymentType = paymentType;
+        if (customerName !== undefined) updatePayload.customerName = customerName;
+        if (customerPhone !== undefined) updatePayload.customerPhone = customerPhone;
+        if (bankName !== undefined) updatePayload.bankName = bankName;
+        if (creditDueDate !== undefined) updatePayload.creditDueDate = creditDueDate;
+        if (notes !== undefined) updatePayload.notes = notes;
+        if (saleDate !== undefined) updatePayload.saleDate = saleDate;
+
+        const effectivePaymentType = paymentType || sale.paymentType;
+        if (effectivePaymentType === "Nisyə") {
+          const payments = await tx.query.creditPayments.findMany({ where: eq(schema.creditPayments.saleId, id) });
+          const returns = await tx.query.returns.findMany({ where: eq(schema.returns.saleId, id) });
+          const remainingDebt = computeRemainingDebt(
+            { totalAmount: newTotalAmount, loyaltyDiscountPaid: sale.loyaltyDiscountPaid },
+            payments,
+            returns
+          );
+          updatePayload.paymentStatus = remainingDebt <= 0 ? "paid" : "credit";
+        } else {
+          updatePayload.paymentStatus = "paid";
+        }
+
+        const [saleUpdated] = await tx
+          .update(schema.sales)
+          .set(updatePayload)
+          .where(and(eq(schema.sales.id, id), eq(schema.sales.tenantId, req.tenantId)))
+          .returning();
+
+        return saleUpdated;
+      });
 
       await logActivity(
         req,
         "EDIT_SALE",
-        `Satış redaktə edildi: Çek № ${id} (Yeni məbləğ: ${newTotalAmount.toFixed(2)} ₼, Ödəniş: ${updatePayload.paymentType || sale.paymentType})`
+        `Satış redaktə edildi: Çek № ${id} (Yeni məbləğ: ${updated.totalAmount} ₼, Məhsul sayı: ${items.length}, Ödəniş: ${updated.paymentType})`
       );
 
       res.json(updated);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Edit sale error:", error);
-      res.status(500).json({ message: "Satış redaktə edilərkən xəta baş verdi" });
+      res.status(500).json({ message: "Satış redaktə edilərkən xəta baş verdi: " + (error?.message || "") });
     }
   });
 
@@ -723,14 +811,63 @@ export default function salesRoutes(): Router {
 
   router.post("/returns", async (req: AuthenticatedRequest, res) => {
     try {
-      const { saleId, reason, items, warehouseId } = req.body;
+      const { saleId, reason, items, warehouseId, adminPassword } = req.body;
       if (!items || items.length === 0) return res.status(400).json({ message: "Qaytarış məlumatları boş ola bilməz" });
 
-      let targetWarehouseId = warehouseId ? parseInt(warehouseId) : null;
-      if (!targetWarehouseId && saleId) {
-        const sale = await db.query.sales.findFirst({ where: eq(schema.sales.id, parseInt(saleId)) });
-        if (sale?.warehouseId) targetWarehouseId = sale.warehouseId;
+      const userRole = (req.headers["x-user-role"] as string) || req.user?.role;
+      if (userRole !== "Admin" && adminPassword) {
+        const adminUser = await db.query.users.findFirst({
+          where: and(
+            eq(schema.users.tenantId, req.tenantId),
+            eq(schema.users.role, "Admin"),
+            eq(schema.users.password, hashPassword(adminPassword.trim()))
+          ),
+        });
+        if (!adminUser) {
+          return res.status(401).json({ message: "Daxil etdiyiniz Admin şifrəsi yanlışdır." });
+        }
       }
+
+      let parsedSaleId = saleId ? parseInt(saleId) : null;
+      let existingSale: any = null;
+
+      if (parsedSaleId) {
+        existingSale = await db.query.sales.findFirst({
+          where: and(eq(schema.sales.id, parsedSaleId), eq(schema.sales.tenantId, req.tenantId)),
+          with: { items: true, returns: { with: { items: true } }, payments: true },
+        });
+
+        if (!existingSale) {
+          return res.status(404).json({ message: "Satış qaiməsi tapılmadı" });
+        }
+
+        // Validate quantities against original sale
+        for (const returnItem of items) {
+          const pid = parseInt(returnItem.productId);
+          const qty = parseFloat(returnItem.quantity);
+          const origItem = existingSale.items.find((i: any) => i.productId === pid);
+          if (!origItem) {
+            return res.status(400).json({ message: `Məhsul (ID: ${pid}) bu satışa aid deyil` });
+          }
+
+          let alreadyReturned = 0;
+          if (existingSale.returns) {
+            for (const ret of existingSale.returns) {
+              const ri = ret.items.find((r: any) => r.productId === pid);
+              if (ri) alreadyReturned += ri.quantity;
+            }
+          }
+
+          const maxReturnable = origItem.quantity - alreadyReturned;
+          if (qty > maxReturnable + 0.0001) {
+            return res.status(400).json({
+              message: `Məhsulun qaytarılma miqdarı satılandan artıq ola bilməz. Maksimum qaytarıla bilən: ${maxReturnable}`,
+            });
+          }
+        }
+      }
+
+      let targetWarehouseId = warehouseId ? parseInt(warehouseId) : (existingSale?.warehouseId || null);
       if (!targetWarehouseId) {
         const defaultWarehouse = await db.query.warehouses.findFirst({ where: (w: any, { eq, and }: any) => and(eq(w.tenantId, req.tenantId), eq(w.isDefault, 1)) });
         if (defaultWarehouse) targetWarehouseId = defaultWarehouse.id;
@@ -739,7 +876,7 @@ export default function salesRoutes(): Router {
       const result = await db.transaction(async (tx) => {
         const totalRefunded = items.reduce((sum: number, item: any) => sum + (parseFloat(item.quantity) * parseFloat(item.salePrice)), 0);
         const [newReturn] = await tx.insert(schema.returns).values({
-          tenantId: req.tenantId, saleId: saleId ? parseInt(saleId) : null,
+          tenantId: req.tenantId, saleId: parsedSaleId,
           returnDate: new Date().toISOString(), totalAmount: totalRefunded,
           reason: reason || "Müştəri qaytarışı", warehouseId: targetWarehouseId,
         }).returning();
@@ -766,10 +903,9 @@ export default function salesRoutes(): Router {
               userId: req.user?.userId || null,
               username: req.headers["x-user-username"] as string || "satici",
               unitPrice: salePrice,
-              notes: `Müştəri Qaytarışı (Qaytarış № ${newReturn.id}${saleId ? `, Çek № ${saleId}` : ""})`,
+              notes: `Müştəri Qaytarışı (Qaytarış № ${newReturn.id}${parsedSaleId ? `, Çek № ${parsedSaleId}` : ""})`,
             });
           }
-
 
           if (item.serialNumbers && Array.isArray(item.serialNumbers)) {
             for (const sNum of item.serialNumbers) {
@@ -780,6 +916,21 @@ export default function salesRoutes(): Router {
             }
           }
         }
+
+        // If the sale was a credit sale, update remaining debt and payment status
+        if (parsedSaleId && existingSale && existingSale.paymentType === "Nisyə") {
+          const allReturns = await tx.query.returns.findMany({ where: eq(schema.returns.saleId, parsedSaleId) });
+          const payments = await tx.query.creditPayments.findMany({ where: eq(schema.creditPayments.saleId, parsedSaleId) });
+          const remainingDebt = computeRemainingDebt(
+            { totalAmount: existingSale.totalAmount, loyaltyDiscountPaid: existingSale.loyaltyDiscountPaid },
+            payments,
+            allReturns
+          );
+          if (remainingDebt <= 0) {
+            await tx.update(schema.sales).set({ paymentStatus: "paid" }).where(eq(schema.sales.id, parsedSaleId));
+          }
+        }
+
         return newReturn;
       });
 
@@ -793,7 +944,7 @@ export default function salesRoutes(): Router {
         return `${pName} (${i.quantity} ədəd x ${i.salePrice} ₼)`;
       }).join(", ");
 
-      await logActivity(req, "CREATE_RETURN", `Müştəri qaytarışı: Qaytarış № ${result.id}${saleId ? ` (Çek № ${saleId})` : ""} | Qaytarılan mallar: [${returnDetails}] | Məbləğ: ${result.totalAmount} ₼ | Səbəb: ${reason || "Qeyd olunmayıb"}`);
+      await logActivity(req, "CREATE_RETURN", `Müştəri qaytarışı: Qaytarış № ${result.id}${parsedSaleId ? ` (Çek № ${parsedSaleId})` : ""} | Qaytarılan mallar: [${returnDetails}] | Məbləğ: ${result.totalAmount} ₼ | Səbəb: ${reason || "Qeyd olunmayıb"}`);
 
       res.json(result);
     } catch (error) {

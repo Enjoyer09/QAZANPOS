@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useToast } from "../components/Toast.tsx";
@@ -21,7 +21,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Pencil,
-  Save
+  Save,
+  Plus,
+  Trash2,
+  Calculator,
 } from "lucide-react";
 import { TableSkeleton } from "../components/Skeleton.tsx";
 
@@ -45,6 +48,18 @@ interface Sale {
   warehouseId?: number | null;
 }
 
+interface EditSaleItem {
+  id?: number;
+  productId: number;
+  productName: string;
+  salePrice: string;
+  quantity: string;
+  purchasePrice: number;
+  unit?: string;
+  barcode?: string | null;
+  currentQuantity?: number;
+}
+
 const paymentBadges: Record<string, string> = {
   Nəğd: "bg-green-50 text-green-700 border-green-100",
   Kart: "bg-blue-50 text-blue-700 border-blue-100",
@@ -57,6 +72,16 @@ export default function SalesHistory() {
   const [activeTab, setActiveTab] = useState<"sales" | "warranty" | "lossSales">("sales");
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  // Stock levels query for product combobox / search
+  const { data: stockLevels } = useQuery<any[]>({
+    queryKey: ["/api/stock/levels"],
+    queryFn: async () => {
+      const res = await fetch("/api/stock/levels");
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
 
   // Return Modal States
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
@@ -85,23 +110,134 @@ export default function SalesHistory() {
   const [editCustomerPhone, setEditCustomerPhone] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editSaleDate, setEditSaleDate] = useState("");
-  const [editItems, setEditItems] = useState<{ id: number; productName: string; salePrice: string; quantity: string; purchasePrice: number }[]>([]);
+  const [editItems, setEditItems] = useState<EditSaleItem[]>([]);
+  const [openProductSearchIndex, setOpenProductSearchIndex] = useState<number | null>(null);
+  const [productSearchTerms, setProductSearchTerms] = useState<Record<number, string>>({});
 
-  const getSaleReturnableQty = (sale: Sale) => {
+  const getSaleReturnInfo = (sale: Sale) => {
     let totalSold = 0;
     if (sale.items) {
-      totalSold = sale.items.reduce((sum, item) => sum + Number(item.quantity), 0);
+      totalSold = sale.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
     }
     let totalReturned = 0;
+    let totalRefundAmount = 0;
     if (sale.returns) {
       for (const ret of sale.returns) {
         if (ret.items) {
-          totalReturned += ret.items.reduce((sum: number, ri: any) => sum + Number(ri.quantity), 0);
+          for (const ri of ret.items) {
+            const qty = Number(ri.quantity || 0);
+            totalReturned += qty;
+            totalRefundAmount += qty * Number(ri.salePrice || 0);
+          }
         }
       }
     }
-    return totalSold - totalReturned;
+    const isFullyReturned = totalSold > 0 && totalReturned >= totalSold;
+    const isPartiallyReturned = totalReturned > 0 && totalReturned < totalSold;
+    const remainingReturnable = Math.max(0, totalSold - totalReturned);
+    return {
+      totalSold,
+      totalReturned,
+      totalRefundAmount,
+      isFullyReturned,
+      isPartiallyReturned,
+      remainingReturnable,
+    };
   };
+
+  const handleReturnAll = () => {
+    if (!selectedSaleForReturn) return;
+    const nextQuantities: Record<number, string> = {};
+    const nextSerials: Record<number, string[]> = {};
+
+    (selectedSaleForReturn.items || []).forEach((item) => {
+      const isSerialized = item.product?.trackingType === "serialized";
+      let alreadyReturned = 0;
+      if (selectedSaleForReturn.returns) {
+        for (const ret of selectedSaleForReturn.returns) {
+          const retItem = ret.items?.find((ri: any) => ri.productId === item.productId);
+          if (retItem) {
+            alreadyReturned += Number(retItem.quantity || 0);
+          }
+        }
+      }
+      const maxReturnable = Math.max(0, Number(item.quantity) - alreadyReturned);
+
+      if (isSerialized) {
+        const productSerials = (selectedSaleForReturn.serials || []).filter(
+          (s: any) => s.productId === item.productId && (s.status === "sold" || s.returnId === null)
+        );
+        nextSerials[item.productId] = productSerials.slice(0, maxReturnable).map((s: any) => s.serialNumber);
+      } else {
+        nextQuantities[item.productId] = maxReturnable > 0 ? String(maxReturnable) : "0";
+      }
+    });
+
+    setReturnQuantities(nextQuantities);
+    setReturnSerials(nextSerials);
+  };
+
+  const handleResetReturns = () => {
+    if (!selectedSaleForReturn) return;
+    const initialQuantities: Record<number, string> = {};
+    const initialSerials: Record<number, string[]> = {};
+    (selectedSaleForReturn.items || []).forEach((item) => {
+      initialQuantities[item.productId] = "0";
+      initialSerials[item.productId] = [];
+    });
+    setReturnQuantities(initialQuantities);
+    setReturnSerials(initialSerials);
+  };
+
+  const handleSetItemMaxReturn = (item: any) => {
+    if (!selectedSaleForReturn) return;
+    let alreadyReturned = 0;
+    if (selectedSaleForReturn.returns) {
+      for (const ret of selectedSaleForReturn.returns) {
+        const retItem = ret.items?.find((ri: any) => ri.productId === item.productId);
+        if (retItem) {
+          alreadyReturned += Number(retItem.quantity || 0);
+        }
+      }
+    }
+    const maxReturnable = Math.max(0, Number(item.quantity) - alreadyReturned);
+    const isSerialized = item.product?.trackingType === "serialized";
+
+    if (isSerialized) {
+      const productSerials = (selectedSaleForReturn.serials || []).filter(
+        (s: any) => s.productId === item.productId && (s.status === "sold" || s.returnId === null)
+      );
+      setReturnSerials(prev => ({
+        ...prev,
+        [item.productId]: productSerials.slice(0, maxReturnable).map((s: any) => s.serialNumber)
+      }));
+    } else {
+      setReturnQuantities(prev => ({
+        ...prev,
+        [item.productId]: maxReturnable > 0 ? String(maxReturnable) : "0"
+      }));
+    }
+  };
+
+  const { totalReturnUnits, totalRefundAmount } = useMemo(() => {
+    if (!selectedSaleForReturn) return { totalReturnUnits: 0, totalRefundAmount: 0 };
+    let units = 0;
+    let amount = 0;
+    (selectedSaleForReturn.items || []).forEach(item => {
+      const isSerialized = item.product?.trackingType === "serialized";
+      let qty = 0;
+      if (isSerialized) {
+        qty = (returnSerials[item.productId] || []).length;
+      } else {
+        qty = parseFloat(returnQuantities[item.productId] || "0") || 0;
+      }
+      if (qty > 0) {
+        units += qty;
+        amount += qty * Number(item.unitPrice || item.salePrice || 0);
+      }
+    });
+    return { totalReturnUnits: units, totalRefundAmount: amount };
+  }, [selectedSaleForReturn, returnQuantities, returnSerials]);
 
   const handleInitiateReturn = (sale: Sale) => {
     setSelectedSaleForReturn(sale);
@@ -133,6 +269,8 @@ export default function SalesHistory() {
     setEditCustomerName(sale.customerName || "");
     setEditCustomerPhone(sale.customerPhone || "");
     setEditNotes(sale.notes || "");
+    setOpenProductSearchIndex(null);
+    setProductSearchTerms({});
     // Format saleDate to YYYY-MM-DDTHH:MM for datetime-local input
     const d = new Date(sale.saleDate);
     const pad = (n: number) => String(n).padStart(2, "0");
@@ -140,10 +278,13 @@ export default function SalesHistory() {
     setEditItems(
       (sale.items || []).map((item: any) => ({
         id: item.id,
+        productId: item.productId,
         productName: item.product?.name || item.productName || "Məhsul",
-        salePrice: String(item.salePrice),
-        quantity: String(item.quantity),
-        purchasePrice: item.purchasePrice,
+        salePrice: String(item.unitPrice || item.salePrice || "0"),
+        quantity: String(item.quantity || "1"),
+        purchasePrice: Number(item.purchasePrice || 0),
+        unit: item.product?.unit || "ədəd",
+        barcode: item.product?.barcode || null,
       }))
     );
     setEditModalOpen(true);
@@ -236,6 +377,11 @@ export default function SalesHistory() {
       return;
     }
 
+    if (!isAdmin && !returnAdminPassword.trim()) {
+      toast({ title: "Xəta", description: "Zəhmət olmasa Administrator şifrəsini daxil edin.", variant: "destructive" });
+      return;
+    }
+
     setIsSubmittingReturn(true);
     try {
       const res = await fetch("/api/returns", {
@@ -259,10 +405,13 @@ export default function SalesHistory() {
         throw new Error(err.message || "Geri qaytarış tamamlanarkən xəta baş verdi.");
       }
 
-      toast({ title: "Uğurlu", description: "Geri qaytarış uğurla rəsmiləşdirildi.", variant: "success" });
+      toast({ title: "Uğurlu", description: "Geri qaytarış uğurla rəsmiləşdirildi və stok bərpa olundu.", variant: "success" });
       setIsReturnModalOpen(false);
       setSelectedSaleForReturn(null);
       queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stock/levels"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/summary"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/pnl"] });
     } catch (err: any) {
       toast({ title: "Xəta", description: err.message, variant: "destructive" });
     } finally {
@@ -296,10 +445,11 @@ export default function SalesHistory() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "✅ Satış yeniləndi!", description: "Dəyişikliklər uğurla yadda saxlanıldı.", variant: "success" });
+      toast({ title: "✅ Satış yeniləndi!", description: "Dəyişikliklər və anbar qalıqları uğurla yadda saxlanıldı.", variant: "success" });
       setEditModalOpen(false);
       setEditingSale(null);
       queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stock/levels"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/summary"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/pnl"] });
     },
@@ -310,14 +460,24 @@ export default function SalesHistory() {
 
   const handleSaveEdit = () => {
     if (!editingSale) return;
-    // Validate
-    for (const item of editItems) {
-      if (isNaN(parseFloat(item.salePrice)) || parseFloat(item.salePrice) < 0) {
-        toast({ title: "Xəta", description: `${item.productName} üçün düzgün qiymət daxil edin.`, variant: "destructive" });
+    if (!editItems || editItems.length === 0) {
+      toast({ title: "Xəta", description: "Satışda ən azı 1 məhsul olmalıdır.", variant: "destructive" });
+      return;
+    }
+    for (let i = 0; i < editItems.length; i++) {
+      const item = editItems[i];
+      if (!item.productId || item.productId <= 0) {
+        toast({ title: "Xəta", description: `Sətir ${i + 1}: Zəhmət olmasa məhsul seçin.`, variant: "destructive" });
         return;
       }
-      if (isNaN(parseFloat(item.quantity)) || parseFloat(item.quantity) <= 0) {
-        toast({ title: "Xəta", description: `${item.productName} üçün düzgün miqdar daxil edin.`, variant: "destructive" });
+      const qty = parseFloat(item.quantity);
+      if (isNaN(qty) || qty <= 0) {
+        toast({ title: "Xəta", description: `"${item.productName || 'Məhsul'}" üçün düzgün miqdar daxil edin (0-dan böyük).`, variant: "destructive" });
+        return;
+      }
+      const price = parseFloat(item.salePrice);
+      if (isNaN(price) || price < 0) {
+        toast({ title: "Xəta", description: `"${item.productName || 'Məhsul'}" üçün düzgün satış qiyməti daxil edin.`, variant: "destructive" });
         return;
       }
     }
@@ -328,7 +488,13 @@ export default function SalesHistory() {
       customerPhone: editCustomerPhone,
       notes: editNotes || null,
       saleDate: editSaleDate ? new Date(editSaleDate).toISOString() : undefined,
-      items: editItems.map(i => ({ id: i.id, salePrice: parseFloat(i.salePrice), quantity: parseFloat(i.quantity) })),
+      items: editItems.map(i => ({
+        id: i.id && i.id > 0 ? i.id : undefined,
+        productId: i.productId,
+        salePrice: parseFloat(i.salePrice),
+        quantity: parseFloat(i.quantity),
+        purchasePrice: i.purchasePrice,
+      })),
     });
   };
 
@@ -957,6 +1123,7 @@ export default function SalesHistory() {
                     </tr>
                   ) : (
                     paginatedSales.map((sale) => {
+                      const returnInfo = getSaleReturnInfo(sale);
                       const returned = (sale.returns || []).reduce((acc: number, r: any) => acc + Number(r.totalAmount || 0), 0);
                       const returnedCost = (sale.returns || []).reduce((retSum: number, r: any) => {
                         const itemsCost = (r.items || []).reduce((iSum: number, item: any) => {
@@ -1049,17 +1216,28 @@ export default function SalesHistory() {
                             </td>
                           )}
                           <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-center">
-                            <span
-                              className={`px-2.5 py-0.5 border rounded-full text-[9px] font-bold uppercase tracking-wider ${
-                                sale.paymentStatus === "paid"
-                                  ? "bg-green-50 text-green-700 border-green-100"
-                                  : "bg-red-50 text-red-600 border-red-100"
-                              }`}
-                            >
-                              {sale.paymentStatus === "paid"
-                                ? (sale.paymentType === "Nisyə" ? "Bağlı" : "Ödənilib")
-                                : (sale.paymentType === "Nisyə" ? "Nisyə" : "Ödənilməyib")}
-                            </span>
+                            <div className="flex flex-col items-center gap-1">
+                              {returnInfo.isFullyReturned ? (
+                                <span className="px-2 py-0.5 border rounded-full text-[9px] font-bold uppercase tracking-wider bg-rose-50 text-rose-700 border-rose-200 shadow-2xs">
+                                  Tam Qaytarılıb
+                                </span>
+                              ) : returnInfo.isPartiallyReturned ? (
+                                <span className="px-2 py-0.5 border rounded-full text-[9px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border-amber-200 shadow-2xs">
+                                  Qismən Qaytarılıb
+                                </span>
+                              ) : null}
+                              <span
+                                className={`px-2.5 py-0.5 border rounded-full text-[9px] font-bold uppercase tracking-wider ${
+                                  sale.paymentStatus === "paid"
+                                    ? "bg-green-50 text-green-700 border-green-100"
+                                    : "bg-red-50 text-red-600 border-red-100"
+                                }`}
+                              >
+                                {sale.paymentStatus === "paid"
+                                  ? (sale.paymentType === "Nisyə" ? "Bağlı" : "Ödənilib")
+                                  : (sale.paymentType === "Nisyə" ? "Nisyə" : "Ödənilməyib")}
+                              </span>
+                            </div>
                           </td>
                           <td className="py-2.5 sm:py-3 px-2 sm:px-4 text-right pr-3 sm:pr-6 whitespace-nowrap">
                             <div className="flex items-center justify-end gap-1 sm:gap-1.5">
@@ -1071,19 +1249,20 @@ export default function SalesHistory() {
                                 <Eye className="w-3.5 h-3.5" />
                               </button>
 
-                              {getSaleReturnableQty(sale) > 0 && (
+                              {returnInfo.remainingReturnable > 0 && (
                                 <button
                                   onClick={() => handleInitiateReturn(sale)}
-                                  className="p-1.5 sm:p-2 border border-red-100 hover:border-red-200 text-red-500 hover:text-red-700 hover:bg-red-50/30 rounded-xl cursor-pointer bg-white transition-all shadow-2xs"
-                                  title="Geri Qaytar"
+                                  className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 border border-red-200 hover:border-red-300 text-red-600 hover:bg-red-50 rounded-xl cursor-pointer bg-white transition-all shadow-2xs text-[11px] font-bold"
+                                  title="Geri Qaytar (Vozvrat)"
                                 >
-                                  <RotateCcw className="w-3.5 h-3.5" />
+                                  <RotateCcw className="w-3.5 h-3.5 text-red-500" />
+                                  <span className="hidden xl:inline">Qaytar</span>
                                 </button>
                               )}
                               {isAdmin && (
                                 <button
                                   onClick={() => handleOpenEdit(sale)}
-                                  className="p-1.5 sm:p-2 border border-indigo-100 hover:border-indigo-300 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50/40 rounded-xl cursor-pointer bg-white transition-all shadow-2xs"
+                                  className="p-1.5 sm:p-2 border border-indigo-100 hover:border-indigo-300 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50/50 rounded-xl cursor-pointer bg-white transition-all shadow-2xs"
                                   title="Satışı Redaktə Et"
                                 >
                                   <Pencil className="w-3.5 h-3.5" />
@@ -1635,7 +1814,25 @@ export default function SalesHistory() {
               <div className="p-6 overflow-y-auto space-y-6 flex-1 text-xs">
                 {/* Sale Items List */}
                 <div className="space-y-4">
-                  <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Satılmış Məhsullar</h4>
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Satılmış Məhsullar</h4>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleReturnAll}
+                        className="text-[11px] font-bold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
+                      >
+                        <span>⚡ Hamısını Qaytar</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleResetReturns}
+                        className="text-[11px] font-semibold text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded-lg transition-all cursor-pointer"
+                      >
+                        Sıfırla
+                      </button>
+                    </div>
+                  </div>
                   <div className="space-y-3">
                     {selectedSaleForReturn.items?.map((item: any) => {
                       const isSerialized = item.product?.trackingType === "serialized";
@@ -1685,9 +1882,18 @@ export default function SalesHistory() {
                                 <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Qaytarılan Miqdar *</label>
                                 {isSerialized ? (
                                   <div className="space-y-2">
-                                    <span className="text-[10px] text-amber-700 font-bold block mb-1">
-                                      Geri qaytarılacaq IMEI / S/N seçin:
-                                    </span>
+                                    <div className="flex items-center justify-between mb-1">
+                                      <span className="text-[10px] text-amber-700 font-bold block">
+                                        Geri qaytarılacaq IMEI / S/N seçin:
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSetItemMaxReturn(item)}
+                                        className="text-[9px] font-bold text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 px-2 py-0.5 rounded cursor-pointer"
+                                      >
+                                        Hamısını seç
+                                      </button>
+                                    </div>
                                     <div className="flex flex-wrap gap-1.5">
                                       {productSerials.map((s: any) => {
                                         const isChecked = (returnSerials[item.productId] || []).includes(s.serialNumber);
@@ -1724,19 +1930,29 @@ export default function SalesHistory() {
                                     </span>
                                   </div>
                                 ) : (
-                                  <input
-                                    type="number"
-                                    step="any"
-                                    min="0"
-                                    max={maxReturnable}
-                                    placeholder="0"
-                                    value={returnQuantities[item.productId] || ""}
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setReturnQuantities(prev => ({ ...prev, [item.productId]: val }));
-                                    }}
-                                    className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-red-500 bg-white font-bold"
-                                  />
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      min="0"
+                                      max={maxReturnable}
+                                      placeholder="0"
+                                      value={returnQuantities[item.productId] || ""}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setReturnQuantities(prev => ({ ...prev, [item.productId]: val }));
+                                      }}
+                                      className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-red-500 bg-white font-bold"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSetItemMaxReturn(item)}
+                                      className="shrink-0 px-2.5 py-2 text-[10px] font-bold text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 rounded-xl transition-all cursor-pointer"
+                                      title="Maksimum miqdarı seç"
+                                    >
+                                      Hamısı
+                                    </button>
+                                  </div>
                                 )}
                               </div>
 
@@ -1768,6 +1984,50 @@ export default function SalesHistory() {
                   </div>
                 </div>
 
+                {/* Live Financial Summary */}
+                {totalReturnUnits > 0 && (
+                  <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200/80 rounded-2xl space-y-2.5 animate-in fade-in-50">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Calculator className="w-4 h-4 text-amber-700" />
+                        <span className="text-xs font-black text-amber-900 uppercase tracking-wider">
+                          Qaytarışın Maliyyə Xülasəsi
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[10px] text-amber-700 font-bold block">Qaytarılan Say: {totalReturnUnits} ədəd</span>
+                        <span className="text-sm font-black font-mono text-amber-900 block">
+                          Cəmi Məbləğ: {totalRefundAmount.toFixed(2)} ₼
+                        </span>
+                      </div>
+                    </div>
+                    <div className="pt-2 border-t border-amber-200/60 text-[11px] text-amber-800 font-medium leading-relaxed">
+                      {selectedSaleForReturn.paymentType === "Nisyə" ? (
+                        <p className="flex items-start gap-1.5">
+                          <span className="font-bold">ℹ️ Nisyə Satış:</span>
+                          <span>
+                            Müştərinin qeyd olunan qaimə üzrə nisyə borcundan <strong>{totalRefundAmount.toFixed(2)} ₼</strong> silinəcək. Əgər borc tam bağlanarsa, qaimə avtomatik <strong>"Bağlı"</strong> statusuna keçəcək.
+                          </span>
+                        </p>
+                      ) : selectedSaleForReturn.paymentType === "Nəğd" ? (
+                        <p className="flex items-start gap-1.5">
+                          <span className="font-bold">💵 Nağd Satış:</span>
+                          <span>
+                            Müştəriyə kassadan nağd olaraq <strong>{totalRefundAmount.toFixed(2)} ₼</strong> geri ödənilməlidir.
+                          </span>
+                        </p>
+                      ) : (
+                        <p className="flex items-start gap-1.5">
+                          <span className="font-bold">💳 {selectedSaleForReturn.paymentType} Satışı:</span>
+                          <span>
+                            Müştəriyə terminal və ya bank hesabı vasitəsilə <strong>{totalRefundAmount.toFixed(2)} ₼</strong> geri köçürülməlidir.
+                          </span>
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Reason Note */}
                 <div className="space-y-1.5">
                   <label className="text-gray-400 uppercase tracking-wider block text-[10px]">Geri Qaytarılma Səbəbi</label>
@@ -1781,25 +2041,37 @@ export default function SalesHistory() {
                 </div>
 
                 {/* Admin Password Block */}
-                <div className="p-4 bg-red-50/50 border border-red-100 rounded-xl space-y-3">
-                  <div className="flex items-center gap-2 text-red-800 font-bold">
-                    <Lock className="w-4 h-4" />
-                    <h5 className="text-[11px] uppercase tracking-wider">Təsdiqləmə Tələb Olunur</h5>
+                {isAdmin ? (
+                  <div className="p-4 bg-emerald-50/70 border border-emerald-100 rounded-xl flex items-center gap-2.5 text-emerald-800">
+                    <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
+                    <div>
+                      <h5 className="text-[11px] font-bold uppercase tracking-wider text-emerald-900">Admin İcazəsi Təsdiqləndi</h5>
+                      <p className="text-[10px] text-emerald-700/90 leading-normal">
+                        Siz Administrator kimi daxil olmusunuz — qaytarış üçün əlavə admin şifrəsi daxil etməyinizə ehtiyac yoxdur.
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-[10px] text-red-700/80 leading-normal">
-                    Qaytarış əməliyyatını tamamlamaq üçün mağaza administratorunun sistem şifrəsini daxil edin. Bu, dövriyyə balansının düzgünlüyü üçün məcburidir.
-                  </p>
-                  <div className="space-y-1">
-                    <input
-                      type="password"
-                      placeholder="Admin Şifrəsi"
-                      required
-                      value={returnAdminPassword}
-                      onChange={(e) => setReturnAdminPassword(e.target.value)}
-                      className="w-full max-w-xs px-3.5 py-2 border border-red-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-red-500 bg-white font-mono text-xs font-bold"
-                    />
+                ) : (
+                  <div className="p-4 bg-red-50/50 border border-red-100 rounded-xl space-y-3">
+                    <div className="flex items-center gap-2 text-red-800 font-bold">
+                      <Lock className="w-4 h-4" />
+                      <h5 className="text-[11px] uppercase tracking-wider">Təsdiqləmə Tələb Olunur</h5>
+                    </div>
+                    <p className="text-[10px] text-red-700/80 leading-normal">
+                      Qaytarış əməliyyatını tamamlamaq üçün mağaza administratorunun sistem şifrəsini daxil edin. Bu, dövriyyə balansının düzgünlüyü üçün məcburidir.
+                    </p>
+                    <div className="space-y-1">
+                      <input
+                        type="password"
+                        placeholder="Admin Şifrəsi"
+                        required
+                        value={returnAdminPassword}
+                        onChange={(e) => setReturnAdminPassword(e.target.value)}
+                        className="w-full max-w-xs px-3.5 py-2 border border-red-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-red-500 bg-white font-mono text-xs font-bold"
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
 
               {/* Modal Footer */}
@@ -1833,17 +2105,19 @@ export default function SalesHistory() {
       {/* ── Edit Sale Modal ─────────────────────────────────────────────────── */}
       {editModalOpen && editingSale && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-start justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl my-8 animate-in fade-in slide-in-from-bottom-4 duration-300 overflow-hidden">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl my-8 animate-in fade-in slide-in-from-bottom-4 duration-300 overflow-visible">
 
             {/* Header */}
-            <div className="flex items-center justify-between p-5 border-b border-gray-100 bg-gradient-to-r from-indigo-50 to-white">
+            <div className="flex items-center justify-between p-5 border-b border-gray-100 bg-gradient-to-r from-indigo-50 to-white rounded-t-3xl">
               <div className="flex items-center gap-3">
                 <div className="size-9 rounded-xl bg-indigo-500 text-white flex items-center justify-center shadow-md shadow-indigo-500/20">
                   <Pencil className="w-4 h-4" />
                 </div>
                 <div>
                   <h3 className="font-black text-gray-900 text-base">Satışı Redaktə Et</h3>
-                  <p className="text-[10px] text-gray-400 font-semibold">Qaimdə №{editingSale.id.toString().padStart(5, "0")}</p>
+                  <p className="text-[10px] text-gray-400 font-semibold">
+                    Qaimə №#{editingSale.id.toString().padStart(5, "0")} | İlkin Məbləğ: {Number(editingSale.totalAmount || 0).toFixed(2)} ₼
+                  </p>
                 </div>
               </div>
               <button
@@ -1855,72 +2129,298 @@ export default function SalesHistory() {
             </div>
 
             {/* Body */}
-            <div className="p-5 space-y-5 max-h-[70vh] overflow-y-auto">
+            <div className="p-5 space-y-5 max-h-[72vh] overflow-y-auto">
 
               {/* Məhsullar cədvəli */}
-              <div className="space-y-2">
-                <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Məhsullar / Qiymətlər</h4>
-                <div className="border border-gray-100 rounded-2xl overflow-hidden">
-                  <table className="w-full text-xs">
-                    <thead className="bg-gray-50 border-b border-gray-100">
-                      <tr>
-                        <th className="text-left p-3 font-bold text-gray-500">Məhsul</th>
-                        <th className="text-center p-3 font-bold text-gray-500 w-24">Miqdar</th>
-                        <th className="text-center p-3 font-bold text-gray-500 w-28">Satış Qiyməti</th>
-                        <th className="text-right p-3 font-bold text-gray-500 w-24">Cəm</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {editItems.map((item, idx) => (
-                        <tr key={item.id} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50/40"}>
-                          <td className="p-3 font-semibold text-gray-700 max-w-[160px] truncate">{item.productName}</td>
-                          <td className="p-2">
-                            <input
-                              type="number"
-                              min="0.001"
-                              step="any"
-                              value={item.quantity}
-                              onChange={e => {
-                                const updated = [...editItems];
-                                updated[idx] = { ...updated[idx], quantity: e.target.value };
-                                setEditItems(updated);
-                              }}
-                              className="w-full text-center border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-white font-mono text-xs"
-                            />
-                          </td>
-                          <td className="p-2">
-                            <div className="relative">
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={item.salePrice}
-                                onChange={e => {
-                                  const updated = [...editItems];
-                                  updated[idx] = { ...updated[idx], salePrice: e.target.value };
-                                  setEditItems(updated);
-                                }}
-                                className="w-full text-center border border-gray-200 rounded-lg px-2 py-1.5 pr-5 focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-white font-mono text-xs"
-                              />
-                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-[10px] font-bold">₼</span>
-                            </div>
-                          </td>
-                          <td className="p-3 text-right font-mono font-bold text-gray-800">
-                            {(parseFloat(item.salePrice || "0") * parseFloat(item.quantity || "0")).toFixed(2)} ₼
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot className="border-t border-gray-100 bg-indigo-50/40">
-                      <tr>
-                        <td colSpan={3} className="p-3 text-xs font-black text-gray-600 text-right">Yeni Cəm:</td>
-                        <td className="p-3 text-right font-mono font-black text-indigo-700">
-                          {editItems.reduce((s, i) => s + parseFloat(i.salePrice||"0") * parseFloat(i.quantity||"0"), 0).toFixed(2)} ₼
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                    Məhsullar / Sətirlər ({editItems.length})
+                  </h4>
+                  <span className="text-[10px] text-indigo-600 font-semibold">
+                    Məhsulu axtarışla dəyişdirə və ya yeni məhsul əlavə edə bilərsiniz
+                  </span>
                 </div>
+
+                <div className="border border-gray-200 rounded-2xl overflow-visible bg-white">
+                  <div className="overflow-x-auto overflow-y-visible">
+                    <table className="w-full text-xs">
+                      <thead className="bg-gray-50 border-b border-gray-200">
+                        <tr>
+                          <th className="text-left p-3 font-bold text-gray-600 min-w-[220px]">Məhsul (Axtarış / Seçim)</th>
+                          <th className="text-center p-3 font-bold text-gray-600 w-28">Miqdar</th>
+                          <th className="text-center p-3 font-bold text-gray-600 w-32">Satış Qiyməti</th>
+                          <th className="text-right p-3 font-bold text-gray-600 w-28">Cəm</th>
+                          <th className="text-center p-3 font-bold text-gray-600 w-12">Sil</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {editItems.map((item, idx) => {
+                          const isSearchOpen = openProductSearchIndex === idx;
+                          const currentSearchTerm = productSearchTerms[idx] ?? "";
+                          
+                          const filteredProducts = (stockLevels || []).filter((p) => {
+                            if (!currentSearchTerm.trim()) return true;
+                            const q = currentSearchTerm.toLowerCase();
+                            return (
+                              p.productName?.toLowerCase().includes(q) ||
+                              p.barcode?.toLowerCase().includes(q) ||
+                              String(p.productId).includes(q)
+                            );
+                          }).slice(0, 15);
+
+                          const rowTotal = (parseFloat(item.salePrice || "0") * parseFloat(item.quantity || "0")) || 0;
+
+                          return (
+                            <tr key={item.id ?? idx} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50/40"}>
+                              {/* Product Combobox Cell */}
+                              <td className="p-2.5 relative">
+                                <div className="relative">
+                                  <div className="flex items-center relative">
+                                    <input
+                                      type="text"
+                                      placeholder="Məhsul adı və ya barkod..."
+                                      value={isSearchOpen ? currentSearchTerm : (item.productName || "")}
+                                      onFocus={() => {
+                                        setOpenProductSearchIndex(idx);
+                                        setProductSearchTerms(prev => ({ ...prev, [idx]: item.productName || "" }));
+                                      }}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setProductSearchTerms(prev => ({ ...prev, [idx]: val }));
+                                        if (!isSearchOpen) setOpenProductSearchIndex(idx);
+                                      }}
+                                      className={`w-full px-3 py-1.5 pr-7 text-xs font-semibold rounded-xl border transition-all ${
+                                        !item.productId || item.productId <= 0
+                                          ? "border-amber-300 bg-amber-50/40 text-amber-900 placeholder:text-amber-500"
+                                          : "border-gray-200 bg-white text-gray-900 focus:border-indigo-400"
+                                      } focus:outline-none focus:ring-1 focus:ring-indigo-400`}
+                                    />
+                                    {isSearchOpen ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => setOpenProductSearchIndex(null)}
+                                        className="absolute right-2 p-1 text-gray-400 hover:text-gray-600 rounded-md cursor-pointer"
+                                        title="Bağla"
+                                      >
+                                        <X className="w-3.5 h-3.5" />
+                                      </button>
+                                    ) : (
+                                      <Search className="absolute right-2.5 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                                    )}
+                                  </div>
+
+                                  {/* Stock & Barcode badge below input */}
+                                  {item.productId > 0 && !isSearchOpen && (
+                                    <div className="flex items-center gap-2 mt-1 px-1 flex-wrap">
+                                      {item.barcode && (
+                                        <span className="text-[10px] text-gray-400 font-mono flex items-center gap-0.5">
+                                          <Barcode className="w-3 h-3 text-gray-400" /> {item.barcode}
+                                        </span>
+                                      )}
+                                      <span className="text-[10px] text-indigo-600 font-semibold">
+                                        Vahid: {item.unit || "ədəd"}
+                                      </span>
+                                    </div>
+                                  )}
+
+                                  {/* Dropdown popup */}
+                                  {isSearchOpen && (
+                                    <>
+                                      <div
+                                        className="fixed inset-0 z-40 bg-transparent"
+                                        onClick={() => setOpenProductSearchIndex(null)}
+                                      />
+                                      <div
+                                        className="absolute z-50 left-0 top-full mt-1 w-full min-w-[280px] max-w-md bg-white border border-gray-200 rounded-xl shadow-2xl max-h-60 overflow-y-auto divide-y divide-gray-100"
+                                      >
+                                        {filteredProducts.length === 0 ? (
+                                          <div className="p-3 text-center text-xs text-gray-400 font-medium">
+                                            Uyğun məhsul tapılmadı
+                                          </div>
+                                        ) : (
+                                          filteredProducts.map((p) => {
+                                            const isSelected = p.productId === item.productId;
+                                            return (
+                                              <button
+                                                key={p.productId}
+                                                type="button"
+                                                onClick={() => {
+                                                  const updated = [...editItems];
+                                                  updated[idx] = {
+                                                    ...updated[idx],
+                                                    productId: p.productId,
+                                                    productName: p.productName,
+                                                    barcode: p.barcode || null,
+                                                    unit: p.unit || "ədəd",
+                                                    salePrice: String(p.lastSalePrice || p.lastPurchasePrice || updated[idx].salePrice || "0"),
+                                                    purchasePrice: Number(p.lastPurchasePrice || 0),
+                                                    currentQuantity: p.currentQuantity,
+                                                  };
+                                                  setEditItems(updated);
+                                                  setOpenProductSearchIndex(null);
+                                                  setProductSearchTerms(prev => ({ ...prev, [idx]: "" }));
+                                                }}
+                                                className={`w-full text-left p-2.5 hover:bg-indigo-50/60 transition-all cursor-pointer flex items-center justify-between gap-2 ${
+                                                  isSelected ? "bg-indigo-50/40" : ""
+                                                }`}
+                                              >
+                                                <div className="min-w-0 flex-1">
+                                                  <div className="font-bold text-gray-900 text-xs truncate">
+                                                    {p.productName}
+                                                  </div>
+                                                  <div className="flex items-center gap-2 text-[10px] text-gray-400 font-semibold mt-0.5">
+                                                    {p.barcode && <span>Kod: {p.barcode}</span>}
+                                                    <span className="text-gray-500">Qalıq: {p.currentQuantity ?? 0} {p.unit || "ədəd"}</span>
+                                                  </div>
+                                                </div>
+                                                <div className="text-right shrink-0">
+                                                  <span className="font-bold font-mono text-indigo-600 text-xs">
+                                                    {(p.lastSalePrice || p.lastPurchasePrice || 0).toFixed(2)} ₼
+                                                  </span>
+                                                </div>
+                                              </button>
+                                            );
+                                          })
+                                        )}
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+
+                              {/* Quantity Input */}
+                              <td className="p-2">
+                                <div className="flex items-center gap-1 justify-center">
+                                  <input
+                                    type="number"
+                                    min="0.001"
+                                    step="any"
+                                    value={item.quantity}
+                                    onChange={(e) => {
+                                      const updated = [...editItems];
+                                      updated[idx] = { ...updated[idx], quantity: e.target.value };
+                                      setEditItems(updated);
+                                    }}
+                                    className="w-20 text-center border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-white font-mono text-xs font-bold"
+                                  />
+                                  <span className="text-[10px] text-gray-400 font-medium shrink-0">
+                                    {item.unit || "ədəd"}
+                                  </span>
+                                </div>
+                              </td>
+
+                              {/* Sale Price Input */}
+                              <td className="p-2">
+                                <div className="relative max-w-[110px] mx-auto">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={item.salePrice}
+                                    onChange={(e) => {
+                                      const updated = [...editItems];
+                                      updated[idx] = { ...updated[idx], salePrice: e.target.value };
+                                      setEditItems(updated);
+                                    }}
+                                    className="w-full text-center border border-gray-200 rounded-lg px-2 py-1.5 pr-5 focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-white font-mono text-xs font-bold"
+                                  />
+                                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-[10px] font-bold">₼</span>
+                                </div>
+                              </td>
+
+                              {/* Line Total */}
+                              <td className="p-3 text-right font-mono font-bold text-gray-900">
+                                {rowTotal.toFixed(2)} ₼
+                              </td>
+
+                              {/* Delete Row Button */}
+                              <td className="p-2 text-center">
+                                <button
+                                  type="button"
+                                  disabled={editItems.length <= 1}
+                                  onClick={() => {
+                                    if (editItems.length <= 1) {
+                                      toast({ title: "Xəbərdarlıq", description: "Satışda ən azı 1 məhsul qalmalıdır.", variant: "destructive" });
+                                      return;
+                                    }
+                                    setEditItems(prev => prev.filter((_, i) => i !== idx));
+                                  }}
+                                  className={`p-1.5 rounded-lg transition-all ${
+                                    editItems.length <= 1
+                                      ? "text-gray-300 cursor-not-allowed"
+                                      : "text-gray-400 hover:text-red-600 hover:bg-red-50 cursor-pointer"
+                                  }`}
+                                  title={editItems.length <= 1 ? "Satışda ən azı 1 məhsul qalmalıdır" : "Məhsulu siyahıdan sil"}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Add New Item Button */}
+                  <div className="p-2.5 border-t border-gray-100 bg-gray-50/50">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newIdx = editItems.length;
+                        setEditItems(prev => [
+                          ...prev,
+                          {
+                            id: -Date.now(),
+                            productId: 0,
+                            productName: "",
+                            salePrice: "0",
+                            quantity: "1",
+                            purchasePrice: 0,
+                            unit: "ədəd",
+                            barcode: null,
+                          }
+                        ]);
+                        setOpenProductSearchIndex(newIdx);
+                        setProductSearchTerms(prev => ({ ...prev, [newIdx]: "" }));
+                      }}
+                      className="w-full py-2 px-3 border border-dashed border-indigo-300 hover:border-indigo-500 bg-indigo-50/30 hover:bg-indigo-50 text-indigo-700 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Yeni Məhsul Əlavə Et
+                    </button>
+                  </div>
+                </div>
+
+                {/* Comparison Card */}
+                {editingSale && (() => {
+                  const originalTotal = Number(editingSale.totalAmount || 0);
+                  const newTotal = editItems.reduce(
+                    (sum, item) => sum + (parseFloat(item.salePrice || "0") * parseFloat(item.quantity || "0") || 0),
+                    0
+                  );
+                  const diff = newTotal - originalTotal;
+
+                  return (
+                    <div className="p-3.5 bg-gradient-to-r from-indigo-50/70 to-slate-50 border border-indigo-100 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs">
+                      <div className="space-y-0.5">
+                        <span className="text-gray-500 font-semibold block text-[11px]">İlkin Məbləğ:</span>
+                        <span className="font-mono font-bold text-gray-800">{originalTotal.toFixed(2)} ₼</span>
+                      </div>
+                      <div className="space-y-0.5">
+                        <span className="text-indigo-600 font-bold block text-[11px]">Yeni Cəm Məbləğ:</span>
+                        <span className="font-mono font-black text-indigo-700 text-sm">{newTotal.toFixed(2)} ₼</span>
+                      </div>
+                      <div className="space-y-0.5 text-right">
+                        <span className="text-gray-500 font-semibold block text-[11px]">Fərq (Balans Təsiri):</span>
+                        <span className={`font-mono font-black text-xs ${diff > 0 ? "text-green-600" : diff < 0 ? "text-amber-600" : "text-gray-600"}`}>
+                          {diff > 0 ? `+${diff.toFixed(2)} ₼ (Artım)` : diff < 0 ? `${diff.toFixed(2)} ₼ (Azalma)` : "0.00 ₼ (Dəyişməz)"}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Ödəniş növü */}
@@ -2019,116 +2519,153 @@ export default function SalesHistory() {
       )}
 
       {/* Right Slide-Over Drawer for Quick Sale & Thermal Receipt Inspection */}
-      {drawerSale && (
-        <div className="fixed inset-0 z-50 overflow-hidden bg-black/50 backdrop-blur-xs animate-in fade-in-0 duration-200">
-          <div className="absolute inset-y-0 right-0 max-w-full flex pl-10">
-            <div className="w-screen max-w-md bg-white border-l border-gray-100 shadow-2xl flex flex-col justify-between animate-in slide-in-from-right duration-300">
-              {/* Drawer Header */}
-              <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 bg-primary/10 text-primary rounded-xl">
-                    <ShoppingBag className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-black text-gray-900 text-sm">Çek № #{drawerSale.id.toString().padStart(5, "0")}</h3>
-                    <p className="text-[10px] text-gray-400 font-bold">
-                      {new Date(drawerSale.saleDate).toLocaleString("az-AZ")}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setDrawerSale(null)}
-                  className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-all"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Drawer Content: Thermal Receipt Simulator */}
-              <div className="p-6 overflow-y-auto space-y-6 flex-1">
-                {/* Simulated 80mm Thermal Receipt */}
-                <div className="bg-amber-50/40 border border-amber-200/60 rounded-2xl p-5 font-mono text-xs shadow-xs text-gray-800 space-y-4 relative overflow-hidden">
-                  <div className="text-center border-b border-dashed border-amber-300 pb-3 space-y-1">
-                    <h4 className="font-black text-sm uppercase tracking-wider">QAZAN POS ÇEK</h4>
-                    <p className="text-[10px] text-gray-500 font-bold">Mağaza Satış Qaiməsi</p>
-                    <p className="text-[10px] text-gray-400">Tarix: {new Date(drawerSale.saleDate).toLocaleString("az-AZ")}</p>
-                  </div>
-
-                  {/* Customer & Cashier Metadata */}
-                  <div className="text-[11px] space-y-1 border-b border-dashed border-amber-300 pb-3">
-                    <div className="flex justify-between">
-                      <span className="text-gray-500 font-bold">Müştəri:</span>
-                      <span className="font-black">{drawerSale.customerName || "Anonim Müştəri"}</span>
+      {drawerSale && (() => {
+        const drawerReturnInfo = getSaleReturnInfo(drawerSale);
+        return (
+          <div className="fixed inset-0 z-50 overflow-hidden bg-black/50 backdrop-blur-xs animate-in fade-in-0 duration-200">
+            <div className="absolute inset-y-0 right-0 max-w-full flex pl-10">
+              <div className="w-screen max-w-md bg-white border-l border-gray-100 shadow-2xl flex flex-col justify-between animate-in slide-in-from-right duration-300">
+                {/* Drawer Header */}
+                <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 bg-primary/10 text-primary rounded-xl">
+                      <ShoppingBag className="w-5 h-5" />
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500 font-bold">Kassir:</span>
-                      <span className="font-bold">{drawerSale.sellerName || "satici"}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500 font-bold">Ödəniş Üsulu:</span>
-                      <span className="font-bold uppercase text-primary">{drawerSale.paymentType}</span>
-                    </div>
-                  </div>
-
-                  {/* Items List */}
-                  <div className="space-y-2 border-b border-dashed border-amber-300 pb-3">
-                    <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                      <span>Məhsul</span>
-                      <span>Say x Qiymət = Cəm</span>
-                    </div>
-                    {drawerSale.items?.map((item: any, idx: number) => (
-                      <div key={idx} className="flex justify-between text-xs font-semibold">
-                        <span className="truncate max-w-[180px]">{item.product?.name || `Məhsul ID: ${item.productId}`}</span>
-                        <span>{item.quantity} x {item.salePrice.toFixed(2)} = {(item.quantity * item.salePrice).toFixed(2)} ₼</span>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-black text-gray-900 text-sm">Çek № #{drawerSale.id.toString().padStart(5, "0")}</h3>
+                        {drawerReturnInfo.isFullyReturned ? (
+                          <span className="px-2 py-0.5 border rounded-full text-[9px] font-bold uppercase tracking-wider bg-rose-50 text-rose-700 border-rose-200">
+                            Tam Qaytarılıb
+                          </span>
+                        ) : drawerReturnInfo.isPartiallyReturned ? (
+                          <span className="px-2 py-0.5 border rounded-full text-[9px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border-amber-200">
+                            Qismən Qaytarılıb
+                          </span>
+                        ) : null}
                       </div>
-                    ))}
-                  </div>
-
-                  {/* Total Calculations */}
-                  <div className="space-y-1 text-right pt-1 font-bold">
-                    <div className="text-sm font-black flex justify-between">
-                      <span>YEKUN:</span>
-                      <span className="text-primary">{drawerSale.totalAmount.toFixed(2)} ₼</span>
+                      <p className="text-[10px] text-gray-400 font-bold">
+                        {new Date(drawerSale.saleDate).toLocaleString("az-AZ")}
+                      </p>
                     </div>
                   </div>
-                </div>
-
-                {/* Returns attached info */}
-                {drawerSale.returns && drawerSale.returns.length > 0 && (
-                  <div className="bg-red-50 border border-red-100 rounded-2xl p-4 space-y-2 text-xs">
-                    <h5 className="font-extrabold text-red-700 flex items-center gap-1.5">
-                      <RotateCcw className="w-4 h-4" />
-                      Qaytarış Qeydləri ({drawerSale.returns.length})
-                    </h5>
-                    {drawerSale.returns.map((ret: any) => (
-                      <div key={ret.id} className="flex justify-between text-[11px] text-red-600 font-medium">
-                        <span>Qaytarış #{ret.id} ({new Date(ret.returnDate).toLocaleDateString("az-AZ")})</span>
-                        <span className="font-mono font-bold">-{ret.totalAmount.toFixed(2)} ₼</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Drawer Footer Actions */}
-              <div className="p-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-3">
-                <Link href={`/satislar/${drawerSale.id}`}>
-                  <button className="py-2.5 px-4 bg-primary text-white rounded-xl font-bold text-xs hover:bg-primary/95 transition-all shadow-md shadow-primary/10 flex items-center justify-center gap-1.5 cursor-pointer">
-                    <Eye className="w-4 h-4" />
-                    Tam Çekə Bax
+                  <button
+                    onClick={() => setDrawerSale(null)}
+                    className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-all cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
                   </button>
-                </Link>
-                <button
-                  onClick={() => setDrawerSale(null)}
-                  className="px-4 py-2.5 border border-gray-200 text-gray-500 rounded-xl font-semibold text-xs hover:bg-gray-100 transition-colors cursor-pointer"
-                >
-                  Bağla
-                </button>
+                </div>
+
+                {/* Drawer Content: Thermal Receipt Simulator */}
+                <div className="p-6 overflow-y-auto space-y-6 flex-1">
+                  {/* Simulated 80mm Thermal Receipt */}
+                  <div className="bg-amber-50/40 border border-amber-200/60 rounded-2xl p-5 font-mono text-xs shadow-xs text-gray-800 space-y-4 relative overflow-hidden">
+                    <div className="text-center border-b border-dashed border-amber-300 pb-3 space-y-1">
+                      <h4 className="font-black text-sm uppercase tracking-wider">QAZAN POS ÇEK</h4>
+                      <p className="text-[10px] text-gray-500 font-bold">Mağaza Satış Qaiməsi</p>
+                      <p className="text-[10px] text-gray-400">Tarix: {new Date(drawerSale.saleDate).toLocaleString("az-AZ")}</p>
+                    </div>
+
+                    {/* Customer & Cashier Metadata */}
+                    <div className="text-[11px] space-y-1 border-b border-dashed border-amber-300 pb-3">
+                      <div className="flex justify-between">
+                        <span className="text-gray-500 font-bold">Müştəri:</span>
+                        <span className="font-black">{drawerSale.customerName || "Anonim Müştəri"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500 font-bold">Kassir:</span>
+                        <span className="font-bold">{drawerSale.sellerName || "satici"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500 font-bold">Ödəniş Üsulu:</span>
+                        <span className="font-bold uppercase text-primary">{drawerSale.paymentType}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500 font-bold">Ödəniş Statusu:</span>
+                        <span className={`font-bold ${drawerSale.paymentStatus === "paid" ? "text-green-700" : "text-amber-700"}`}>
+                          {drawerSale.paymentStatus === "paid" ? (drawerSale.paymentType === "Nisyə" ? "Borc Bağlı" : "Ödənilib") : "Ödənilməyib / Nisyə"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Items List */}
+                    <div className="space-y-2 border-b border-dashed border-amber-300 pb-3">
+                      <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                        <span>Məhsul</span>
+                        <span>Say x Qiymət = Cəm</span>
+                      </div>
+                      {drawerSale.items?.map((item: any, idx: number) => (
+                        <div key={idx} className="flex justify-between text-xs font-semibold">
+                          <span className="truncate max-w-[180px]">{item.product?.name || `Məhsul ID: ${item.productId}`}</span>
+                          <span>{item.quantity} x {Number(item.salePrice || item.unitPrice || 0).toFixed(2)} = {(item.quantity * Number(item.salePrice || item.unitPrice || 0)).toFixed(2)} ₼</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Total Calculations */}
+                    <div className="space-y-1 text-right pt-1 font-bold">
+                      {drawerReturnInfo.totalRefundAmount > 0 ? (
+                        <>
+                          <div className="text-xs text-gray-500 flex justify-between">
+                            <span>İlkin Cəm:</span>
+                            <span className="line-through">{drawerSale.totalAmount.toFixed(2)} ₼</span>
+                          </div>
+                          <div className="text-xs text-red-600 flex justify-between">
+                            <span>Qaytarılan Məbləğ:</span>
+                            <span>-{drawerReturnInfo.totalRefundAmount.toFixed(2)} ₼</span>
+                          </div>
+                          <div className="text-sm font-black flex justify-between pt-1 border-t border-dashed border-amber-300">
+                            <span>NET YEKUN:</span>
+                            <span className="text-primary">{(drawerSale.totalAmount - drawerReturnInfo.totalRefundAmount).toFixed(2)} ₼</span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-sm font-black flex justify-between">
+                          <span>YEKUN:</span>
+                          <span className="text-primary">{drawerSale.totalAmount.toFixed(2)} ₼</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Returns attached info */}
+                  {drawerSale.returns && drawerSale.returns.length > 0 && (
+                    <div className="bg-red-50 border border-red-100 rounded-2xl p-4 space-y-2 text-xs">
+                      <h5 className="font-extrabold text-red-700 flex items-center gap-1.5">
+                        <RotateCcw className="w-4 h-4" />
+                        Qaytarış Qeydləri ({drawerSale.returns.length})
+                      </h5>
+                      {drawerSale.returns.map((ret: any) => (
+                        <div key={ret.id} className="flex justify-between text-[11px] text-red-600 font-medium">
+                          <span>Qaytarış #{ret.id} ({new Date(ret.returnDate).toLocaleDateString("az-AZ")})</span>
+                          <span className="font-mono font-bold">-{Number(ret.totalAmount || 0).toFixed(2)} ₼</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Drawer Footer Actions */}
+                <div className="p-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-3">
+                  <Link href={`/satislar/${drawerSale.id}`}>
+                    <button className="py-2.5 px-4 bg-primary text-white rounded-xl font-bold text-xs hover:bg-primary/95 transition-all shadow-md shadow-primary/10 flex items-center justify-center gap-1.5 cursor-pointer">
+                      <Eye className="w-4 h-4" />
+                      Tam Çekə Bax
+                    </button>
+                  </Link>
+                  <button
+                    onClick={() => setDrawerSale(null)}
+                    className="px-4 py-2.5 border border-gray-200 text-gray-500 rounded-xl font-semibold text-xs hover:bg-gray-100 transition-colors cursor-pointer"
+                  >
+                    Bağla
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

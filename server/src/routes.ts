@@ -9,7 +9,7 @@ import { fileURLToPath } from "url";
 import { verifyTOTP, generateSecret, getOTPAuthURI } from "./db/totp.js";
 import { sendTelegramNotification } from "./lib/telegram.js";
 import { hashPassword, generateToken, verifyToken } from "./lib/auth.js";
-import { recordLedgerMovement } from "./routes/helpers.js";
+import { recordLedgerMovement, AuthenticatedRequest, computeRemainingDebt } from "./routes/helpers.js";
 
 
 
@@ -2856,6 +2856,164 @@ router.get("/sales/:id", async (req, res) => {
   }
 });
 
+// Edit a sale (Admin only)
+router.put("/sales/:id", requireAdmin, async (req: AuthenticatedRequest, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { paymentType, customerName, customerPhone, bankName, creditDueDate, notes, saleDate, items } = req.body;
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: "Satışda ən azı 1 məhsul olmalıdır" });
+    }
+
+    const sale = await db.query.sales.findFirst({
+      where: and(eq(schema.sales.id, id), eq(schema.sales.tenantId, req.tenantId)),
+      with: { items: true, payments: true, returns: true },
+    });
+    if (!sale) return res.status(404).json({ message: "Satış tapılmadı" });
+
+    for (const it of items) {
+      const pid = parseInt(it.productId);
+      const qty = parseFloat(it.quantity);
+      const price = parseFloat(it.salePrice);
+      if (isNaN(pid) || pid <= 0) {
+        return res.status(400).json({ message: "Bütün sətirlərdə düzgün məhsul seçilməlidir" });
+      }
+      if (isNaN(qty) || qty <= 0) {
+        return res.status(400).json({ message: "Bütün sətirlərdə miqdar 0-dan böyük olmalıdır" });
+      }
+      if (isNaN(price) || price < 0) {
+        return res.status(400).json({ message: "Bütün sətirlərdə satış qiyməti mənfi ola bilməz" });
+      }
+    }
+
+    const updated = await db.transaction(async (tx) => {
+      const oldQtyMap = new Map<number, number>();
+      const oldItemMap = new Map<number, any>();
+      for (const oi of sale.items) {
+        oldQtyMap.set(oi.productId, (oldQtyMap.get(oi.productId) || 0) + oi.quantity);
+        oldItemMap.set(oi.productId, oi);
+      }
+
+      const newQtyMap = new Map<number, number>();
+      for (const ni of items) {
+        const pid = parseInt(ni.productId);
+        const qty = parseFloat(ni.quantity);
+        newQtyMap.set(pid, (newQtyMap.get(pid) || 0) + qty);
+      }
+
+      const allProductIds = new Set([...oldQtyMap.keys(), ...newQtyMap.keys()]);
+      for (const pid of allProductIds) {
+        const oldQty = oldQtyMap.get(pid) || 0;
+        const newQty = newQtyMap.get(pid) || 0;
+        const delta = newQty - oldQty;
+
+        if (delta !== 0) {
+          await recordLedgerMovement(tx, {
+            tenantId: req.tenantId,
+            productId: pid,
+            warehouseId: sale.warehouseId || null,
+            quantity: -delta,
+            movementType: "stock_adjustment",
+            referenceType: "sale",
+            referenceId: id,
+            userId: (req as any).user?.userId || null,
+            username: (req.headers["x-user-username"] as string) || req.user?.username || "admin",
+            unitPrice: 0,
+            notes: delta > 0
+              ? `Satışın redaktəsi (Çek № ${id}) - Əlavə çıxış (${delta} ədəd)`
+              : `Satışın redaktəsi (Çek № ${id}) - Qalıq bərpası (${Math.abs(delta)} ədəd)`,
+          });
+        }
+      }
+
+      await tx.delete(schema.saleItems).where(and(eq(schema.saleItems.saleId, id), eq(schema.saleItems.tenantId, req.tenantId)));
+
+      let newTotalAmount = 0;
+      let newTotalCost = 0;
+
+      for (const it of items) {
+        const pid = parseInt(it.productId);
+        const qty = parseFloat(it.quantity);
+        const salePrice = parseFloat(it.salePrice);
+        let purchasePrice = parseFloat(it.purchasePrice);
+
+        if (isNaN(purchasePrice) || purchasePrice <= 0) {
+          const oldItem = oldItemMap.get(pid);
+          if (oldItem && oldItem.purchasePrice > 0) {
+            purchasePrice = oldItem.purchasePrice;
+          } else {
+            purchasePrice = await computeFIFOSaleCost(pid, req.tenantId, qty);
+            if (purchasePrice <= 0) {
+              purchasePrice = salePrice;
+            }
+          }
+        }
+
+        await tx.insert(schema.saleItems).values({
+          tenantId: req.tenantId,
+          saleId: id,
+          productId: pid,
+          quantity: qty,
+          salePrice,
+          purchasePrice,
+        });
+
+        newTotalAmount += salePrice * qty;
+        newTotalCost += purchasePrice * qty;
+      }
+
+      newTotalAmount = Math.round(newTotalAmount * 100) / 100;
+      newTotalCost = Math.round(newTotalCost * 100) / 100;
+
+      const updatePayload: Record<string, any> = {
+        totalAmount: newTotalAmount,
+        totalCost: newTotalCost,
+      };
+      if (paymentType !== undefined) updatePayload.paymentType = paymentType;
+      if (customerName !== undefined) updatePayload.customerName = customerName;
+      if (customerPhone !== undefined) updatePayload.customerPhone = customerPhone;
+      if (bankName !== undefined) updatePayload.bankName = bankName;
+      if (creditDueDate !== undefined) updatePayload.creditDueDate = creditDueDate;
+      if (notes !== undefined) updatePayload.notes = notes;
+      if (saleDate !== undefined) updatePayload.saleDate = saleDate;
+
+      const effectivePaymentType = paymentType || sale.paymentType;
+      if (effectivePaymentType === "Nisyə") {
+        const payments = await tx.query.creditPayments.findMany({ where: eq(schema.creditPayments.saleId, id) });
+        const returns = await tx.query.returns.findMany({ where: eq(schema.returns.saleId, id) });
+        const remainingDebt = computeRemainingDebt(
+          { totalAmount: newTotalAmount, loyaltyDiscountPaid: sale.loyaltyDiscountPaid },
+          payments,
+          returns
+        );
+        updatePayload.paymentStatus = remainingDebt <= 0 ? "paid" : "credit";
+      } else {
+        updatePayload.paymentStatus = "paid";
+      }
+
+      const [saleUpdated] = await tx
+        .update(schema.sales)
+        .set(updatePayload)
+        .where(and(eq(schema.sales.id, id), eq(schema.sales.tenantId, req.tenantId)))
+        .returning();
+
+      return saleUpdated;
+    });
+
+    await logActivity(
+      req,
+      "EDIT_SALE",
+      `Satış redaktə edildi: Çek № ${id} (Yeni məbləğ: ${updated.totalAmount} ₼, Məhsul sayı: ${items.length}, Ödəniş: ${updated.paymentType})`
+    );
+
+    res.json(updated);
+  } catch (error: any) {
+    console.error("Edit sale error:", error);
+    res.status(500).json({ message: "Satış redaktə edilərkən xəta baş verdi: " + (error?.message || "") });
+  }
+});
+
 // Pay customer credit debt fully
 router.patch("/sales/:id/pay-credit", async (req, res) => {
   try {
@@ -3270,6 +3428,22 @@ router.post("/returns", async (req, res) => {
           status: item.status, // "returned_to_stock" or "defective"
         });
 
+        if (item.status === "returned_to_stock") {
+          await recordLedgerMovement(tx, {
+            tenantId: req.tenantId,
+            productId: item.productId,
+            warehouseId: targetWarehouseId,
+            quantity: parseFloat(item.quantity),
+            movementType: "return",
+            referenceType: "return",
+            referenceId: returnId,
+            userId: (req as any).user?.userId || null,
+            username: (req.headers["x-user-username"] as string) || "satici",
+            unitPrice: parseFloat(item.salePrice),
+            notes: `Müştəri Qaytarışı (Qaytarış № ${returnId}${saleId ? `, Çek № ${saleId}` : ""})`,
+          });
+        }
+
         // Link and update returned serial numbers
         if (item.serialNumbers && Array.isArray(item.serialNumbers) && item.serialNumbers.length > 0) {
           for (const sNum of item.serialNumbers) {
@@ -3288,6 +3462,24 @@ router.post("/returns", async (req, res) => {
                   eq(schema.productSerials.productId, item.productId)
                 )
               );
+          }
+        }
+      }
+
+      if (saleId) {
+        const saleRecord = await tx.query.sales.findFirst({
+          where: and(eq(schema.sales.id, saleId), eq(schema.sales.tenantId, req.tenantId)),
+          with: { payments: true },
+        });
+        if (saleRecord && saleRecord.paymentType === "Nisyə") {
+          const allReturns = await tx.query.returns.findMany({ where: eq(schema.returns.saleId, saleId) });
+          const remaining = computeRemainingDebt(
+            { totalAmount: saleRecord.totalAmount, loyaltyDiscountPaid: saleRecord.loyaltyDiscountPaid },
+            saleRecord.payments || [],
+            allReturns
+          );
+          if (remaining <= 0) {
+            await tx.update(schema.sales).set({ paymentStatus: "paid" }).where(eq(schema.sales.id, saleId));
           }
         }
       }
